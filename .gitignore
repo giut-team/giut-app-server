@@ -25,6 +25,7 @@ build/
 *.rar
 
 # Spring Boot
+src/main/resources/application.properties
 application-local.properties
 application-dev.properties
 application-prod.properties
