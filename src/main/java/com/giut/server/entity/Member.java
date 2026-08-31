@@ -44,7 +44,7 @@ public class Member {
     private String studentNo;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20)")
     private Role role;
 
     @Column(name = "university_email", unique = true, length = 255)
@@ -54,7 +54,7 @@ public class Member {
     private LocalDateTime universityVerifiedAt;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20)")
     private Status status;
 
     @Column(name = "created_at", nullable = false)
@@ -74,5 +74,11 @@ public class Member {
         member.createdAt = LocalDateTime.now();
         member.updatedAt = member.createdAt;
         return member;
+    }
+
+    public void verifyUniversityEmail(String universityEmail) {
+        this.universityEmail = universityEmail;
+        this.universityVerifiedAt = LocalDateTime.now();
+        this.updatedAt = this.universityVerifiedAt;
     }
 }
