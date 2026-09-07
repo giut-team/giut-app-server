@@ -9,6 +9,7 @@ import java.time.Instant;
 @MappedSuperclass
 public abstract class BaseTimeEntity {
     protected Instant createdAt;
+
     protected Instant updatedAt;
 
     @PrePersist

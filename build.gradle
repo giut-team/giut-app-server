@@ -43,6 +43,14 @@ dependencies {
 	testCompileOnly 'org.projectlombok:lombok'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// Security
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
+	implementation 'io.jsonwebtoken:jjwt-impl:0.12.7'
+	implementation 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+
+	// Email SMTP
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
 tasks.named('test') {

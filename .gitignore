@@ -90,3 +90,4 @@ temp/
 *.tmp
 *.swp
 *.swo
+/gradle/
