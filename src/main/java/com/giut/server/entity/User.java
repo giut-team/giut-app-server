@@ -9,9 +9,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@Table(name = "members")
+@Table(name = "users")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Member {
+public class User {
 
     public enum Role {
         STUDENT,
@@ -63,17 +63,17 @@ public class Member {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    public static Member createAdmin(String email, String passwordHash, String nickname, String phone) {
-        Member member = new Member();
-        member.email = email;
-        member.passwordHash = passwordHash;
-        member.nickname = nickname;
-        member.phone = phone;
-        member.role = Role.ADMIN;
-        member.status = Status.ACTIVE;
-        member.createdAt = LocalDateTime.now();
-        member.updatedAt = member.createdAt;
-        return member;
+    public static User createAdmin(String email, String passwordHash, String nickname, String phone) {
+        User user = new User();
+        user.email = email;
+        user.passwordHash = passwordHash;
+        user.nickname = nickname;
+        user.phone = phone;
+        user.role = Role.ADMIN;
+        user.status = Status.ACTIVE;
+        user.createdAt = LocalDateTime.now();
+        user.updatedAt = user.createdAt;
+        return user;
     }
 
     public void verifyUniversityEmail(String universityEmail) {

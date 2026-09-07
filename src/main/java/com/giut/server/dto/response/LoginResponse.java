@@ -1,6 +1,6 @@
 package com.giut.server.dto.response;
 
-import com.giut.server.entity.Member;
+import com.giut.server.entity.User;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -14,7 +14,7 @@ public class LoginResponse {
 
     private String nickname;
 
-    private Member.Role role;
+    private User.Role role;
 
     private String accessToken;
 

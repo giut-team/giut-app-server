@@ -4,7 +4,7 @@ import com.giut.server.dto.request.LoginRequest;
 import com.giut.server.dto.request.SignUpRequest;
 import com.giut.server.dto.response.LoginResponse;
 import com.giut.server.dto.response.SignUpResponse;
-import com.giut.server.entity.Member;
+import com.giut.server.entity.User;
 import com.giut.server.repository.MemberRepository;
 import com.giut.server.security.JwtProvider;
 import jakarta.transaction.Transactional;
@@ -31,44 +31,44 @@ public class AuthService {
         }
 
         String encodedPassword = passwordEncoder.encode(request.getPassword());
-        Member member = Member.createAdmin(
+        User user = User.createAdmin(
                 request.getEmail(),
                 encodedPassword,
                 request.getNickname(),
                 request.getPhone()
         );
 
-        Member savedMember = memberRepository.save(member);
+        User savedUser = memberRepository.save(user);
 
         return new SignUpResponse(
-                savedMember.getId(),
-                savedMember.getEmail(),
-                savedMember.getNickname(),
-                savedMember.getRole()
+                savedUser.getId(),
+                savedUser.getEmail(),
+                savedUser.getNickname(),
+                savedUser.getRole()
         );
     }
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
-        Member member = memberRepository.findByEmail(request.getEmail())
+        User user = memberRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다."));
 
-        if (member.getRole() != Member.Role.ADMIN) {
+        if (user.getRole() != User.Role.ADMIN) {
             throw new IllegalArgumentException("관리자 계정만 로그인할 수 있습니다.");
         }
 
-        if (member.getPasswordHash() == null || !passwordEncoder.matches(request.getPassword(), member.getPasswordHash())) {
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        String accessToken = jwtProvider.generateAccessToken(member);
-        String refreshToken = jwtProvider.generateRefreshToken(member);
+        String accessToken = jwtProvider.generateAccessToken(user);
+        String refreshToken = jwtProvider.generateRefreshToken(user);
 
         return new LoginResponse(
-                member.getId(),
-                member.getEmail(),
-                member.getNickname(),
-                member.getRole(),
+                user.getId(),
+                user.getEmail(),
+                user.getNickname(),
+                user.getRole(),
                 accessToken,
                 refreshToken,
                 "Bearer"

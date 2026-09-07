@@ -1,6 +1,6 @@
 package com.giut.server.security;
 
-import com.giut.server.entity.Member;
+import com.giut.server.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -39,14 +38,14 @@ public class JwtProvider {
         key = Keys.hmacShaKeyFor(secretKeyBytes);
     }
 
-    public String generateAccessToken(Member member) {
+    public String generateAccessToken(User user) {
         Date now = new Date();
         Date expiredDate = new Date(now.getTime() + accessExpirationTime);
 
         return Jwts.builder()
-                .subject(String.valueOf(member.getId()))
-                .claim("email", member.getEmail())
-                .claim("role", member.getRole().name())
+                .subject(String.valueOf(user.getId()))
+                .claim("email", user.getEmail())
+                .claim("role", user.getRole().name())
                 .claim("type", "access")
                 .issuedAt(now)
                 .expiration(expiredDate)
@@ -54,7 +53,7 @@ public class JwtProvider {
                 .compact();
     }
 
-    public String generateRefreshToken(Member user) {
+    public String generateRefreshToken(User user) {
         Date now = new Date();
         Date expiredDate = new Date(now.getTime() + refreshAccessExpirationTime);
 
@@ -73,7 +72,7 @@ public class JwtProvider {
         String memberName = getMemberName(token);
         String role = getRole(token);
 
-        UserDetails userDetails = User.builder()
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
                 .username(memberName)
                 .password("")
                 .authorities("ROLE_" + role)
@@ -141,7 +140,7 @@ public class JwtProvider {
         String role = parseClaims(token)
                 .get("role", String.class);
 
-        return role == null ? Member.Role.STUDENT.name() : role;
+        return role == null ? User.Role.STUDENT.name() : role;
     }
 
     private Claims parseClaims(String token) {

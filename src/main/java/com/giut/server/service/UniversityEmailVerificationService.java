@@ -4,7 +4,7 @@ import com.giut.server.dto.request.UniversityEmailSendRequest;
 import com.giut.server.dto.request.UniversityEmailVerifyRequest;
 import com.giut.server.dto.response.UniversityEmailSendResponse;
 import com.giut.server.dto.response.UniversityEmailVerifyResponse;
-import com.giut.server.entity.Member;
+import com.giut.server.entity.User;
 import com.giut.server.repository.MemberRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -70,16 +70,16 @@ public class UniversityEmailVerificationService {
             throw new IllegalArgumentException("인증코드가 일치하지 않습니다.");
         }
 
-        Member member = memberRepository.findById(memberId)
+        User user = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        member.verifyUniversityEmail(universityEmail);
+        user.verifyUniversityEmail(universityEmail);
         verificationCodes.remove(key);
 
         return new UniversityEmailVerifyResponse(
-                member.getId(),
-                member.getUniversityEmail(),
-                member.getUniversityVerifiedAt()
+                user.getId(),
+                user.getUniversityEmail(),
+                user.getUniversityVerifiedAt()
         );
     }
 
