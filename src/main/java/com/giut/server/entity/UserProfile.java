@@ -25,5 +25,36 @@ public class UserProfile extends BaseTimeEntity {
     @Column(name = "is_searchable", nullable = false)
     private boolean searchable = true;
 
+    public static UserProfile create(
+            Long userId,
+            Department department,
+            Short grade,
+            Gender gender,
+            String profileImageUrl,
+            String bio,
+            boolean searchable
+    ) {
+        UserProfile profile = new UserProfile();
+        profile.userId = userId;
+        profile.update(department, grade, gender, profileImageUrl, bio, searchable);
+        return profile;
+    }
+
+    public void update(
+            Department department,
+            Short grade,
+            Gender gender,
+            String profileImageUrl,
+            String bio,
+            boolean searchable
+    ) {
+        this.department = department;
+        this.grade = grade;
+        this.gender = gender;
+        this.profileImageUrl = profileImageUrl;
+        this.bio = bio;
+        this.searchable = searchable;
+    }
+
     public enum Gender { MALE, FEMALE, OTHER, UNSPECIFIED }
 }
