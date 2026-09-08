@@ -91,3 +91,4 @@ temp/
 *.swp
 *.swo
 /gradle/
+/src/main/resources/db/
