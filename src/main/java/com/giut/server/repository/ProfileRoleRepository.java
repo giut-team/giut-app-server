@@ -10,5 +10,5 @@ public interface ProfileRoleRepository extends JpaRepository<ProfileRole, Long> 
 
     List<ProfileRole> findAllByCodeIn(Collection<String> codes);
 
-    List<ProfileRole> findAllByPrimaryRole_CodeOrderByDisplayOrderAsc(String primaryRoleCode);
+    List<ProfileRole> findAllByPrimaryRoleOrderByDisplayOrderAsc(ProfileRole.PrimaryRole primaryRole);
 }

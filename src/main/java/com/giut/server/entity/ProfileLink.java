@@ -1,56 +1,13 @@
 package com.giut.server.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
-import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 
-@Entity
-@Table(
-        name = "profile_links",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_profile_links_user_type",
-                columnNames = {"user_id", "link_type"}
-        )
-)
-@Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProfileLink extends BaseTimeEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "link_type", nullable = false, length = 20)
-    private Type type;
-
-    @Column(nullable = false, length = 2048)
-    private String url;
-
-    @Column(length = 100)
-    private String title;
-
-    public static ProfileLink create(Long userId, Type type, String url, String title) {
-        ProfileLink profileLink = new ProfileLink();
-        profileLink.userId = userId;
-        profileLink.type = type;
-        profileLink.url = url;
-        profileLink.title = title;
-        return profileLink;
-    }
+/**
+ * user_profiles.external_links JSON 배열에 저장하는 값 객체다.
+ * 링크 단건을 따로 수정하는 API가 없으므로 독립 테이블과 식별자는 두지 않는다.
+ */
+public record ProfileLink(Type type, String url, String title) {
 
     @Getter
     @RequiredArgsConstructor

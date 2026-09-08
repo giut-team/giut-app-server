@@ -58,11 +58,6 @@ public record PutMyProfileRequest(
         @Size(max = 3, message = "기술 스택은 최대 3개까지 선택할 수 있습니다.")
         List<Long> skillTagIds,
 
-        @Schema(description = "직접 입력한 기술 스택 목록. 기존 기술 스택과 합쳐 최대 3개입니다.", example = "[\"Docker\"]")
-        @NotNull(message = "직접 입력 기술 스택 목록은 필수입니다. 없다면 빈 배열을 입력하세요.")
-        @Size(max = 3, message = "직접 입력 기술 스택은 최대 3개까지 입력할 수 있습니다.")
-        List<@NotBlank(message = "직접 입력 기술 스택은 비어 있을 수 없습니다.") @Size(max = 80, message = "기술 스택 이름은 80자 이하여야 합니다.") String> customSkills,
-
         @Schema(description = "관심 분야 태그 ID 목록", example = "[21, 25]")
         @NotNull(message = "관심 분야 목록은 필수입니다. 선택하지 않았다면 빈 배열을 입력하세요.")
         @Size(max = 3, message = "관심 분야는 최대 3개까지 선택할 수 있습니다.")

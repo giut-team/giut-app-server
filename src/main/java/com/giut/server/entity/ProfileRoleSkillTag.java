@@ -16,29 +16,30 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Entity
-@Table(name = "user_profile_primary_roles")
-@IdClass(UserProfilePrimaryRoleId.class)
+@Table(name = "profile_role_skill_tags")
+@IdClass(ProfileRoleSkillTagId.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class UserProfilePrimaryRole {
-
-    @Id
-    @Column(name = "user_id")
-    private Long userId;
+public class ProfileRoleSkillTag {
 
     @Id
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "primary_role_id", nullable = false)
-    private ProfileRoleCategory primaryRole;
+    @JoinColumn(name = "role_id", nullable = false)
+    private ProfileRole role;
+
+    @Id
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag_id", nullable = false)
+    private ProfileTag tag;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    public static UserProfilePrimaryRole create(Long userId, ProfileRoleCategory primaryRole) {
-        UserProfilePrimaryRole userProfilePrimaryRole = new UserProfilePrimaryRole();
-        userProfilePrimaryRole.userId = userId;
-        userProfilePrimaryRole.primaryRole = primaryRole;
-        return userProfilePrimaryRole;
+    public static ProfileRoleSkillTag create(ProfileRole role, ProfileTag tag) {
+        ProfileRoleSkillTag profileRoleSkillTag = new ProfileRoleSkillTag();
+        profileRoleSkillTag.role = role;
+        profileRoleSkillTag.tag = tag;
+        return profileRoleSkillTag;
     }
 
     @PrePersist

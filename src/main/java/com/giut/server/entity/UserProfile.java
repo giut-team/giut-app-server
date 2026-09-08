@@ -31,6 +31,19 @@ public class UserProfile extends BaseTimeEntity {
     @Column(name = "is_searchable", nullable = false)
     private boolean searchable = true;
 
+    /**
+     * 검색 조건으로 사용하지 않는 대표 역할은 JSON 배열로 보관한다.
+     * 예: ["DEVELOPMENT", "PLANNING"]
+     */
+    @Column(name = "primary_roles", columnDefinition = "json", nullable = false)
+    private String primaryRolesJson;
+
+    /**
+     * 프로필 전체 수정 시 함께 교체되는 외부 링크 목록이다.
+     */
+    @Column(name = "external_links", columnDefinition = "json", nullable = false)
+    private String externalLinksJson;
+
     public static UserProfile create(
             Long userId,
             DepartmentType department,
@@ -39,11 +52,23 @@ public class UserProfile extends BaseTimeEntity {
             Gender gender,
             String profileImageUrl,
             String bio,
-            boolean searchable
+            boolean searchable,
+            String primaryRolesJson,
+            String externalLinksJson
     ) {
         UserProfile profile = new UserProfile();
         profile.userId = userId;
-        profile.update(department, activityStatus, grade, gender, profileImageUrl, bio, searchable);
+        profile.update(
+                department,
+                activityStatus,
+                grade,
+                gender,
+                profileImageUrl,
+                bio,
+                searchable,
+                primaryRolesJson,
+                externalLinksJson
+        );
         return profile;
     }
 
@@ -54,7 +79,9 @@ public class UserProfile extends BaseTimeEntity {
             Gender gender,
             String profileImageUrl,
             String bio,
-            boolean searchable
+            boolean searchable,
+            String primaryRolesJson,
+            String externalLinksJson
     ) {
         this.department = department;
         this.activityStatus = activityStatus;
@@ -63,6 +90,8 @@ public class UserProfile extends BaseTimeEntity {
         this.profileImageUrl = profileImageUrl;
         this.bio = bio;
         this.searchable = searchable;
+        this.primaryRolesJson = primaryRolesJson;
+        this.externalLinksJson = externalLinksJson;
     }
 
     @Getter

@@ -28,6 +28,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "Profile Options", description = "프로필 작성 화면의 역할과 태그 선택지")
 @RestController
 @RequiredArgsConstructor
@@ -107,9 +109,10 @@ public class ProfileOptionController {
     }
 
     @GetMapping("/tags")
-    @Operation(summary = "유형별 프로필 태그 조회", description = "기술 스택, 관심 분야, 활동 경험 선택지를 유형별로 조회합니다.")
+    @Operation(summary = "유형별 프로필 태그 조회", description = "기술 스택, 관심 분야, 활동 경험 선택지를 유형별로 조회합니다. 기술 스택은 relatedRoleCodes를 전달하면 해당 세부 역할과 연결된 추천 목록만 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @Parameter(name = "type", in = ParameterIn.QUERY, required = true, example = "SKILL", description = "SKILL, INTEREST, EXPERIENCE 중 하나")
+    @Parameter(name = "relatedRoleCodes", in = ParameterIn.QUERY, required = false, example = "DATA_ANALYST,FRONTEND_DEVELOPER", description = "기술 스택 추천에 사용할 세부 역할 코드. 쉼표로 여러 개를 전달할 수 있습니다.")
     @ApiResponses({
             // 성공 응답
             @ApiResponse(
@@ -118,7 +121,7 @@ public class ProfileOptionController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ProfileTagListResponse.class),
-                            examples = @ExampleObject(value = "{\"type\":\"SKILL\",\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}]}"
+                            examples = @ExampleObject(value = "{\"type\":\"SKILL\",\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]},{\"id\":4,\"type\":\"SKILL\",\"name\":\"React\",\"relatedRoles\":[{\"code\":\"FRONTEND_DEVELOPER\",\"name\":\"프론트엔드 개발자\"}]}]}"
                     )
                     )
             ),
@@ -161,9 +164,13 @@ public class ProfileOptionController {
             )
     })
     public ResponseEntity<ProfileTagListResponse> getTags(
-            @RequestParam ProfileTag.TagType type
+            @RequestParam ProfileTag.TagType type,
+            @RequestParam(required = false) List<String> relatedRoleCodes
     ) {
-        return ResponseEntity.ok(profileOptionService.getTags(type));
+        return ResponseEntity.ok(profileOptionService.getTags(
+                type,
+                relatedRoleCodes == null ? List.of() : relatedRoleCodes
+        ));
     }
 
     @PostMapping("/tags/skills")
@@ -174,12 +181,12 @@ public class ProfileOptionController {
             @ApiResponse(
                     responseCode = "201",
                     description = "기술 스택 신규 추가 성공",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":true,\"skill\":{\"id\":23,\"type\":\"SKILL\",\"name\":\"Docker\"}}"))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":true,\"skill\":{\"id\":36,\"type\":\"SKILL\",\"name\":\"Docker\",\"relatedRoles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}]}}"))
             ),
             @ApiResponse(
                     responseCode = "200",
                     description = "이미 존재하는 기술 스택 반환",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":false,\"skill\":{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}}"))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":false,\"skill\":{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}}"))
             ),
             // 실패 응답
             @ApiResponse(

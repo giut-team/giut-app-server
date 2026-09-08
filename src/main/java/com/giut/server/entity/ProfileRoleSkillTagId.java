@@ -9,9 +9,9 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode
-public class UserProfilePrimaryRoleId implements Serializable {
+public class ProfileRoleSkillTagId implements Serializable {
 
-    private Long userId;
+    private Long role;
 
-    private Long primaryRole;
+    private Long tag;
 }
