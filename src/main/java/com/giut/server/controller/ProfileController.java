@@ -6,6 +6,7 @@ import com.giut.server.dto.response.CreateSkillTagResponse;
 import com.giut.server.dto.response.ProfileRoleListResponse;
 import com.giut.server.dto.response.ProfileTagListResponse;
 import com.giut.server.dto.response.PublicProfileListResponse;
+import com.giut.server.dto.response.PublicProfileDetailResponse;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.service.ProfileOptionService;
 import com.giut.server.service.UserProfileService;
@@ -26,6 +27,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -234,7 +236,7 @@ public class ProfileController {
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicProfileListResponse.class),
                             examples = @ExampleObject(
-                                    value = "{\"profiles\":[{\"userId\":1,\"nickname\":\"김민재\",\"universityVerified\":true,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}]}],\"page\":0,\"size\":5,\"totalElements\":24,\"totalPages\":5,\"hasNext\":true}"
+                                    value = "{\"profiles\":[{\"userId\":1,\"nickname\":\"김민재\",\"universityVerified\":true,\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"skills\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}]}],\"page\":0,\"size\":5,\"totalElements\":24,\"totalPages\":5,\"hasNext\":true}"
                             )
                     )
             ),
@@ -271,5 +273,47 @@ public class ProfileController {
             @RequestParam(defaultValue = "0") @Min(value = 0, message = "page는 0 이상이어야 합니다.") int page
     ) {
         return ResponseEntity.ok(userProfileService.getPublicProfiles(page));
+    }
+
+    @GetMapping("/{userId}")
+    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 외부 링크를 포함한 상세 프로필을 조회합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            // 성공 응답
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "공개 프로필 상세 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PublicProfileDetailResponse.class),
+                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}")
+                    )
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "userId 형식 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"MethodArgumentTypeMismatchException : userId는 숫자여야 합니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "공개 프로필을 찾을 수 없음",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 공개 프로필을 찾을 수 없습니다.\",\"code\":404}"))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}"))
+            )
+    })
+    public ResponseEntity<PublicProfileDetailResponse> getPublicProfile(
+            @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(userProfileService.getPublicProfile(userId));
     }
 }

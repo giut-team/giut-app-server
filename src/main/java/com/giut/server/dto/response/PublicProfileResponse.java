@@ -8,15 +8,13 @@ public record PublicProfileResponse(
         Long userId,
         String nickname,
         boolean universityVerified,
-        UserProfile.DepartmentType department,
-        String departmentName,
-        Short grade,
         String profileImageUrl,
         UserProfile.ActivityStatus activityStatus,
         String activityStatusName,
-        String bio,
         List<ProfilePrimaryRoleResponse> primaryRoles,
-        List<ProfileRoleResponse> roles,
-        List<ProfileTagSummaryResponse> tags
+        String departmentName,
+        Short grade,
+        String bio,
+        List<ProfileTagSummaryResponse> skills
 ) {
 }

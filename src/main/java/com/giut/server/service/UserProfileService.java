@@ -13,6 +13,7 @@ import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
 import com.giut.server.entity.UserProfileTag;
+import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
@@ -94,20 +95,36 @@ public class UserProfileService {
             return toPublicProfileListResponse(profilePage, List.of());
         }
 
-        Map<Long, List<ProfileRoleResponse>> rolesByUserId = findRolesByUserId(publicUserIds);
-        Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = findTagsByUserId(publicUserIds);
+        Map<Long, List<ProfileTagSummaryResponse>> skillsByUserId = findSkillsByUserId(publicUserIds);
 
         List<PublicProfileResponse> publicProfiles = profiles.stream()
                 .filter(profile -> userById.containsKey(profile.getUserId()))
                 .map(profile -> toPublicProfileResponse(
                         profile,
                         userById.get(profile.getUserId()),
-                        rolesByUserId.getOrDefault(profile.getUserId(), List.of()),
-                        tagsByUserId.getOrDefault(profile.getUserId(), List.of())
+                        skillsByUserId.getOrDefault(profile.getUserId(), List.of())
                 ))
                 .toList();
 
         return toPublicProfileListResponse(profilePage, publicProfiles);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicProfileDetailResponse getPublicProfile(Long userId) {
+        UserProfile profile = userProfileRepository.findById(userId)
+                .filter(UserProfile::isSearchable)
+                .filter(userProfile -> userProfile.getActivityStatus() != UserProfile.ActivityStatus.RESTING)
+                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
+
+        User user = userRepository.findById(userId)
+                .filter(foundUser -> foundUser.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
+
+        return new PublicProfileDetailResponse(
+                user.getNickname(),
+                user.getUniversityVerifiedAt() != null,
+                toProfileResponse(profile)
+        );
     }
 
     @Transactional
@@ -243,6 +260,10 @@ public class UserProfileService {
     }
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
+        return MyProfileResponse.completed(toProfileResponse(profile));
+    }
+
+    private ProfileResponse toProfileResponse(UserProfile profile) {
         List<ProfilePrimaryRoleResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile))
                 .stream()
                 .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
@@ -277,18 +298,10 @@ public class UserProfileService {
                 .map(ProfileLinkResponse::from)
                 .toList();
 
-        return MyProfileResponse.completed(ProfileResponse.from(profile, primaryRoles, roles, tags, links));
+        return ProfileResponse.from(profile, primaryRoles, roles, tags, links);
     }
 
-    private Map<Long, List<ProfileRoleResponse>> findRolesByUserId(List<Long> userIds) {
-        Map<Long, List<ProfileRoleResponse>> rolesByUserId = new HashMap<>();
-        userProfileRoleRepository.findAllByUserIdIn(userIds).forEach(userProfileRole -> rolesByUserId
-                .computeIfAbsent(userProfileRole.getUserId(), ignored -> new ArrayList<>())
-                .add(ProfileRoleResponse.from(userProfileRole.getRole())));
-        return rolesByUserId;
-    }
-
-    private Map<Long, List<ProfileTagSummaryResponse>> findTagsByUserId(List<Long> userIds) {
+    private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {
         List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByUserIdIn(userIds);
         Map<Long, ProfileTag> tagById = new HashMap<>();
         profileTagRepository.findAllById(userProfileTags.stream().map(UserProfileTag::getTagId).toList())
@@ -297,7 +310,7 @@ public class UserProfileService {
         Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = new HashMap<>();
         userProfileTags.forEach(userProfileTag -> {
             ProfileTag tag = tagById.get(userProfileTag.getTagId());
-            if (tag != null) {
+            if (tag != null && tag.getTagType() == ProfileTag.TagType.SKILL) {
                 tagsByUserId
                         .computeIfAbsent(userProfileTag.getUserId(), ignored -> new ArrayList<>())
                         .add(ProfileTagSummaryResponse.from(tag));
@@ -309,8 +322,7 @@ public class UserProfileService {
     private PublicProfileResponse toPublicProfileResponse(
             UserProfile profile,
             User user,
-            List<ProfileRoleResponse> roles,
-            List<ProfileTagSummaryResponse> tags
+            List<ProfileTagSummaryResponse> skills
     ) {
         List<ProfilePrimaryRoleResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile)).stream()
                 .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
@@ -321,16 +333,14 @@ public class UserProfileService {
                 profile.getUserId(),
                 user.getNickname(),
                 user.getUniversityVerifiedAt() != null,
-                profile.getDepartment(),
-                profile.getDepartment().getDisplayName(),
-                profile.getGrade(),
                 profile.getProfileImageUrl(),
                 profile.getActivityStatus(),
                 profile.getActivityStatus().getDisplayName(),
-                profile.getBio(),
                 primaryRoles,
-                roles,
-                tags
+                profile.getDepartment().getDisplayName(),
+                profile.getGrade(),
+                profile.getBio(),
+                skills
         );
     }
 
