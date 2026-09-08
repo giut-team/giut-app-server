@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,12 +30,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
 
 @Tag(name = "Profile Options", description = "프로필 작성 화면의 역할과 태그 선택지")
 @RestController
 @RequiredArgsConstructor
+@Validated
 @RequestMapping("/api/profile")
 public class ProfileController {
 
@@ -219,7 +222,7 @@ public class ProfileController {
     @GetMapping
     @Operation(
             summary = "전체 공개 프로필 조회",
-            description = "프로필 공개가 켜져 있고 현재 활동 상태가 휴식 중이 아닌 사용자 프로필을 조회합니다."
+            description = "프로필 공개가 켜져 있고 현재 활동 상태가 휴식 중이 아닌 사용자 프로필을 페이지 단위로 조회합니다. page는 0부터 시작하며 페이지당 5개로 고정됩니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -231,11 +234,20 @@ public class ProfileController {
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicProfileListResponse.class),
                             examples = @ExampleObject(
-                                    value = "{\"profiles\":[{\"userId\":1,\"nickname\":\"김민재\",\"universityVerified\":true,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}]}]}"
+                                    value = "{\"profiles\":[{\"userId\":1,\"nickname\":\"김민재\",\"universityVerified\":true,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}]}],\"page\":0,\"size\":5,\"totalElements\":24,\"totalPages\":5,\"hasNext\":true}"
                             )
                     )
             ),
             // 실패 응답
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "page 범위 오류",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"ConstraintViolationException : page는 0 이상이어야 합니다.\",\"code\":400}")
+                    )
+            ),
             @ApiResponse(
                     responseCode = "401",
                     description = "인증 실패 또는 토큰 누락",
@@ -255,7 +267,9 @@ public class ProfileController {
                     )
             )
     })
-    public ResponseEntity<PublicProfileListResponse> getPublicProfiles() {
-        return ResponseEntity.ok(userProfileService.getPublicProfiles());
+    public ResponseEntity<PublicProfileListResponse> getPublicProfiles(
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "page는 0 이상이어야 합니다.") int page
+    ) {
+        return ResponseEntity.ok(userProfileService.getPublicProfiles(page));
     }
 }

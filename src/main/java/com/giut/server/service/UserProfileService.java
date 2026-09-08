@@ -22,6 +22,9 @@ import com.giut.server.repository.UserProfileTagRepository;
 import com.giut.server.repository.UserRepository;
 import com.giut.server.dto.request.ProfileLinkRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +39,8 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class UserProfileService {
+
+    private static final int PUBLIC_PROFILE_PAGE_SIZE = 5;
 
     private final UserProfileRepository userProfileRepository;
 
@@ -65,11 +70,15 @@ public class UserProfileService {
      * 프로필 수와 관계없이 프로필, 사용자, 역할, 사용자 태그, 태그를 각각 한 번씩 조회한다.
      */
     @Transactional(readOnly = true)
-    public PublicProfileListResponse getPublicProfiles() {
-        List<UserProfile> profiles = userProfileRepository
-                .findAllBySearchableTrueAndActivityStatusNot(UserProfile.ActivityStatus.RESTING);
+    public PublicProfileListResponse getPublicProfiles(int page) {
+        Page<UserProfile> profilePage = userProfileRepository.findPublicProfiles(
+                UserProfile.ActivityStatus.RESTING,
+                User.Status.ACTIVE,
+                PageRequest.of(page, PUBLIC_PROFILE_PAGE_SIZE, Sort.by(Sort.Direction.DESC, "userId"))
+        );
+        List<UserProfile> profiles = profilePage.getContent();
         if (profiles.isEmpty()) {
-            return new PublicProfileListResponse(List.of());
+            return toPublicProfileListResponse(profilePage, List.of());
         }
 
         List<Long> profileUserIds = profiles.stream().map(UserProfile::getUserId).toList();
@@ -82,7 +91,7 @@ public class UserProfileService {
                 .filter(userById::containsKey)
                 .toList();
         if (publicUserIds.isEmpty()) {
-            return new PublicProfileListResponse(List.of());
+            return toPublicProfileListResponse(profilePage, List.of());
         }
 
         Map<Long, List<ProfileRoleResponse>> rolesByUserId = findRolesByUserId(publicUserIds);
@@ -98,7 +107,7 @@ public class UserProfileService {
                 ))
                 .toList();
 
-        return new PublicProfileListResponse(publicProfiles);
+        return toPublicProfileListResponse(profilePage, publicProfiles);
     }
 
     @Transactional
@@ -322,6 +331,20 @@ public class UserProfileService {
                 primaryRoles,
                 roles,
                 tags
+        );
+    }
+
+    private PublicProfileListResponse toPublicProfileListResponse(
+            Page<UserProfile> profilePage,
+            List<PublicProfileResponse> profiles
+    ) {
+        return new PublicProfileListResponse(
+                profiles,
+                profilePage.getNumber(),
+                profilePage.getSize(),
+                profilePage.getTotalElements(),
+                profilePage.getTotalPages(),
+                profilePage.hasNext()
         );
     }
 
