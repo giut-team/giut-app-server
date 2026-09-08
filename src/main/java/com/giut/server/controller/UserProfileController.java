@@ -55,7 +55,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 생성 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"departmentId\":3,\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"UNSPECIFIED\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"id\":1,\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
                             )
                     )
             ),
@@ -67,7 +67,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 수정 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"departmentId\":3,\"departmentName\":\"컴퓨터과학부\",\"grade\":4,\"gender\":\"UNSPECIFIED\",\"profileImageUrl\":null,\"bio\":\"백엔드 공모전 팀원을 찾고 있습니다.\",\"searchable\":false}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":4,\"gender\":\"MALE\",\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"activityStatus\":\"OPEN_TO_OFFERS\",\"activityStatusName\":\"프로필 쓰는 중\",\"profileImageUrl\":null,\"bio\":\"백엔드 공모전 팀원을 찾고 있습니다.\",\"searchable\":false,\"roles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}],\"tags\":[],\"links\":[]}}"
                             )
                     )
             ),
@@ -84,14 +84,14 @@ public class UserProfileController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "404",
-                    description = "학과를 찾을 수 없음",
+                    responseCode = "400",
+                    description = "유효하지 않은 요청값 또는 태그/역할 조합",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ResultDto.class),
                             examples = @ExampleObject(
-                                    name = "학과 없음",
-                                    value = "{\"success\":false,\"message\":\"Resource not Found : 존재하지 않는 학과입니다.\",\"code\":404}"
+                                    name = "잘못된 요청",
+                                    value = "{\"success\":false,\"message\":\"IllegalArgumentException : 세부 역할은 대표 역할과 같은 분야에서 선택해야 합니다.\",\"code\":400}"
                             )
                     )
             ),
