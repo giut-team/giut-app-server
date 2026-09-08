@@ -5,12 +5,16 @@ import com.giut.server.entity.UserProfileRoleId;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface UserProfileRoleRepository extends JpaRepository<UserProfileRole, UserProfileRoleId> {
 
     @EntityGraph(attributePaths = "role")
     List<UserProfileRole> findAllByUserId(Long userId);
+
+    @EntityGraph(attributePaths = "role")
+    List<UserProfileRole> findAllByUserIdIn(Collection<Long> userIds);
 
     void deleteByUserId(Long userId);
 }

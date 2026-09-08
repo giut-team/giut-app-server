@@ -5,8 +5,10 @@ import com.giut.server.dto.request.CreateSkillTagRequest;
 import com.giut.server.dto.response.CreateSkillTagResponse;
 import com.giut.server.dto.response.ProfileRoleListResponse;
 import com.giut.server.dto.response.ProfileTagListResponse;
+import com.giut.server.dto.response.PublicProfileListResponse;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.service.ProfileOptionService;
+import com.giut.server.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -33,10 +35,11 @@ import java.util.List;
 @Tag(name = "Profile Options", description = "프로필 작성 화면의 역할과 태그 선택지")
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/profile-options")
-public class ProfileOptionController {
+@RequestMapping("/api/profile")
+public class ProfileController {
 
     private final ProfileOptionService profileOptionService;
+    private final UserProfileService userProfileService;
 
     @GetMapping("/roles")
     @Operation(summary = "대표 역할별 세부 역할 조회", description = "대표 역할 버튼을 선택했을 때 선택 가능한 세부 역할을 조회합니다.")
@@ -210,5 +213,49 @@ public class ProfileOptionController {
     ) {
         CreateSkillTagResponse response = profileOptionService.createSkill(request);
         return ResponseEntity.status(response.created() ? HttpStatus.CREATED : HttpStatus.OK).body(response);
+    }
+
+
+    @GetMapping
+    @Operation(
+            summary = "전체 공개 프로필 조회",
+            description = "프로필 공개가 켜져 있고 현재 활동 상태가 휴식 중이 아닌 사용자 프로필을 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            // 성공 응답
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "전체 공개 프로필 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PublicProfileListResponse.class),
+                            examples = @ExampleObject(
+                                    value = "{\"profiles\":[{\"userId\":1,\"nickname\":\"김민재\",\"universityVerified\":true,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}]}]}"
+                            )
+                    )
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}")
+                    )
+            )
+    })
+    public ResponseEntity<PublicProfileListResponse> getPublicProfiles() {
+        return ResponseEntity.ok(userProfileService.getPublicProfiles());
     }
 }

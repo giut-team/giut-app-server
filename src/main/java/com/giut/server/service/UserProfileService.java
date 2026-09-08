@@ -9,6 +9,7 @@ import com.giut.server.entity.ProfileLink;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
+import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
 import com.giut.server.entity.UserProfileTag;
@@ -18,6 +19,7 @@ import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
+import com.giut.server.repository.UserRepository;
 import com.giut.server.dto.request.ProfileLinkRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,8 @@ public class UserProfileService {
 
     private final UserProfileRepository userProfileRepository;
 
+    private final UserRepository userRepository;
+
     private final UserProfileRoleRepository userProfileRoleRepository;
 
     private final UserProfileTagRepository userProfileTagRepository;
@@ -54,6 +58,47 @@ public class UserProfileService {
         return userProfileRepository.findById(userId)
                 .map(this::toMyProfileResponse)
                 .orElseGet(MyProfileResponse::notCompleted);
+    }
+
+    /**
+     * 기웃허브 목록에 노출할 공개 프로필을 일괄 조회한다.
+     * 프로필 수와 관계없이 프로필, 사용자, 역할, 사용자 태그, 태그를 각각 한 번씩 조회한다.
+     */
+    @Transactional(readOnly = true)
+    public PublicProfileListResponse getPublicProfiles() {
+        List<UserProfile> profiles = userProfileRepository
+                .findAllBySearchableTrueAndActivityStatusNot(UserProfile.ActivityStatus.RESTING);
+        if (profiles.isEmpty()) {
+            return new PublicProfileListResponse(List.of());
+        }
+
+        List<Long> profileUserIds = profiles.stream().map(UserProfile::getUserId).toList();
+        Map<Long, User> userById = new HashMap<>();
+        userRepository.findAllByIdInAndStatus(profileUserIds, User.Status.ACTIVE)
+                .forEach(user -> userById.put(user.getId(), user));
+
+        List<Long> publicUserIds = profiles.stream()
+                .map(UserProfile::getUserId)
+                .filter(userById::containsKey)
+                .toList();
+        if (publicUserIds.isEmpty()) {
+            return new PublicProfileListResponse(List.of());
+        }
+
+        Map<Long, List<ProfileRoleResponse>> rolesByUserId = findRolesByUserId(publicUserIds);
+        Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = findTagsByUserId(publicUserIds);
+
+        List<PublicProfileResponse> publicProfiles = profiles.stream()
+                .filter(profile -> userById.containsKey(profile.getUserId()))
+                .map(profile -> toPublicProfileResponse(
+                        profile,
+                        userById.get(profile.getUserId()),
+                        rolesByUserId.getOrDefault(profile.getUserId(), List.of()),
+                        tagsByUserId.getOrDefault(profile.getUserId(), List.of())
+                ))
+                .toList();
+
+        return new PublicProfileListResponse(publicProfiles);
     }
 
     @Transactional
@@ -224,6 +269,60 @@ public class UserProfileService {
                 .toList();
 
         return MyProfileResponse.completed(ProfileResponse.from(profile, primaryRoles, roles, tags, links));
+    }
+
+    private Map<Long, List<ProfileRoleResponse>> findRolesByUserId(List<Long> userIds) {
+        Map<Long, List<ProfileRoleResponse>> rolesByUserId = new HashMap<>();
+        userProfileRoleRepository.findAllByUserIdIn(userIds).forEach(userProfileRole -> rolesByUserId
+                .computeIfAbsent(userProfileRole.getUserId(), ignored -> new ArrayList<>())
+                .add(ProfileRoleResponse.from(userProfileRole.getRole())));
+        return rolesByUserId;
+    }
+
+    private Map<Long, List<ProfileTagSummaryResponse>> findTagsByUserId(List<Long> userIds) {
+        List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByUserIdIn(userIds);
+        Map<Long, ProfileTag> tagById = new HashMap<>();
+        profileTagRepository.findAllById(userProfileTags.stream().map(UserProfileTag::getTagId).toList())
+                .forEach(tag -> tagById.put(tag.getId(), tag));
+
+        Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = new HashMap<>();
+        userProfileTags.forEach(userProfileTag -> {
+            ProfileTag tag = tagById.get(userProfileTag.getTagId());
+            if (tag != null) {
+                tagsByUserId
+                        .computeIfAbsent(userProfileTag.getUserId(), ignored -> new ArrayList<>())
+                        .add(ProfileTagSummaryResponse.from(tag));
+            }
+        });
+        return tagsByUserId;
+    }
+
+    private PublicProfileResponse toPublicProfileResponse(
+            UserProfile profile,
+            User user,
+            List<ProfileRoleResponse> roles,
+            List<ProfileTagSummaryResponse> tags
+    ) {
+        List<ProfilePrimaryRoleResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile)).stream()
+                .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
+                .map(ProfilePrimaryRoleResponse::from)
+                .toList();
+
+        return new PublicProfileResponse(
+                profile.getUserId(),
+                user.getNickname(),
+                user.getUniversityVerifiedAt() != null,
+                profile.getDepartment(),
+                profile.getDepartment().getDisplayName(),
+                profile.getGrade(),
+                profile.getProfileImageUrl(),
+                profile.getActivityStatus(),
+                profile.getActivityStatus().getDisplayName(),
+                profile.getBio(),
+                primaryRoles,
+                roles,
+                tags
+        );
     }
 
     private String writeJson(Object value) {
