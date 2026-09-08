@@ -2,26 +2,47 @@ package com.giut.server.dto.response;
 
 import com.giut.server.entity.UserProfile;
 
+import java.util.List;
+
 public record ProfileResponse(
         Long userId,
-        Long departmentId,
+        UserProfile.DepartmentType department,
         String departmentName,
         Short grade,
         UserProfile.Gender gender,
+        String primaryRole,
+        String primaryRoleName,
+        UserProfile.ActivityStatus activityStatus,
+        String activityStatusName,
         String profileImageUrl,
         String bio,
-        boolean searchable
+        boolean searchable,
+        List<ProfileRoleResponse> roles,
+        List<ProfileTagResponse> tags,
+        List<ProfileLinkResponse> links
 ) {
-    public static ProfileResponse from(UserProfile profile) {
+    public static ProfileResponse from(
+            UserProfile profile,
+            List<ProfileRoleResponse> roles,
+            List<ProfileTagResponse> tags,
+            List<ProfileLinkResponse> links
+    ) {
         return new ProfileResponse(
                 profile.getUserId(),
-                profile.getDepartment().getId().longValue(),
-                profile.getDepartment().getName(),
+                profile.getDepartment(),
+                profile.getDepartment().getDisplayName(),
                 profile.getGrade(),
                 profile.getGender(),
+                profile.getPrimaryRole().getCode(),
+                profile.getPrimaryRole().getName(),
+                profile.getActivityStatus(),
+                profile.getActivityStatus().getDisplayName(),
                 profile.getProfileImageUrl(),
                 profile.getBio(),
-                profile.isSearchable()
+                profile.isSearchable(),
+                roles,
+                tags,
+                links
         );
     }
 }
