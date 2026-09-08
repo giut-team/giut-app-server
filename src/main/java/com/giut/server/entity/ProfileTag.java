@@ -21,6 +21,14 @@ public class ProfileTag {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    public static ProfileTag create(TagType tagType, String name, String normalizedName) {
+        ProfileTag tag = new ProfileTag();
+        tag.tagType = tagType;
+        tag.name = name;
+        tag.normalizedName = normalizedName;
+        return tag;
+    }
+
     @PrePersist void onCreate() {
         if (createdAt == null) createdAt = Instant.now();
     }
