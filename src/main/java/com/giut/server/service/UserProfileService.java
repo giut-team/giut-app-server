@@ -9,6 +9,7 @@ import com.giut.server.entity.ProfileLink;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
+import com.giut.server.entity.PortfolioItem;
 import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
@@ -17,6 +18,7 @@ import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
+import com.giut.server.repository.PortfolioItemRepository;
 import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
@@ -56,6 +58,8 @@ public class UserProfileService {
     private final ProfileRoleRepository profileRoleRepository;
 
     private final ProfileRoleSkillTagRepository profileRoleSkillTagRepository;
+
+    private final PortfolioItemRepository portfolioItemRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -298,7 +302,13 @@ public class UserProfileService {
                 .map(ProfileLinkResponse::from)
                 .toList();
 
-        return ProfileResponse.from(profile, primaryRoles, roles, tags, links);
+        List<PortfolioItemResponse> portfolioItems = portfolioItemRepository
+                .findAllByUserIdOrderByDisplayOrderAsc(profile.getUserId())
+                .stream()
+                .map(PortfolioItemResponse::from)
+                .toList();
+
+        return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems);
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {

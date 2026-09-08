@@ -18,14 +18,16 @@ public record ProfileResponse(
         boolean searchable,
         List<ProfileRoleResponse> roles,
         List<ProfileTagResponse> tags,
-        List<ProfileLinkResponse> links
+        List<ProfileLinkResponse> links,
+        List<PortfolioItemResponse> portfolioItems
 ) {
     public static ProfileResponse from(
             UserProfile profile,
             List<ProfilePrimaryRoleResponse> primaryRoles,
             List<ProfileRoleResponse> roles,
             List<ProfileTagResponse> tags,
-            List<ProfileLinkResponse> links
+            List<ProfileLinkResponse> links,
+            List<PortfolioItemResponse> portfolioItems
     ) {
         return new ProfileResponse(
                 profile.getUserId(),
@@ -41,7 +43,8 @@ public record ProfileResponse(
                 profile.isSearchable(),
                 roles,
                 tags,
-                links
+                links,
+                portfolioItems
         );
     }
 }
