@@ -5,6 +5,7 @@ import com.giut.server.dto.request.UniversityEmailVerifyRequest;
 import com.giut.server.dto.response.UniversityEmailSendResponse;
 import com.giut.server.dto.response.UniversityEmailVerifyResponse;
 import com.giut.server.entity.User;
+import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -71,7 +72,7 @@ public class UniversityEmailVerificationService {
         }
 
         User user = userRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
 
         user.verifyUniversityEmail(universityEmail);
         verificationCodes.remove(key);

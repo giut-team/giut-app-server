@@ -1,5 +1,6 @@
 package com.giut.server.controller;
 
+import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.response.ProfileRoleListResponse;
 import com.giut.server.dto.response.ProfileTagListResponse;
 import com.giut.server.entity.ProfileTag;
@@ -44,6 +45,7 @@ public class ProfileOptionController {
             )
     )
     @ApiResponses({
+            // 성공 응답
             @ApiResponse(
                     responseCode = "200",
                     description = "세부 역할 조회 성공",
@@ -52,6 +54,43 @@ public class ProfileOptionController {
                             schema = @Schema(implementation = ProfileRoleListResponse.class),
                             examples = @ExampleObject(value = "{\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}"
                     )
+                    )
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "필수 Query Parameter 누락 또는 잘못된 요청 형식",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"MissingServletRequestParameterException : Required request parameter 'primaryRole' for method parameter type String is not present\",\"code\":400}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "대표 역할 또는 세부 역할을 찾을 수 없음",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 존재하지 않는 대표 역할입니다.\",\"code\":404}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}")
                     )
             )
     })
@@ -66,6 +105,7 @@ public class ProfileOptionController {
     @SecurityRequirement(name = "JWT")
     @Parameter(name = "type", in = ParameterIn.QUERY, required = true, example = "SKILL", description = "SKILL, INTEREST, EXPERIENCE 중 하나")
     @ApiResponses({
+            // 성공 응답
             @ApiResponse(
                     responseCode = "200",
                     description = "프로필 태그 조회 성공",
@@ -74,6 +114,43 @@ public class ProfileOptionController {
                             schema = @Schema(implementation = ProfileTagListResponse.class),
                             examples = @ExampleObject(value = "{\"type\":\"SKILL\",\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}]}"
                     )
+                    )
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "필수 Query Parameter 누락 또는 지원하지 않는 태그 유형",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"MethodArgumentTypeMismatchException : Failed to convert value\",\"code\":400}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "요청한 유형의 프로필 태그가 없음",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 등록된 프로필 태그가 없습니다.\",\"code\":404}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}")
                     )
             )
     })

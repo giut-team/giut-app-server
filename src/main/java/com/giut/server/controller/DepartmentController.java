@@ -1,5 +1,6 @@
 package com.giut.server.controller;
 
+import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.response.DepartmentListResponse;
 import com.giut.server.service.DepartmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +29,7 @@ public class DepartmentController {
     @Operation(summary = "서울시립대학교 학과 목록 조회", description = "프로필 등록 화면에서 선택할 학부 과정의 학과 Enum 목록을 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
+            // 성공 응답
             @ApiResponse(
                     responseCode = "200",
                     description = "학과 목록 조회 성공",
@@ -39,7 +41,25 @@ public class DepartmentController {
                             )
                     )
             ),
-            @ApiResponse(responseCode = "401", description = "인증 실패")
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}")
+                    )
+            )
     })
     public ResponseEntity<DepartmentListResponse> getDepartments() {
         return ResponseEntity.ok(departmentService.getDepartments());

@@ -34,6 +34,30 @@ public class UserProfileController {
 
     @GetMapping("/me/profile")
     @Operation(summary = "내 프로필 조회", description = "현재 로그인한 사용자의 프로필과 프로필 등록 여부를 조회합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            // 성공 응답
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "내 프로필 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = MyProfileResponse.class),
+                            examples = @ExampleObject(value = "{\"profileCompleted\":false,\"profile\":null}")
+                    )
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}"))
+            )
+    })
     public ResponseEntity<MyProfileResponse> getMyProfile(Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
 
@@ -47,6 +71,7 @@ public class UserProfileController {
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
+            // 성공 응답
             @ApiResponse(
                     responseCode = "201",
                     description = "프로필 최초 등록 성공",
@@ -71,6 +96,7 @@ public class UserProfileController {
                             )
                     )
             ),
+            // 실패 응답
             @ApiResponse(
                     responseCode = "401",
                     description = "인증 실패 또는 토큰 누락",
