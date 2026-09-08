@@ -90,3 +90,16 @@ temp/
 *.tmp
 *.swp
 *.swo
+/gradle/
+/src/main/resources/db/
+!/src/main/resources/db/
+!/src/main/resources/db/manual/
+/src/main/resources/db/*
+!/src/main/resources/db/manual/
+/src/main/resources/db/manual/*
+!/src/main/resources/db/manual/V7__simplify_profile_display_data.sql
+!/src/main/resources/db/manual/V8__merge_profile_role_categories.sql
+!/src/main/resources/db/manual/V9__create_portfolio_items.sql
+!/src/main/resources/db/seed/
+/src/main/resources/db/seed/*
+!/src/main/resources/db/seed/profile_roles.sql
