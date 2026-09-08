@@ -1,10 +1,10 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.request.PortfolioItemOrderRequest;
-import com.giut.server.dto.request.PortfolioItemRequest;
-import com.giut.server.dto.response.PortfolioItemListResponse;
-import com.giut.server.dto.response.PortfolioItemResponse;
+import com.giut.server.dto.profile.request.PortfolioItemOrderRequest;
+import com.giut.server.dto.profile.request.PortfolioItemRequest;
+import com.giut.server.dto.profile.response.PortfolioItemListResponse;
+import com.giut.server.dto.profile.response.PortfolioItemResponse;
 import com.giut.server.service.PortfolioItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

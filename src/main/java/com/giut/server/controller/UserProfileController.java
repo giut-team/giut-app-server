@@ -1,9 +1,9 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.request.PutMyProfileRequest;
-import com.giut.server.dto.response.MyProfileResponse;
-import com.giut.server.dto.response.MyProfileSaveResponse;
+import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.response.MyProfileResponse;
+import com.giut.server.dto.profile.response.MyProfileSaveResponse;
 import com.giut.server.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

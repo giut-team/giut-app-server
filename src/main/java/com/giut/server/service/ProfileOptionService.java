@@ -1,11 +1,11 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.CreateSkillTagRequest;
-import com.giut.server.dto.response.CreateSkillTagResponse;
-import com.giut.server.dto.response.ProfileRoleListResponse;
-import com.giut.server.dto.response.ProfileRoleResponse;
-import com.giut.server.dto.response.ProfileTagListResponse;
-import com.giut.server.dto.response.ProfileTagResponse;
+import com.giut.server.dto.profile.request.CreateSkillTagRequest;
+import com.giut.server.dto.profile.response.CreateSkillTagResponse;
+import com.giut.server.dto.profile.response.ProfileRoleListResponse;
+import com.giut.server.dto.profile.response.ProfileRoleResponse;
+import com.giut.server.dto.profile.response.ProfileTagListResponse;
+import com.giut.server.dto.profile.response.ProfileTagResponse;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;

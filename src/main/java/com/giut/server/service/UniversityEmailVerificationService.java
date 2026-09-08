@@ -1,9 +1,9 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.UniversityEmailSendRequest;
-import com.giut.server.dto.request.UniversityEmailVerifyRequest;
-import com.giut.server.dto.response.UniversityEmailSendResponse;
-import com.giut.server.dto.response.UniversityEmailVerifyResponse;
+import com.giut.server.dto.university.request.UniversityEmailSendRequest;
+import com.giut.server.dto.university.request.UniversityEmailVerifyRequest;
+import com.giut.server.dto.university.response.UniversityEmailSendResponse;
+import com.giut.server.dto.university.response.UniversityEmailVerifyResponse;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.UserRepository;

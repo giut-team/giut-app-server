@@ -1,9 +1,9 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.PortfolioItemOrderRequest;
-import com.giut.server.dto.request.PortfolioItemRequest;
-import com.giut.server.dto.response.PortfolioItemListResponse;
-import com.giut.server.dto.response.PortfolioItemResponse;
+import com.giut.server.dto.profile.request.PortfolioItemOrderRequest;
+import com.giut.server.dto.profile.request.PortfolioItemRequest;
+import com.giut.server.dto.profile.response.PortfolioItemListResponse;
+import com.giut.server.dto.profile.response.PortfolioItemResponse;
 import com.giut.server.entity.PortfolioItem;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.PortfolioItemRepository;

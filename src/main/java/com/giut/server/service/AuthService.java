@@ -1,9 +1,9 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.LoginRequest;
-import com.giut.server.dto.request.SignUpRequest;
-import com.giut.server.dto.response.LoginResponse;
-import com.giut.server.dto.response.SignUpResponse;
+import com.giut.server.dto.auth.request.LoginRequest;
+import com.giut.server.dto.auth.request.SignUpRequest;
+import com.giut.server.dto.auth.response.LoginResponse;
+import com.giut.server.dto.auth.response.SignUpResponse;
 import com.giut.server.entity.User;
 import com.giut.server.repository.UserRepository;
 import com.giut.server.security.JwtProvider;

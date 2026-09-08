@@ -1,10 +1,10 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.request.UniversityEmailSendRequest;
-import com.giut.server.dto.request.UniversityEmailVerifyRequest;
-import com.giut.server.dto.response.UniversityEmailSendResponse;
-import com.giut.server.dto.response.UniversityEmailVerifyResponse;
+import com.giut.server.dto.university.request.UniversityEmailSendRequest;
+import com.giut.server.dto.university.request.UniversityEmailVerifyRequest;
+import com.giut.server.dto.university.response.UniversityEmailSendResponse;
+import com.giut.server.dto.university.response.UniversityEmailVerifyResponse;
 import com.giut.server.service.UniversityEmailVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

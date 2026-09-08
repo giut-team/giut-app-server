@@ -1,7 +1,7 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.response.DepartmentListResponse;
-import com.giut.server.dto.response.DepartmentResponse;
+import com.giut.server.dto.department.response.DepartmentListResponse;
+import com.giut.server.dto.department.response.DepartmentResponse;
 import com.giut.server.entity.UserProfile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

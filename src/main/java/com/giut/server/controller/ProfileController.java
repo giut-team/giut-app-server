@@ -1,12 +1,12 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.request.CreateSkillTagRequest;
-import com.giut.server.dto.response.CreateSkillTagResponse;
-import com.giut.server.dto.response.ProfileRoleListResponse;
-import com.giut.server.dto.response.ProfileTagListResponse;
-import com.giut.server.dto.response.PublicProfileListResponse;
-import com.giut.server.dto.response.PublicProfileDetailResponse;
+import com.giut.server.dto.profile.request.CreateSkillTagRequest;
+import com.giut.server.dto.profile.response.CreateSkillTagResponse;
+import com.giut.server.dto.profile.response.ProfileRoleListResponse;
+import com.giut.server.dto.profile.response.ProfileTagListResponse;
+import com.giut.server.dto.profile.response.PublicProfileListResponse;
+import com.giut.server.dto.profile.response.PublicProfileDetailResponse;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.service.ProfileOptionService;
 import com.giut.server.service.UserProfileService;

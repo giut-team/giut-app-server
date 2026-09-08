@@ -1,9 +1,9 @@
 package com.giut.server.controller.Admin;
 
-import com.giut.server.dto.request.LoginRequest;
-import com.giut.server.dto.request.SignUpRequest;
-import com.giut.server.dto.response.LoginResponse;
-import com.giut.server.dto.response.SignUpResponse;
+import com.giut.server.dto.auth.request.LoginRequest;
+import com.giut.server.dto.auth.request.SignUpRequest;
+import com.giut.server.dto.auth.response.LoginResponse;
+import com.giut.server.dto.auth.response.SignUpResponse;
 import com.giut.server.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

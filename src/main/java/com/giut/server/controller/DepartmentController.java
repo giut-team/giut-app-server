@@ -1,7 +1,7 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.response.DepartmentListResponse;
+import com.giut.server.dto.department.response.DepartmentListResponse;
 import com.giut.server.service.DepartmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
