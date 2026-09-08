@@ -1,11 +1,11 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.LoginRequest;
-import com.giut.server.dto.request.SignUpRequest;
-import com.giut.server.dto.response.LoginResponse;
-import com.giut.server.dto.response.SignUpResponse;
+import com.giut.server.dto.auth.request.LoginRequest;
+import com.giut.server.dto.auth.request.SignUpRequest;
+import com.giut.server.dto.auth.response.LoginResponse;
+import com.giut.server.dto.auth.response.SignUpResponse;
 import com.giut.server.entity.User;
-import com.giut.server.repository.MemberRepository;
+import com.giut.server.repository.UserRepository;
 import com.giut.server.security.JwtProvider;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
 
@@ -26,7 +26,7 @@ public class AuthService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
-        if (memberRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
@@ -38,7 +38,7 @@ public class AuthService {
                 request.getPhone()
         );
 
-        User savedUser = memberRepository.save(user);
+        User savedUser = userRepository.save(user);
 
         return new SignUpResponse(
                 savedUser.getId(),
@@ -50,7 +50,7 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
-        User user = memberRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다."));
 
         if (user.getRole() != User.Role.ADMIN) {

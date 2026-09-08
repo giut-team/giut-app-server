@@ -1,4 +1,4 @@
-package com.giut.server.dto.response;
+package com.giut.server.dto.auth.response;
 
 import com.giut.server.entity.User;
 import lombok.AllArgsConstructor;

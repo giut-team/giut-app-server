@@ -1,11 +1,12 @@
 package com.giut.server.service;
 
-import com.giut.server.dto.request.UniversityEmailSendRequest;
-import com.giut.server.dto.request.UniversityEmailVerifyRequest;
-import com.giut.server.dto.response.UniversityEmailSendResponse;
-import com.giut.server.dto.response.UniversityEmailVerifyResponse;
+import com.giut.server.dto.university.request.UniversityEmailSendRequest;
+import com.giut.server.dto.university.request.UniversityEmailVerifyRequest;
+import com.giut.server.dto.university.response.UniversityEmailSendResponse;
+import com.giut.server.dto.university.response.UniversityEmailVerifyResponse;
 import com.giut.server.entity.User;
-import com.giut.server.repository.MemberRepository;
+import com.giut.server.exception.ResourceNotFoundException;
+import com.giut.server.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,7 +27,7 @@ public class UniversityEmailVerificationService {
     private final Map<String, VerificationCode> verificationCodes = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
 
-    private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
 
@@ -70,8 +71,8 @@ public class UniversityEmailVerificationService {
             throw new IllegalArgumentException("인증코드가 일치하지 않습니다.");
         }
 
-        User user = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+        User user = userRepository.findById(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
 
         user.verifyUniversityEmail(universityEmail);
         verificationCodes.remove(key);
@@ -90,7 +91,7 @@ public class UniversityEmailVerificationService {
     }
 
     private void validateNotUsedUniversityEmail(String universityEmail) {
-        if (memberRepository.existsByUniversityEmail(universityEmail)) {
+        if (userRepository.existsByUniversityEmail(universityEmail)) {
             throw new IllegalArgumentException("이미 인증에 사용된 학교 이메일입니다.");
         }
     }

@@ -1,4 +1,4 @@
-package com.giut.server.dto.response;
+package com.giut.server.dto.university.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -7,11 +7,9 @@ import java.time.LocalDateTime;
 
 @Getter
 @AllArgsConstructor
-public class UniversityEmailVerifyResponse {
-
-    private Long memberId;
+public class UniversityEmailSendResponse {
 
     private String universityEmail;
 
-    private LocalDateTime universityVerifiedAt;
+    private LocalDateTime expiresAt;
 }

@@ -15,6 +15,13 @@ public class UserProfileTag {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    public static UserProfileTag create(Long userId, Long tagId) {
+        UserProfileTag userProfileTag = new UserProfileTag();
+        userProfileTag.userId = userId;
+        userProfileTag.tagId = tagId;
+        return userProfileTag;
+    }
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = Instant.now();

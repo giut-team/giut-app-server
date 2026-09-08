@@ -1,4 +1,4 @@
-package com.giut.server.dto.request;
+package com.giut.server.dto.university.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

@@ -1,4 +1,4 @@
-package com.giut.server.dto.request;
+package com.giut.server.dto.auth.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Email;
