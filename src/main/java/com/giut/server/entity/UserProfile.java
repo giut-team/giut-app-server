@@ -14,10 +14,6 @@ public class UserProfile extends BaseTimeEntity {
     @Enumerated(EnumType.STRING) @Column(name = "department_type", nullable = false, length = 50)
     private DepartmentType department;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "primary_role_id", nullable = false)
-    private ProfileRoleCategory primaryRole;
-
     @Enumerated(EnumType.STRING) @Column(name = "activity_status", nullable = false, length = 30)
     private ActivityStatus activityStatus;
 
@@ -38,7 +34,6 @@ public class UserProfile extends BaseTimeEntity {
     public static UserProfile create(
             Long userId,
             DepartmentType department,
-            ProfileRoleCategory primaryRole,
             ActivityStatus activityStatus,
             Short grade,
             Gender gender,
@@ -48,13 +43,12 @@ public class UserProfile extends BaseTimeEntity {
     ) {
         UserProfile profile = new UserProfile();
         profile.userId = userId;
-        profile.update(department, primaryRole, activityStatus, grade, gender, profileImageUrl, bio, searchable);
+        profile.update(department, activityStatus, grade, gender, profileImageUrl, bio, searchable);
         return profile;
     }
 
     public void update(
             DepartmentType department,
-            ProfileRoleCategory primaryRole,
             ActivityStatus activityStatus,
             Short grade,
             Gender gender,
@@ -63,7 +57,6 @@ public class UserProfile extends BaseTimeEntity {
             boolean searchable
     ) {
         this.department = department;
-        this.primaryRole = primaryRole;
         this.activityStatus = activityStatus;
         this.grade = grade;
         this.gender = gender;

@@ -1,6 +1,8 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.request.CreateSkillTagRequest;
+import com.giut.server.dto.response.CreateSkillTagResponse;
 import com.giut.server.dto.response.ProfileRoleListResponse;
 import com.giut.server.dto.response.ProfileTagListResponse;
 import com.giut.server.entity.ProfileTag;
@@ -16,8 +18,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -158,5 +164,44 @@ public class ProfileOptionController {
             @RequestParam ProfileTag.TagType type
     ) {
         return ResponseEntity.ok(profileOptionService.getTags(type));
+    }
+
+    @PostMapping("/tags/skills")
+    @Operation(summary = "직접 입력 기술 스택 추가", description = "기존 기술 스택에 없던 항목을 SKILL 태그로 추가합니다. 동일한 기술 스택이 있으면 기존 태그를 반환합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            // 성공 응답
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "기술 스택 신규 추가 성공",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":true,\"skill\":{\"id\":23,\"type\":\"SKILL\",\"name\":\"Docker\"}}"))
+            ),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "이미 존재하는 기술 스택 반환",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateSkillTagResponse.class), examples = @ExampleObject(value = "{\"created\":false,\"skill\":{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}}"))
+            ),
+            // 실패 응답
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "기술 스택 이름 누락 또는 길이 초과",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"기술 스택 이름은 필수입니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}"))
+            )
+    })
+    public ResponseEntity<CreateSkillTagResponse> createSkill(
+            @Valid @RequestBody CreateSkillTagRequest request
+    ) {
+        CreateSkillTagResponse response = profileOptionService.createSkill(request);
+        return ResponseEntity.status(response.created() ? HttpStatus.CREATED : HttpStatus.OK).body(response);
     }
 }

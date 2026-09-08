@@ -3,7 +3,7 @@ package com.giut.server.controller;
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.request.PutMyProfileRequest;
 import com.giut.server.dto.response.MyProfileResponse;
-import com.giut.server.service.MyProfileSaveResult;
+import com.giut.server.dto.response.MyProfileSaveResponse;
 import com.giut.server.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -43,7 +43,16 @@ public class UserProfileController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = MyProfileResponse.class),
-                            examples = @ExampleObject(value = "{\"profileCompleted\":false,\"profile\":null}")
+                            examples = {
+                                    @ExampleObject(
+                                            name = "프로필 등록 완료",
+                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"links\":[{\"id\":1,\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "프로필 미등록",
+                                            value = "{\"profileCompleted\":false,\"profile\":null}"
+                                    )
+                            }
                     )
             ),
             // 실패 응답
@@ -80,7 +89,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 생성 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"id\":1,\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"id\":1,\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
                             )
                     )
             ),
@@ -92,7 +101,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 수정 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":4,\"gender\":\"MALE\",\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"activityStatus\":\"OPEN_TO_OFFERS\",\"activityStatusName\":\"프로필 쓰는 중\",\"profileImageUrl\":null,\"bio\":\"백엔드 공모전 팀원을 찾고 있습니다.\",\"searchable\":false,\"roles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}],\"tags\":[],\"links\":[]}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":4,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"OPEN_TO_OFFERS\",\"activityStatusName\":\"프로필 쓰는 중\",\"profileImageUrl\":null,\"bio\":\"백엔드 공모전 팀원을 찾고 있습니다.\",\"searchable\":false,\"roles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"},{\"code\":\"PROJECT_MANAGER\",\"name\":\"프로젝트 매니저\"}],\"tags\":[],\"links\":[]}}"
                             )
                     )
             ),
@@ -139,7 +148,7 @@ public class UserProfileController {
             @Valid @RequestBody PutMyProfileRequest request
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        MyProfileSaveResult result = userProfileService.saveMyProfile(userId, request);
+        MyProfileSaveResponse result = userProfileService.saveMyProfile(userId, request);
 
         if (result.created()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(result.response());

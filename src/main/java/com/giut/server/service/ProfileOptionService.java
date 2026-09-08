@@ -1,5 +1,7 @@
 package com.giut.server.service;
 
+import com.giut.server.dto.request.CreateSkillTagRequest;
+import com.giut.server.dto.response.CreateSkillTagResponse;
 import com.giut.server.dto.response.ProfileRoleListResponse;
 import com.giut.server.dto.response.ProfileRoleResponse;
 import com.giut.server.dto.response.ProfileTagListResponse;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -58,5 +61,21 @@ public class ProfileOptionService {
         }
 
         return new ProfileTagListResponse(type, tags);
+    }
+
+    @Transactional
+    public CreateSkillTagResponse createSkill(CreateSkillTagRequest request) {
+        String name = request.name().trim();
+        String normalizedName = name.toLowerCase(Locale.ROOT);
+
+        return profileTagRepository
+                .findByTagTypeAndNormalizedName(ProfileTag.TagType.SKILL, normalizedName)
+                .map(skill -> new CreateSkillTagResponse(false, ProfileTagResponse.from(skill)))
+                .orElseGet(() -> {
+                    ProfileTag skill = profileTagRepository.save(
+                            ProfileTag.create(ProfileTag.TagType.SKILL, name, normalizedName)
+                    );
+                    return new CreateSkillTagResponse(true, ProfileTagResponse.from(skill));
+                });
     }
 }

@@ -10,8 +10,7 @@ public record ProfileResponse(
         String departmentName,
         Short grade,
         UserProfile.Gender gender,
-        String primaryRole,
-        String primaryRoleName,
+        List<ProfilePrimaryRoleResponse> primaryRoles,
         UserProfile.ActivityStatus activityStatus,
         String activityStatusName,
         String profileImageUrl,
@@ -23,6 +22,7 @@ public record ProfileResponse(
 ) {
     public static ProfileResponse from(
             UserProfile profile,
+            List<ProfilePrimaryRoleResponse> primaryRoles,
             List<ProfileRoleResponse> roles,
             List<ProfileTagResponse> tags,
             List<ProfileLinkResponse> links
@@ -33,8 +33,7 @@ public record ProfileResponse(
                 profile.getDepartment().getDisplayName(),
                 profile.getGrade(),
                 profile.getGender(),
-                profile.getPrimaryRole().getCode(),
-                profile.getPrimaryRole().getName(),
+                primaryRoles,
                 profile.getActivityStatus(),
                 profile.getActivityStatus().getDisplayName(),
                 profile.getProfileImageUrl(),

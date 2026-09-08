@@ -1,8 +1,8 @@
-package com.giut.server.service;
+package com.giut.server.dto.response;
 
 import com.giut.server.dto.response.MyProfileResponse;
 
-public record MyProfileSaveResult(
+public record MyProfileSaveResponse(
         MyProfileResponse response,
         boolean created
 ) {

@@ -17,9 +17,10 @@ public record PutMyProfileRequest(
         @NotNull(message = "학과는 필수입니다.")
         UserProfile.DepartmentType department,
 
-        @Schema(description = "대표 역할 코드. profile_role_categories의 code 값입니다.", example = "DEVELOPMENT")
-        @NotBlank(message = "대표 역할은 필수입니다.")
-        String primaryRole,
+        @Schema(description = "대표 역할 코드 목록. DEVELOPMENT, DESIGN, PLANNING, MARKETING 중 복수 선택할 수 있습니다.", example = "[\"DEVELOPMENT\", \"PLANNING\"]")
+        @NotEmpty(message = "대표 역할은 1개 이상 선택해야 합니다.")
+        @Size(max = 4, message = "대표 역할은 최대 4개까지 선택할 수 있습니다.")
+        List<@NotBlank(message = "대표 역할 코드는 비어 있을 수 없습니다.") String> primaryRoles,
 
         @Schema(description = "세부 역할 목록. 대표 역할과 같은 분야의 역할만 선택할 수 있습니다.", example = "[\"BACKEND_DEVELOPER\", \"DATA_ANALYST\"]")
         @NotEmpty(message = "세부 역할은 1개 이상 선택해야 합니다.")
