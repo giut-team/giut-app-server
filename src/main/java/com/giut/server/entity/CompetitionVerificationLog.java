@@ -23,8 +23,9 @@ public class CompetitionVerificationLog {
     @Enumerated(EnumType.STRING) @Column(name = "verification_method", nullable = false, length = 20)
     private Method verificationMethod;
 
-    @Column(name = "actor_user_id")
-    private Long actorUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "actor_user_id", foreignKey = @ForeignKey(name = "fk_verification_logs_actor_user"))
+    private User actorUser;
 
     @Column(columnDefinition = "text")
     private String reason;

@@ -135,6 +135,8 @@ public class UserProfileService {
 
     @Transactional
     public MyProfileSaveResponse saveMyProfile(Long userId, PutMyProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
         validateLinkTypes(request.links()); // 같은 링크로 등록하는게 있는지 체크
@@ -148,7 +150,7 @@ public class UserProfileService {
 
         if (created) {
             profile = userProfileRepository.save(UserProfile.create(
-                    userId,
+                    user,
                     request.department(),
                     request.activityStatus(),
                     request.grade(),
@@ -173,8 +175,8 @@ public class UserProfileService {
             );
         }
 
-        replaceRoles(userId, roles);
-        replaceTags(userId, request);
+        replaceRoles(profile, roles);
+        replaceTags(profile, request);
 
         return new MyProfileSaveResponse(toMyProfileResponse(profile), created);
     }
@@ -219,25 +221,25 @@ public class UserProfileService {
         }
     }
 
-    private void replaceRoles(Long userId, List<ProfileRole> roles) {
-        userProfileRoleRepository.deleteByUserId(userId);
+    private void replaceRoles(UserProfile profile, List<ProfileRole> roles) {
+        userProfileRoleRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileRoleRepository.flush();
 
         userProfileRoleRepository.saveAll(roles.stream()
-                .map(role -> UserProfileRole.create(userId, role))
+                .map(role -> UserProfileRole.create(profile, role))
                 .toList());
     }
 
-    private void replaceTags(Long userId, PutMyProfileRequest request) {
+    private void replaceTags(UserProfile profile, PutMyProfileRequest request) {
         List<ProfileTag> allTags = new ArrayList<>(findTags(request.skillTagIds(), ProfileTag.TagType.SKILL));
         allTags.addAll(findTags(request.interestTagIds(), ProfileTag.TagType.INTEREST));
         allTags.addAll(findTags(request.experienceTagIds(), ProfileTag.TagType.EXPERIENCE));
 
-        userProfileTagRepository.deleteByUserId(userId);
+        userProfileTagRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileTagRepository.flush();
 
         userProfileTagRepository.saveAll(allTags.stream()
-                .map(tag -> UserProfileTag.create(userId, tag.getId()))
+                .map(tag -> UserProfileTag.create(profile, tag))
                 .toList());
     }
 
@@ -276,13 +278,13 @@ public class UserProfileService {
                 .map(ProfileCodeNameResponse::from)
                 .toList();
 
-        List<ProfileCodeNameResponse> roles = userProfileRoleRepository.findAllByUserId(profile.getUserId()).stream()
+        List<ProfileCodeNameResponse> roles = userProfileRoleRepository.findAllByProfile_UserId(profile.getUserId()).stream()
                 .map(UserProfileRole::getRole)
                 .map(ProfileCodeNameResponse::from)
                 .toList();
 
-        List<Long> tagIds = userProfileTagRepository.findAllByUserId(profile.getUserId()).stream()
-                .map(UserProfileTag::getTagId)
+        List<Long> tagIds = userProfileTagRepository.findAllByProfile_UserId(profile.getUserId()).stream()
+                .map(userProfileTag -> userProfileTag.getTag().getId())
                 .toList();
         Map<Long, ProfileTag> tagById = new HashMap<>();
         profileTagRepository.findAllById(tagIds).forEach(tag -> tagById.put(tag.getId(), tag));
@@ -305,7 +307,7 @@ public class UserProfileService {
                 .toList();
 
         List<PortfolioItemDto> portfolioItems = portfolioItemRepository
-                .findAllByUserIdOrderByDisplayOrderAsc(profile.getUserId())
+                .findAllByUser_IdOrderByDisplayOrderAsc(profile.getUserId())
                 .stream()
                 .map(PortfolioItemDto::from)
                 .toList();
@@ -314,17 +316,17 @@ public class UserProfileService {
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {
-        List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByUserIdIn(userIds);
+        List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByProfile_UserIdIn(userIds);
         Map<Long, ProfileTag> tagById = new HashMap<>();
-        profileTagRepository.findAllById(userProfileTags.stream().map(UserProfileTag::getTagId).toList())
+        profileTagRepository.findAllById(userProfileTags.stream().map(userProfileTag -> userProfileTag.getTag().getId()).toList())
                 .forEach(tag -> tagById.put(tag.getId(), tag));
 
         Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = new HashMap<>();
         userProfileTags.forEach(userProfileTag -> {
-            ProfileTag tag = tagById.get(userProfileTag.getTagId());
+            ProfileTag tag = tagById.get(userProfileTag.getTag().getId());
             if (tag != null && tag.getTagType() == ProfileTag.TagType.SKILL) {
                 tagsByUserId
-                        .computeIfAbsent(userProfileTag.getUserId(), ignored -> new ArrayList<>())
+                        .computeIfAbsent(userProfileTag.getProfile().getUserId(), ignored -> new ArrayList<>())
                         .add(ProfileTagSummaryResponse.from(tag));
             }
         });

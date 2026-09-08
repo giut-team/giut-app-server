@@ -3,6 +3,7 @@ package com.giut.server.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.JoinColumn;
@@ -23,8 +24,9 @@ import java.time.Instant;
 public class UserProfileRole {
 
     @Id
-    @Column(name = "user_id")
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_user_profile_roles_profile"))
+    private UserProfile profile;
 
     @Id
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,9 +36,9 @@ public class UserProfileRole {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    public static UserProfileRole create(Long userId, ProfileRole role) {
+    public static UserProfileRole create(UserProfile profile, ProfileRole role) {
         UserProfileRole userProfileRole = new UserProfileRole();
-        userProfileRole.userId = userId;
+        userProfileRole.profile = profile;
         userProfileRole.role = role;
         return userProfileRole;
     }

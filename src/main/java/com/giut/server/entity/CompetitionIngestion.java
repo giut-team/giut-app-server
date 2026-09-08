@@ -18,8 +18,9 @@ public class CompetitionIngestion {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "source_id", nullable = false)
     private Source source;
 
-    @Column(name = "submitted_by_user_id")
-    private Long submittedByUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submitted_by_user_id", foreignKey = @ForeignKey(name = "fk_ingestions_submitted_by_user"))
+    private User submittedByUser;
 
     @Column(name = "external_id", length = 200)
     private String externalId;
@@ -48,8 +49,9 @@ public class CompetitionIngestion {
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "raw_payload", columnDefinition = "json")
     private String rawPayload;
 
-    @Column(name = "reviewed_by_user_id")
-    private Long reviewedByUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id", foreignKey = @ForeignKey(name = "fk_ingestions_reviewed_by_user"))
+    private User reviewedByUser;
 
     @Column(name = "reviewed_at")
     private Instant reviewedAt;

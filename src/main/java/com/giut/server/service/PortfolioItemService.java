@@ -4,8 +4,10 @@ import com.giut.server.dto.profile.request.PortfolioItemOrderRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.entity.PortfolioItem;
+import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,20 +24,24 @@ public class PortfolioItemService {
 
     private final PortfolioItemRepository portfolioItemRepository;
 
+    private final UserRepository userRepository;
+
     @Transactional(readOnly = true)
     public PortfolioItemListResponse getMyPortfolioItems(Long userId) {
-        return toListResponse(portfolioItemRepository.findAllByUserIdOrderByDisplayOrderAsc(userId));
+        return toListResponse(portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(userId));
     }
 
     @Transactional
     public PortfolioItemDto createPortfolioItem(Long userId, PortfolioItemDto request) {
-        if (portfolioItemRepository.countByUserId(userId) >= MAX_PORTFOLIO_ITEMS) {
+        if (portfolioItemRepository.countByUser_Id(userId) >= MAX_PORTFOLIO_ITEMS) {
             throw new IllegalStateException("포트폴리오는 최대 6개까지 등록할 수 있습니다.");
         }
 
-        int displayOrder = portfolioItemRepository.findAllByUserIdOrderByDisplayOrderAsc(userId).size() + 1;
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        int displayOrder = portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(userId).size() + 1;
         PortfolioItem portfolioItem = portfolioItemRepository.save(PortfolioItem.create(
-                userId,
+                user,
                 request.imageUrl(),
                 request.title(),
                 request.caption(),
@@ -63,7 +69,7 @@ public class PortfolioItemService {
 
     @Transactional
     public PortfolioItemListResponse changePortfolioItemOrder(Long userId, PortfolioItemOrderRequest request) {
-        List<PortfolioItem> portfolioItems = portfolioItemRepository.findAllByUserIdOrderByDisplayOrderAsc(userId);
+        List<PortfolioItem> portfolioItems = portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(userId);
         List<Long> requestedIds = request.portfolioItemIds();
         Set<Long> requestedIdSet = new HashSet<>(requestedIds);
         Set<Long> currentIdSet = portfolioItems.stream().map(PortfolioItem::getId).collect(java.util.stream.Collectors.toSet());
@@ -82,12 +88,12 @@ public class PortfolioItemService {
     }
 
     private PortfolioItem findPortfolioItem(Long userId, Long portfolioItemId) {
-        return portfolioItemRepository.findByIdAndUserId(portfolioItemId, userId)
+        return portfolioItemRepository.findByIdAndUser_Id(portfolioItemId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("포트폴리오 항목을 찾을 수 없습니다."));
     }
 
     private void reassignDisplayOrder(Long userId) {
-        List<PortfolioItem> portfolioItems = portfolioItemRepository.findAllByUserIdOrderByDisplayOrderAsc(userId);
+        List<PortfolioItem> portfolioItems = portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(userId);
         for (int index = 0; index < portfolioItems.size(); index++) {
             portfolioItems.get(index).changeDisplayOrder(index + 1);
         }

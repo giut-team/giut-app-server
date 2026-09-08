@@ -11,8 +11,9 @@ public class Team extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "competition_id", nullable = false)
     private Competition competition;
 
-    @Column(name = "leader_user_id", nullable = false)
-    private Long leaderUserId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "leader_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_teams_leader_user"))
+    private User leader;
 
     @Column(nullable = false, length = 100)
     private String name;

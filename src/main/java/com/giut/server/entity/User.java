@@ -63,6 +63,9 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
+    private UserProfile profile;
+
     public static User createAdmin(String email, String passwordHash, String nickname, String phone) {
         User user = new User();
         user.email = email;

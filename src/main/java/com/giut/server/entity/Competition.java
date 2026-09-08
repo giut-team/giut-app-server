@@ -39,8 +39,9 @@ public class Competition extends BaseTimeEntity {
     @Column(name = "verified_at")
     private Instant verifiedAt;
 
-    @Column(name = "verified_by_user_id")
-    private Long verifiedByUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "verified_by_user_id", foreignKey = @ForeignKey(name = "fk_competitions_verified_by_user"))
+    private User verifiedByUser;
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;

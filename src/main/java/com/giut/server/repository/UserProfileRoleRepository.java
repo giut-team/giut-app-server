@@ -11,10 +11,10 @@ import java.util.List;
 public interface UserProfileRoleRepository extends JpaRepository<UserProfileRole, UserProfileRoleId> {
 
     @EntityGraph(attributePaths = "role")
-    List<UserProfileRole> findAllByUserId(Long userId);
+    List<UserProfileRole> findAllByProfile_UserId(Long userId);
 
     @EntityGraph(attributePaths = "role")
-    List<UserProfileRole> findAllByUserIdIn(Collection<Long> userIds);
+    List<UserProfileRole> findAllByProfile_UserIdIn(Collection<Long> userIds);
 
-    void deleteByUserId(Long userId);
+    void deleteByProfile_UserId(Long userId);
 }
