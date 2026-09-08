@@ -276,7 +276,7 @@ public class ProfileController {
     }
 
     @GetMapping("/{userId}")
-    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 외부 링크를 포함한 상세 프로필을 조회합니다.")
+    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 외부 링크, 포트폴리오를 포함한 상세 프로필을 조회합니다. 포트폴리오는 displayOrder 오름차순으로 반환됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -286,7 +286,7 @@ public class ProfileController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicProfileDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}")
+                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}],\"portfolioItems\":[{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"content\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"displayOrder\":1}]}}")
                     )
             ),
             // 실패 응답
