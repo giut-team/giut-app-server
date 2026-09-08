@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Department")
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/departments")
+@RequestMapping("/api/departments")
 public class DepartmentController {
 
     private final DepartmentService departmentService;
