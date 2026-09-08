@@ -12,4 +12,10 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             ChatMessage.Status status,
             Pageable pageable
     );
+
+    Page<ChatMessage> findAllByChatRoomIdAndStatusOrderByIdAsc(
+            Long chatRoomId,
+            ChatMessage.Status status,
+            Pageable pageable
+    );
 }
