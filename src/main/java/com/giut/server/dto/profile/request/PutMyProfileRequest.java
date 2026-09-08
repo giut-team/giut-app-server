@@ -1,6 +1,7 @@
 package com.giut.server.dto.profile.request;
 
 import com.giut.server.entity.UserProfile;
+import com.giut.server.dto.profile.common.ProfileLinkDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -71,6 +72,6 @@ public record PutMyProfileRequest(
         @Schema(description = "GitHub, Notion, 포트폴리오 PDF 등 외부 링크 목록", example = "[{\"type\":\"GITHUB\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]")
         @NotNull(message = "외부 링크 목록은 필수입니다. 없다면 빈 배열을 입력하세요.")
         @Size(max = 4, message = "외부 링크는 최대 4개까지 등록할 수 있습니다.")
-        List<@jakarta.validation.Valid ProfileLinkRequest> links
+        List<@jakarta.validation.Valid ProfileLinkDto> links
 ) {
 }
