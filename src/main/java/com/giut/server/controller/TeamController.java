@@ -37,7 +37,7 @@ public class TeamController {
     @PostMapping
     @Operation(
             summary = "팀 생성",
-            description = "대회에 참여할 팀을 생성합니다. 팀 생성 시 팀장은 팀원으로 자동 등록되고, 팀 채팅방과 채팅방 참여자도 함께 생성됩니다."
+            description = "대회에 참여할 팀을 생성합니다. 팀 생성 시 팀장은 팀원으로 자동 등록됩니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -47,7 +47,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = CreateTeamResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"status\":\"RECRUITING\",\"chatRoomId\":5,\"chatRoomType\":\"TEAM\",\"createdAt\":\"2026-09-08T10:30:00Z\"}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"status\":\"RECRUITING\",\"createdAt\":\"2026-09-08T10:30:00Z\"}")
                     )
             ),
             @ApiResponse(
@@ -123,7 +123,7 @@ public class TeamController {
     @PostMapping("/{teamId}/applications/{applicationId}/approve")
     @Operation(
             summary = "팀 참가 신청 승인",
-            description = "팀장이 참가 신청을 승인합니다. 승인 시 신청자는 팀원으로 추가되고 팀 채팅방 참여자로도 자동 추가됩니다."
+            description = "팀장이 참가 신청을 승인합니다. 승인 시 신청자는 팀원으로 추가됩니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -133,7 +133,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ApproveTeamApplicationResponse.class),
-                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"status\":\"APPROVED\",\"teamMemberId\":3,\"chatRoomId\":5,\"chatRoomMemberId\":7}")
+                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"status\":\"APPROVED\",\"teamMemberId\":3}")
                     )
             ),
             @ApiResponse(
@@ -148,7 +148,7 @@ public class TeamController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "팀, 신청 내역 또는 팀 채팅방을 찾을 수 없음",
+                    description = "팀 또는 승인 대기 중인 신청 내역을 찾을 수 없음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 승인 대기 중인 참가 신청을 찾을 수 없습니다.\",\"code\":404}"))
             )
     })

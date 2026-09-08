@@ -18,12 +18,6 @@ public record ApproveTeamApplicationResponse(
         TeamApplication.Status status,
 
         @Schema(description = "팀원 ID", example = "3")
-        Long teamMemberId,
-
-        @Schema(description = "채팅방 ID", example = "5")
-        Long chatRoomId,
-
-        @Schema(description = "채팅방 참여자 ID", example = "7")
-        Long chatRoomMemberId
+        Long teamMemberId
 ) {
 }

@@ -1,6 +1,5 @@
 package com.giut.server.dto.team.response;
 
-import com.giut.server.entity.ChatRoom;
 import com.giut.server.entity.Team;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -23,25 +22,17 @@ public record CreateTeamResponse(
         @Schema(description = "팀 상태", example = "RECRUITING")
         Team.Status status,
 
-        @Schema(description = "생성된 팀 채팅방 ID", example = "5")
-        Long chatRoomId,
-
-        @Schema(description = "채팅방 타입", example = "TEAM")
-        ChatRoom.Type chatRoomType,
-
         @Schema(description = "생성일시", example = "2026-09-08T10:30:00Z")
         Instant createdAt
 ) {
 
-    public static CreateTeamResponse of(Team team, ChatRoom chatRoom) {
+    public static CreateTeamResponse from(Team team) {
         return new CreateTeamResponse(
                 team.getId(),
                 team.getCompetition().getId(),
                 team.getLeaderUserId(),
                 team.getName(),
                 team.getStatus(),
-                chatRoom.getId(),
-                chatRoom.getType(),
                 team.getCreatedAt()
         );
     }

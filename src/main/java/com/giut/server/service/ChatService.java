@@ -1,15 +1,19 @@
 package com.giut.server.service;
 
+import com.giut.server.dto.chat.request.CreatePersonalChatRoomRequest;
 import com.giut.server.dto.chat.request.SendChatMessageRequest;
 import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
+import com.giut.server.dto.chat.response.ChatRoomResponse;
 import com.giut.server.entity.ChatMessage;
 import com.giut.server.entity.ChatRoom;
 import com.giut.server.entity.ChatRoomMember;
+import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ChatMessageRepository;
 import com.giut.server.repository.ChatRoomMemberRepository;
 import com.giut.server.repository.ChatRoomRepository;
+import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +32,28 @@ public class ChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final UserRepository userRepository;
+
+    @Transactional
+    public ChatRoomResponse createPersonalChatRoom(Long userId, CreatePersonalChatRoomRequest request) {
+        Long targetUserId = request.targetUserId();
+        if (userId.equals(targetUserId)) {
+            throw new IllegalArgumentException("자기 자신과는 개인 채팅방을 만들 수 없습니다.");
+        }
+
+        findActiveUser(userId, "사용자를 찾을 수 없습니다.");
+        findActiveUser(targetUserId, "상대 사용자를 찾을 수 없습니다.");
+
+        return chatRoomMemberRepository.findActivePersonalChatRoomId(
+                        userId,
+                        targetUserId,
+                        ChatRoom.Type.PERSONAL,
+                        ChatRoom.Status.ACTIVE
+                )
+                .flatMap(chatRoomRepository::findById)
+                .map(chatRoom -> ChatRoomResponse.of(chatRoom, targetUserId, false))
+                .orElseGet(() -> createNewPersonalChatRoom(userId, targetUserId));
+    }
 
     @Transactional
     public ChatMessageResponse sendMessage(Long userId, Long chatRoomId, SendChatMessageRequest request) {
@@ -92,5 +118,18 @@ public class ChatService {
         }
 
         return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private ChatRoomResponse createNewPersonalChatRoom(Long userId, Long targetUserId) {
+        ChatRoom chatRoom = chatRoomRepository.save(ChatRoom.createPersonalRoom());
+        chatRoomMemberRepository.save(ChatRoomMember.join(chatRoom.getId(), userId));
+        chatRoomMemberRepository.save(ChatRoomMember.join(chatRoom.getId(), targetUserId));
+        return ChatRoomResponse.of(chatRoom, targetUserId, true);
+    }
+
+    private User findActiveUser(Long userId, String notFoundMessage) {
+        return userRepository.findById(userId)
+                .filter(user -> user.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException(notFoundMessage));
     }
 }

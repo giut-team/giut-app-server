@@ -1,9 +1,11 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.chat.request.CreatePersonalChatRoomRequest;
 import com.giut.server.dto.chat.request.SendChatMessageRequest;
 import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
+import com.giut.server.dto.chat.response.ChatRoomResponse;
 import com.giut.server.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,6 +35,48 @@ import org.springframework.web.bind.annotation.RestController;
 public class ChatController {
 
     private final ChatService chatService;
+
+    @PostMapping("/personal")
+    @Operation(
+            summary = "개인 채팅방 생성",
+            description = "현재 로그인한 사용자와 상대 사용자 사이의 개인 채팅방을 생성합니다. 이미 활성화된 개인 채팅방이 있으면 기존 채팅방을 반환합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "개인 채팅방 생성 또는 기존 채팅방 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ChatRoomResponse.class),
+                            examples = @ExampleObject(value = "{\"chatRoomId\":5,\"type\":\"PERSONAL\",\"status\":\"ACTIVE\",\"targetUserId\":15,\"created\":true,\"createdAt\":\"2026-09-08T11:10:00Z\"}")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "자기 자신과의 채팅방 생성 요청",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"자기 자신과는 개인 채팅방을 만들 수 없습니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 또는 토큰 누락",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "사용자 또는 상대 사용자를 찾을 수 없음",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 상대 사용자를 찾을 수 없습니다.\",\"code\":404}"))
+            )
+    })
+    public ResponseEntity<ChatRoomResponse> createPersonalChatRoom(
+            Authentication authentication,
+            @Valid @RequestBody CreatePersonalChatRoomRequest request
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        ChatRoomResponse response = chatService.createPersonalChatRoom(userId, request);
+        HttpStatus status = response.created() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(response);
+    }
 
     @PostMapping("/{chatRoomId}/messages")
     @Operation(

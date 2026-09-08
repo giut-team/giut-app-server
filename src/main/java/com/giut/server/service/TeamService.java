@@ -5,16 +5,12 @@ import com.giut.server.dto.team.request.ApplyTeamRequest;
 import com.giut.server.dto.team.response.ApproveTeamApplicationResponse;
 import com.giut.server.dto.team.response.CreateTeamResponse;
 import com.giut.server.dto.team.response.TeamApplicationResponse;
-import com.giut.server.entity.ChatRoom;
-import com.giut.server.entity.ChatRoomMember;
 import com.giut.server.entity.Competition;
 import com.giut.server.entity.Team;
 import com.giut.server.entity.TeamApplication;
 import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
-import com.giut.server.repository.ChatRoomMemberRepository;
-import com.giut.server.repository.ChatRoomRepository;
 import com.giut.server.repository.CompetitionRepository;
 import com.giut.server.repository.TeamApplicationRepository;
 import com.giut.server.repository.TeamMemberRepository;
@@ -31,8 +27,6 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
-    private final ChatRoomRepository chatRoomRepository;
-    private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final CompetitionRepository competitionRepository;
     private final UserRepository userRepository;
 
@@ -56,10 +50,7 @@ public class TeamService {
 
         teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId()));
 
-        ChatRoom chatRoom = chatRoomRepository.save(ChatRoom.createTeamRoom(team.getId()));
-        chatRoomMemberRepository.save(ChatRoomMember.join(chatRoom.getId(), leader.getId()));
-
-        return CreateTeamResponse.of(team, chatRoom);
+        return CreateTeamResponse.from(team);
     }
 
     @Transactional
@@ -106,23 +97,15 @@ public class TeamService {
             throw new IllegalArgumentException("팀 정원이 이미 마감되었습니다.");
         }
 
-        ChatRoom chatRoom = chatRoomRepository.findByTeamIdAndType(teamId, ChatRoom.Type.TEAM)
-                .orElseThrow(() -> new ResourceNotFoundException("팀 채팅방을 찾을 수 없습니다."));
-
         application.approve();
         TeamMember teamMember = teamMemberRepository.save(TeamMember.createMember(teamId, application.getUserId()));
-        ChatRoomMember chatRoomMember = chatRoomMemberRepository.save(
-                ChatRoomMember.join(chatRoom.getId(), application.getUserId())
-        );
 
         return new ApproveTeamApplicationResponse(
                 application.getId(),
                 application.getTeamId(),
                 application.getUserId(),
                 application.getStatus(),
-                teamMember.getId(),
-                chatRoom.getId(),
-                chatRoomMember.getId()
+                teamMember.getId()
         );
     }
 
