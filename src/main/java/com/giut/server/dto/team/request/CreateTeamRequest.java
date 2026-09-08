@@ -3,10 +3,13 @@ package com.giut.server.dto.team.request;
 import com.giut.server.entity.Team;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 @Schema(description = "팀 생성 요청")
 public record CreateTeamRequest(
@@ -31,6 +34,10 @@ public record CreateTeamRequest(
         @NotNull(message = "최대 팀원 수는 필수입니다.")
         @Min(value = 2, message = "최대 팀원 수는 2명 이상이어야 합니다.")
         @Max(value = 20, message = "최대 팀원 수는 20명 이하여야 합니다.")
-        Short maxMemberCount
+        Short maxMemberCount,
+
+        @Schema(description = "팀장이 설정한 지원서 질문 목록", example = "[{\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true}]")
+        @Size(max = 5, message = "지원서 질문은 최대 5개까지 등록할 수 있습니다.")
+        List<@Valid CreateTeamQuestionRequest> applicationQuestions
 ) {
 }

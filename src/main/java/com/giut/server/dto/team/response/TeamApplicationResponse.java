@@ -4,6 +4,7 @@ import com.giut.server.entity.TeamApplication;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.List;
 
 @Schema(description = "팀 참가 신청 응답")
 public record TeamApplicationResponse(
@@ -26,10 +27,16 @@ public record TeamApplicationResponse(
         Instant appliedAt,
 
         @Schema(description = "승인/거절 처리 일시", example = "2026-09-08T10:45:00Z", nullable = true)
-        Instant decidedAt
+        Instant decidedAt,
+
+        @Schema(description = "지원서 답변 목록")
+        List<TeamApplicationAnswerResponse> answers
 ) {
 
-    public static TeamApplicationResponse from(TeamApplication application) {
+    public static TeamApplicationResponse of(
+            TeamApplication application,
+            List<TeamApplicationAnswerResponse> answers
+    ) {
         return new TeamApplicationResponse(
                 application.getId(),
                 application.getTeamId(),
@@ -37,7 +44,8 @@ public record TeamApplicationResponse(
                 application.getMessage(),
                 application.getStatus(),
                 application.getAppliedAt(),
-                application.getDecidedAt()
+                application.getDecidedAt(),
+                answers
         );
     }
 }

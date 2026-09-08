@@ -4,6 +4,7 @@ import com.giut.server.entity.Team;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.List;
 
 @Schema(description = "팀 생성 응답")
 public record CreateTeamResponse(
@@ -23,17 +24,21 @@ public record CreateTeamResponse(
         Team.Status status,
 
         @Schema(description = "생성일시", example = "2026-09-08T10:30:00Z")
-        Instant createdAt
+        Instant createdAt,
+
+        @Schema(description = "지원서 질문 목록")
+        List<TeamApplicationQuestionResponse> applicationQuestions
 ) {
 
-    public static CreateTeamResponse from(Team team) {
+    public static CreateTeamResponse of(Team team, List<TeamApplicationQuestionResponse> applicationQuestions) {
         return new CreateTeamResponse(
                 team.getId(),
                 team.getCompetition().getId(),
                 team.getLeaderUserId(),
                 team.getName(),
                 team.getStatus(),
-                team.getCreatedAt()
+                team.getCreatedAt(),
+                applicationQuestions
         );
     }
 }
