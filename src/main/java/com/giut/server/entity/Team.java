@@ -31,4 +31,23 @@ public class Team extends BaseTimeEntity {
 
     public enum ActivityMode { ONLINE, OFFLINE, HYBRID }
     public enum Status { RECRUITING, CLOSED, ARCHIVED }
+
+    public static Team create(
+            Competition competition,
+            Long leaderUserId,
+            String name,
+            String description,
+            ActivityMode activityMode,
+            Short maxMemberCount
+    ) {
+        Team team = new Team();
+        team.competition = competition;
+        team.leaderUserId = leaderUserId;
+        team.name = name;
+        team.description = description;
+        team.activityMode = activityMode;
+        team.maxMemberCount = maxMemberCount;
+        team.status = Status.RECRUITING;
+        return team;
+    }
 }
