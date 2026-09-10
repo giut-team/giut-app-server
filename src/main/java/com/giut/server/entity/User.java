@@ -24,6 +24,11 @@ public class User {
         DELETED
     }
 
+    public enum OAuthProvider {
+        KAKAO,
+        APPLE
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -37,8 +42,15 @@ public class User {
     @Column(nullable = false, length = 50)
     private String nickname;
 
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private String phone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "oauth_provider", length = 20)
+    private OAuthProvider oauthProvider;
+
+    @Column(name = "oauth_provider_id", unique = true, length = 100)
+    private String oauthProviderId;
 
     @Column(name = "student_no", unique = true, length = 30)
     private String studentNo;
@@ -73,6 +85,24 @@ public class User {
         user.nickname = nickname;
         user.phone = phone;
         user.role = Role.ADMIN;
+        user.status = Status.ACTIVE;
+        user.createdAt = LocalDateTime.now();
+        user.updatedAt = user.createdAt;
+        return user;
+    }
+
+    public static User createOAuthUser(
+            String email,
+            String nickname,
+            OAuthProvider oauthProvider,
+            String oauthProviderId
+    ) {
+        User user = new User();
+        user.email = email;
+        user.nickname = nickname;
+        user.oauthProvider = oauthProvider;
+        user.oauthProviderId = oauthProviderId;
+        user.role = Role.STUDENT;
         user.status = Status.ACTIVE;
         user.createdAt = LocalDateTime.now();
         user.updatedAt = user.createdAt;

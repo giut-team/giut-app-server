@@ -82,6 +82,21 @@ public class GlobalExceptionHandler {
                 .body(resultDto);
     }
 
+    @ExceptionHandler(KakaoApiException.class)
+    public ResponseEntity<ResultDto> handleKakaoApiException(KakaoApiException e) {
+        logger.error("KakaoApiException : {}", e.getMessage());
+
+        ResultDto resultDto = ResultDto.builder()
+                .success(false)
+                .message("KakaoApiException : " + e.getMessage())
+                .code(e.getStatus().value())
+                .build();
+
+        return ResponseEntity
+                .status(e.getStatus())
+                .body(resultDto);
+    }
+
     // Conflict
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ResultDto> handleConflict(ConflictException e) {

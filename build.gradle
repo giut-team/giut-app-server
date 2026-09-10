@@ -51,6 +51,13 @@ dependencies {
 
 	// Email SMTP
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+	// Kakao Login
+	implementation 'com.google.code.gson:gson'
+
+	// Apple Login
+	implementation "com.nimbusds:nimbus-jose-jwt:9.37.3"
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 }
 
 tasks.named('test') {
