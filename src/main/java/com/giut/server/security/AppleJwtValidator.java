@@ -20,8 +20,8 @@ import java.util.Map;
 public class AppleJwtValidator {
     private static final String APPLE_PUBLIC_KEYS_URL = "https://appleid.apple.com/auth/keys";
 
-    @Value("${apple.bundle-id}")
-    private String appleBundleId;
+    @Value("${apple.client-id}")
+    private String appleClientId;
 
     private final WebClient webClient;
 
@@ -30,6 +30,10 @@ public class AppleJwtValidator {
     }
 
     public Map<String, Object> validateAndGetClaims(String identityToken) throws Exception {
+        return validateAndGetClaims(identityToken, null);
+    }
+
+    public Map<String, Object> validateAndGetClaims(String identityToken, String expectedNonce) throws Exception {
         SignedJWT signedJWT = SignedJWT.parse(identityToken);
 
         if (!verifySignature(signedJWT)) {
@@ -41,6 +45,7 @@ public class AppleJwtValidator {
         validateAudience(claims);
         validateExpiration(signedJWT);
         validateIssuer(claims);
+        validateNonce(claims, expectedNonce);
 
         return claims;
     }
@@ -50,9 +55,9 @@ public class AppleJwtValidator {
         boolean valid = false;
 
         if (audClaim instanceof String) {
-            valid = appleBundleId.equals(audClaim);
+            valid = appleClientId.equals(audClaim);
         } else if (audClaim instanceof List) {
-            valid = ((List<?>) audClaim).contains(appleBundleId);
+            valid = ((List<?>) audClaim).contains(appleClientId);
         }
 
         if (!valid) {
@@ -71,6 +76,17 @@ public class AppleJwtValidator {
         String issuer = (String) claims.get("iss");
         if (!"https://appleid.apple.com".equals(issuer)) {
             throw new IllegalArgumentException("Invalid issuer: " + issuer);
+        }
+    }
+
+    private void validateNonce(Map<String, Object> claims, String expectedNonce) {
+        if (expectedNonce == null) {
+            return;
+        }
+
+        Object nonce = claims.get("nonce");
+        if (!(nonce instanceof String) || !expectedNonce.equals(nonce)) {
+            throw new IllegalArgumentException("Invalid nonce");
         }
     }
 

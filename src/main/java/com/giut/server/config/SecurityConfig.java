@@ -34,7 +34,7 @@ public class SecurityConfig {
                                 "/api/admin/auth/signup",
                                 "/api/admin/auth/sign-up",
                                 "/api/admin/auth/login",
-                                "/api/auth/kakao/**",
+                                "/api/oauth/**",
                                 "/swagger-ui",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",

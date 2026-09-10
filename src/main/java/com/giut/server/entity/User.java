@@ -42,9 +42,6 @@ public class User {
     @Column(nullable = false, length = 50)
     private String nickname;
 
-    @Column(length = 20)
-    private String phone;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "oauth_provider", length = 20)
     private OAuthProvider oauthProvider;
@@ -78,12 +75,11 @@ public class User {
     @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
     private UserProfile profile;
 
-    public static User createAdmin(String email, String passwordHash, String nickname, String phone) {
+    public static User createAdmin(String email, String passwordHash, String nickname) {
         User user = new User();
         user.email = email;
         user.passwordHash = passwordHash;
         user.nickname = nickname;
-        user.phone = phone;
         user.role = Role.ADMIN;
         user.status = Status.ACTIVE;
         user.createdAt = LocalDateTime.now();

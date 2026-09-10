@@ -97,6 +97,21 @@ public class GlobalExceptionHandler {
                 .body(resultDto);
     }
 
+    @ExceptionHandler(AppleApiException.class)
+    public ResponseEntity<ResultDto> handleAppleApiException(AppleApiException e) {
+        logger.error("AppleApiException : {}", e.getMessage());
+
+        ResultDto resultDto = ResultDto.builder()
+                .success(false)
+                .message("AppleApiException : " + e.getMessage())
+                .code(e.getStatus().value())
+                .build();
+
+        return ResponseEntity
+                .status(e.getStatus())
+                .body(resultDto);
+    }
+
     // Conflict
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ResultDto> handleConflict(ConflictException e) {

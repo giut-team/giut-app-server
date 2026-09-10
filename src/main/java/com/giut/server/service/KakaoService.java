@@ -12,6 +12,7 @@ import com.giut.server.repository.UserRepository;
 import com.giut.server.security.JwtProvider;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class KakaoService {
 
@@ -45,12 +47,16 @@ public class KakaoService {
     @Value("${kakao.redirect-uri}")
     private String redirectUri;
 
-    public String getAuthorizationUrl() {
+    @Value("${kakao.client-secret:}")
+    private String clientSecret;
+
+    public String getAuthorizationUrl(String state) {
         return UriComponentsBuilder
                 .fromUriString(KAKAO_AUTHORIZATION_URL)
                 .queryParam("client_id", restApiKey)
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("response_type", "code")
+                .queryParam("state", state)
                 .build()
                 .toUriString();
     }
@@ -105,6 +111,10 @@ public class KakaoService {
                 + "&redirect_uri=" + encode(redirectUri)
                 + "&code=" + encode(authorizationCode);
 
+        if (clientSecret != null && !clientSecret.isBlank()) {
+            form += "&client_secret=" + encode(clientSecret);
+        }
+
         try (Writer writer = new OutputStreamWriter(connection.getOutputStream(), StandardCharsets.UTF_8)) {
             writer.write(form);
         } catch (IOException e) {
@@ -157,12 +167,14 @@ public class KakaoService {
                     ? connection.getInputStream()
                     : connection.getErrorStream();
 
-            if (status < 200 || status >= 300) {
-                throw new KakaoApiException(HttpStatus.BAD_GATEWAY, failureMessage);
-            }
-
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                 String responseBody = reader.lines().reduce("", String::concat);
+
+                if (status < 200 || status >= 300) {
+                    log.warn("Kakao API failed. status={}, response={}", status, responseBody);
+                    throw new KakaoApiException(HttpStatus.BAD_GATEWAY, failureMessage);
+                }
+
                 return JsonParser.parseString(responseBody).getAsJsonObject();
             }
         } catch (KakaoApiException e) {
