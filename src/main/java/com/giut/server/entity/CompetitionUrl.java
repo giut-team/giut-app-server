@@ -33,6 +33,24 @@ public class CompetitionUrl {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    public static CompetitionUrl create(
+            Competition competition,
+            Type urlType,
+            String url,
+            String normalizedUrl,
+            String normalizedUrlHash,
+            boolean primary
+    ) {
+        CompetitionUrl competitionUrl = new CompetitionUrl();
+        competitionUrl.competition = competition;
+        competitionUrl.urlType = urlType;
+        competitionUrl.url = url;
+        competitionUrl.normalizedUrl = normalizedUrl;
+        competitionUrl.normalizedUrlHash = normalizedUrlHash;
+        competitionUrl.primary = primary;
+        return competitionUrl;
+    }
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = Instant.now();

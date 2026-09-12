@@ -36,6 +36,23 @@ public class CompetitionVerificationLog {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    public static CompetitionVerificationLog createAdminReviewLog(
+            Competition competition,
+            Competition.VerificationStatus fromStatus,
+            Competition.VerificationStatus toStatus,
+            User actorUser,
+            String reason
+    ) {
+        CompetitionVerificationLog log = new CompetitionVerificationLog();
+        log.competition = competition;
+        log.fromStatus = fromStatus;
+        log.toStatus = toStatus;
+        log.verificationMethod = Method.ADMIN_REVIEW;
+        log.actorUser = actorUser;
+        log.reason = reason;
+        return log;
+    }
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = Instant.now();
