@@ -108,6 +108,13 @@ public class Competition extends BaseTimeEntity {
         }
     }
 
+    public void publish() {
+        if (publicationStatus != PublicationStatus.DRAFT) {
+            throw new IllegalArgumentException("임시 저장 상태의 공모전만 공개 승인할 수 있습니다.");
+        }
+        this.publicationStatus = PublicationStatus.PUBLISHED;
+    }
+
     private boolean isVerified(VerificationStatus verificationStatus) {
         return verificationStatus == VerificationStatus.AUTO_VERIFIED
                 || verificationStatus == VerificationStatus.MANUALLY_VERIFIED;

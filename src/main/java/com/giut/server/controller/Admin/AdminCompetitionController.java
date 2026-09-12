@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -71,5 +72,27 @@ public class AdminCompetitionController {
     ) {
         Long adminUserId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(competitionService.updateByAdmin(adminUserId, competitionId, request));
+    }
+
+    @PatchMapping("/{competitionId}/publish")
+    @Operation(
+            summary = "관리자 공모전 공개 승인",
+            description = "DRAFT 상태인 공모전을 PUBLISHED 상태로 변경합니다. 공개된 공모전은 전체 공모전 목록에 노출됩니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "공모전 공개 승인 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "DRAFT 상태가 아닌 공모전 승인 시도"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류")
+    })
+    public ResponseEntity<AdminCompetitionResponse> publishCompetition(
+            @PathVariable Long competitionId,
+            Authentication authentication
+    ) {
+        Long adminUserId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(competitionService.publishByAdmin(adminUserId, competitionId));
     }
 }

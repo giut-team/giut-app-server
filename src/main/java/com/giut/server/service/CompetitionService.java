@@ -145,6 +145,18 @@ public class CompetitionService {
         return toResponse(competition, savedUrls);
     }
 
+    @Transactional
+    public AdminCompetitionResponse publishByAdmin(Long adminUserId, Long competitionId) {
+        findActiveAdmin(adminUserId);
+        Competition competition = competitionRepository.findById(competitionId)
+                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+
+        competition.publish();
+
+        List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
+        return toResponse(competition, urls);
+    }
+
     private User findActiveAdmin(Long adminUserId) {
         User admin = userRepository.findById(adminUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
