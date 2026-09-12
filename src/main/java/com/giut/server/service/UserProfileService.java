@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.*;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
@@ -29,7 +30,6 @@ import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,11 +77,17 @@ public class UserProfileService {
      * 프로필 수와 관계없이 프로필, 사용자, 역할, 사용자 태그, 태그를 각각 한 번씩 조회한다.
      */
     @Transactional(readOnly = true)
-    public PublicProfileListResponse getPublicProfiles(int page) {
+    public PublicProfileListResponse getPublicProfiles(Long currentUserId, PublicProfileSearchRequest request) {
         Page<UserProfile> profilePage = userProfileRepository.findPublicProfiles(
-                UserProfile.ActivityStatus.RESTING,
-                User.Status.ACTIVE,
-                PageRequest.of(page, PUBLIC_PROFILE_PAGE_SIZE, Sort.by(Sort.Direction.DESC, "userId"))
+                UserProfile.ActivityStatus.RESTING.name(),
+                User.Status.ACTIVE.name(),
+                currentUserId,
+                request.primaryRole() == null ? null : request.primaryRole().name(),
+                request.normalizedRole(),
+                request.activityStatus() == null ? null : request.activityStatus().name(),
+                request.departmentType() == null ? null : request.departmentType().name(),
+                request.skillTagId(),
+                PageRequest.of(request.pageOrDefault(), PUBLIC_PROFILE_PAGE_SIZE)
         );
         List<UserProfile> profiles = profilePage.getContent();
         if (profiles.isEmpty()) {

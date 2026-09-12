@@ -2,6 +2,7 @@ package com.giut.server.exception;
 
 
 import com.giut.server.dto.ResultDto;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.validation.BindException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -189,7 +191,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             MethodArgumentTypeMismatchException.class,
             MissingServletRequestParameterException.class,
-            HttpMessageNotReadableException.class
+            HttpMessageNotReadableException.class,
+            BindException.class
     })
     public ResponseEntity<ResultDto> handleBadRequest(Exception e) {
         logger.error(e.getClass().getSimpleName() + " : {}", e.getMessage());
@@ -219,5 +222,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(resultDto);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ResultDto> handleConstraintViolation(ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .findFirst()
+                .map(violation -> violation.getMessage())
+                .orElse("요청 값이 올바르지 않습니다.");
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ResultDto.builder()
+                        .success(false)
+                        .message(message)
+                        .code(HttpStatus.BAD_REQUEST.value())
+                        .build());
     }
 }
