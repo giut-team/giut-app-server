@@ -5,10 +5,13 @@ import com.giut.server.dto.competition.request.CompetitionSearchRequest;
 import com.giut.server.dto.competition.request.UpsertCompetitionRequest;
 import com.giut.server.dto.competition.response.AdminCompetitionResponse;
 import com.giut.server.dto.competition.response.CompetitionRecruitmentStatus;
+import com.giut.server.dto.competition.response.CompetitionScrapResponse;
 import com.giut.server.dto.competition.response.CompetitionUrlResponse;
+import com.giut.server.dto.competition.response.PublicCompetitionDetailResponse;
 import com.giut.server.dto.competition.response.PublicCompetitionListResponse;
 import com.giut.server.dto.competition.response.PublicCompetitionResponse;
 import com.giut.server.entity.Competition;
+import com.giut.server.entity.CompetitionScrap;
 import com.giut.server.entity.CompetitionUrl;
 import com.giut.server.entity.CompetitionVerificationLog;
 import com.giut.server.entity.User;
@@ -16,6 +19,7 @@ import com.giut.server.exception.ConflictException;
 import com.giut.server.exception.ForbiddenException;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.CompetitionRepository;
+import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.CompetitionUrlRepository;
 import com.giut.server.repository.CompetitionVerificationLogRepository;
 import com.giut.server.repository.UserRepository;
@@ -28,6 +32,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +44,7 @@ import java.util.Set;
 public class CompetitionService {
 
     private final CompetitionRepository competitionRepository;
+    private final CompetitionScrapRepository competitionScrapRepository;
     private final CompetitionUrlRepository competitionUrlRepository;
     private final CompetitionVerificationLogRepository competitionVerificationLogRepository;
     private final UserRepository userRepository;
@@ -63,16 +69,7 @@ public class CompetitionService {
                 specification,
                 PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id"))
         );
-        List<Competition> competitions = competitionPage.getContent();
-        Map<Long, String> primaryUrlByCompetitionId = findPrimaryUrls(competitions);
-
-        List<PublicCompetitionResponse> responses = competitions.stream()
-                .map(competition -> PublicCompetitionResponse.from(
-                        competition,
-                        recruitmentStatusOf(competition, now),
-                        primaryUrlByCompetitionId.get(competition.getId())
-                ))
-                .toList();
+        List<PublicCompetitionResponse> responses = toPublicResponses(competitionPage.getContent(), now);
 
         return new PublicCompetitionListResponse(
                 responses,
@@ -82,6 +79,76 @@ public class CompetitionService {
                 competitionPage.getTotalPages(),
                 competitionPage.hasNext()
         );
+    }
+
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<PublicCompetitionResponse> getTop5Competitions() {
+        Instant now = Instant.now();
+        List<Competition> competitions = competitionRepository
+                .findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name());
+        return toPublicResponses(competitions, now);
+    }
+
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<PublicCompetitionResponse> getClosingSoonCompetitions() {
+        Instant now = Instant.now();
+        Instant deadline = now.plus(7, ChronoUnit.DAYS);
+        Specification<Competition> specification = publishedCompetition().and((root, query, criteriaBuilder) ->
+                criteriaBuilder.and(
+                        criteriaBuilder.isNotNull(root.get("applicationEndAt")),
+                        criteriaBuilder.greaterThan(root.get("applicationEndAt"), now),
+                        criteriaBuilder.lessThanOrEqualTo(root.get("applicationEndAt"), deadline),
+                        criteriaBuilder.or(
+                                criteriaBuilder.isNull(root.get("applicationStartAt")),
+                                criteriaBuilder.lessThanOrEqualTo(root.get("applicationStartAt"), now)
+                        )
+                )
+        );
+
+        List<Competition> competitions = competitionRepository.findAll(
+                specification,
+                Sort.by(Sort.Direction.ASC, "applicationEndAt").and(Sort.by(Sort.Direction.DESC, "id"))
+        );
+        return toPublicResponses(competitions, now);
+    }
+
+    @Transactional
+    public PublicCompetitionDetailResponse getPublishedCompetition(Long userId, Long competitionId) {
+        findPublishedCompetition(competitionId);
+        competitionRepository.incrementViewCount(competitionId);
+
+        Competition competition = findPublishedCompetition(competitionId);
+        boolean scrapped = competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId);
+        List<CompetitionUrlResponse> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId).stream()
+                .map(CompetitionUrlResponse::from)
+                .toList();
+
+        return PublicCompetitionDetailResponse.from(
+                competition,
+                recruitmentStatusOf(competition, Instant.now()),
+                scrapped,
+                urls
+        );
+    }
+
+    @Transactional
+    public CompetitionScrapResponse scrapCompetition(Long userId, Long competitionId) {
+        User user = findActiveUser(userId);
+        Competition competition = findPublishedCompetition(competitionId);
+
+        if (!competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId)) {
+            competitionScrapRepository.save(CompetitionScrap.create(user, competition));
+        }
+        return new CompetitionScrapResponse(competitionId, true);
+    }
+
+    @Transactional
+    public CompetitionScrapResponse removeCompetitionScrap(Long userId, Long competitionId) {
+        findActiveUser(userId);
+        findPublishedCompetition(competitionId);
+
+        competitionScrapRepository.deleteByUser_IdAndCompetition_Id(userId, competitionId);
+        return new CompetitionScrapResponse(competitionId, false);
     }
 
     @Transactional
@@ -166,6 +233,23 @@ public class CompetitionService {
         return admin;
     }
 
+    private User findActiveUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        if (user.getStatus() != User.Status.ACTIVE) {
+            throw new ForbiddenException("활성 상태의 사용자만 공모전을 스크랩할 수 있습니다.");
+        }
+        return user;
+    }
+
+    private Competition findPublishedCompetition(Long competitionId) {
+        return competitionRepository.findByIdAndPublicationStatus(
+                        competitionId,
+                        Competition.PublicationStatus.PUBLISHED
+                )
+                .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
+    }
+
     private Specification<Competition> publishedCompetition() {
         return (root, query, criteriaBuilder) -> criteriaBuilder.equal(
                 root.get("publicationStatus"),
@@ -224,6 +308,35 @@ public class CompetitionService {
                 )
                 .forEach(url -> primaryUrlByCompetitionId.put(url.getCompetition().getId(), url.getUrl()));
         return primaryUrlByCompetitionId;
+    }
+
+    private List<PublicCompetitionResponse> toPublicResponses(List<Competition> competitions, Instant now) {
+        Map<Long, String> primaryUrlByCompetitionId = findPrimaryUrls(competitions);
+        Map<Long, Long> scrapCountByCompetitionId = findScrapCounts(competitions);
+        return competitions.stream()
+                .map(competition -> PublicCompetitionResponse.from(
+                        competition,
+                        recruitmentStatusOf(competition, now),
+                        primaryUrlByCompetitionId.get(competition.getId()),
+                        scrapCountByCompetitionId.getOrDefault(competition.getId(), 0L)
+                ))
+                .toList();
+    }
+
+    private Map<Long, Long> findScrapCounts(List<Competition> competitions) {
+        if (competitions.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Long> scrapCountByCompetitionId = new HashMap<>();
+        competitionScrapRepository.countByCompetitionIdIn(
+                        competitions.stream().map(Competition::getId).toList()
+                )
+                .forEach(count -> scrapCountByCompetitionId.put(
+                        count.getCompetitionId(),
+                        count.getScrapCount()
+                ));
+        return scrapCountByCompetitionId;
     }
 
     private CompetitionRecruitmentStatus recruitmentStatusOf(Competition competition, Instant now) {
