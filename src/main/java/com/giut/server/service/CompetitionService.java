@@ -119,6 +119,7 @@ public class CompetitionService {
 
         Competition competition = findPublishedCompetition(competitionId);
         boolean scrapped = competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId);
+        long scrapCount = competitionScrapRepository.countByCompetition_Id(competitionId);
         List<CompetitionUrlResponse> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId).stream()
                 .map(CompetitionUrlResponse::from)
                 .toList();
@@ -126,6 +127,7 @@ public class CompetitionService {
         return PublicCompetitionDetailResponse.from(
                 competition,
                 recruitmentStatusOf(competition, Instant.now()),
+                scrapCount,
                 scrapped,
                 urls
         );

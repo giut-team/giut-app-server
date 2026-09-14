@@ -12,6 +12,8 @@ public interface CompetitionScrapRepository extends JpaRepository<CompetitionScr
 
     boolean existsByUser_IdAndCompetition_Id(Long userId, Long competitionId);
 
+    long countByCompetition_Id(Long competitionId);
+
     void deleteByUser_IdAndCompetition_Id(Long userId, Long competitionId);
 
     @Query("""
