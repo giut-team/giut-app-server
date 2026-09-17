@@ -6,6 +6,7 @@ import com.giut.server.dto.chat.request.SendChatMessageRequest;
 import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
 import com.giut.server.dto.chat.response.ChatRoomResponse;
+import com.giut.server.dto.chat.response.ChatRoomListResponse;
 import com.giut.server.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,6 +37,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class ChatController {
 
     private final ChatService chatService;
+
+    @GetMapping
+    @Operation(
+            summary = "내 채팅방 목록 조회",
+            description = "현재 로그인한 사용자가 참여 중인 활성 개인 채팅방 목록을 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "채팅방 목록 조회 성공")
+    public ResponseEntity<ChatRoomListResponse> getChatRooms(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(chatService.getChatRooms(userId));
+    }
 
     @PostMapping("/personal")
     @Operation(
@@ -119,6 +133,21 @@ public class ChatController {
         return ResponseEntity.status(HttpStatus.CREATED).body(chatService.sendMessage(userId, chatRoomId, request));
     }
 
+    @GetMapping("/{chatRoomId}")
+    @Operation(
+            summary = "채팅방 상세 조회",
+            description = "현재 로그인한 사용자가 참여 중인 개인 채팅방의 상세 정보를 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공")
+    public ResponseEntity<ChatRoomResponse> getChatRoom(
+            Authentication authentication,
+            @PathVariable Long chatRoomId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(chatService.getChatRoom(userId, chatRoomId));
+    }
+
     @GetMapping("/{chatRoomId}/messages")
     @Operation(
             summary = "채팅 메시지 목록 조회",
@@ -159,5 +188,22 @@ public class ChatController {
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(chatService.getMessages(userId, chatRoomId, page, size));
+    }
+
+    @DeleteMapping("/{chatRoomId}/messages/{messageId}")
+    @Operation(
+            summary = "채팅 메시지 삭제",
+            description = "현재 로그인한 사용자가 보낸 메시지를 삭제합니다. 실제 데이터는 삭제하지 않고 삭제 상태로 변경합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "204", description = "메시지 삭제 성공")
+    public ResponseEntity<Void> deleteMessage(
+            Authentication authentication,
+            @PathVariable Long chatRoomId,
+            @PathVariable Long messageId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        chatService.deleteMessage(userId, chatRoomId, messageId);
+        return ResponseEntity.noContent().build();
     }
 }

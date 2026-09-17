@@ -5,6 +5,7 @@ import com.giut.server.dto.chat.request.SendChatMessageRequest;
 import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
 import com.giut.server.dto.chat.response.ChatRoomResponse;
+import com.giut.server.dto.chat.response.ChatRoomListResponse;
 import com.giut.server.entity.ChatMessage;
 import com.giut.server.entity.ChatRoom;
 import com.giut.server.entity.ChatRoomMember;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -98,6 +100,58 @@ public class ChatService {
                 messagePage.hasNext(),
                 messages
         );
+    }
+
+    @Transactional(readOnly = true)
+    public ChatRoomListResponse getChatRooms(Long userId) {
+        List<ChatRoomResponse> chatRooms = chatRoomMemberRepository.findAllByUserIdAndLeftAtIsNull(userId).stream()
+                .map(ChatRoomMember::getChatRoomId)
+                .distinct()
+                .map(chatRoomRepository::findById)
+                .flatMap(java.util.Optional::stream)
+                .filter(chatRoom -> chatRoom.getType() == ChatRoom.Type.PERSONAL)
+                .filter(chatRoom -> chatRoom.getStatus() == ChatRoom.Status.ACTIVE)
+                .map(chatRoom -> ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false))
+                .toList();
+
+        return new ChatRoomListResponse(chatRooms);
+    }
+
+    @Transactional(readOnly = true)
+    public ChatRoomResponse getChatRoom(Long userId, Long chatRoomId) {
+        ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
+        validateActiveParticipant(chatRoom.getId(), userId);
+
+        return ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false);
+    }
+
+    @Transactional
+    public void deleteMessage(Long userId, Long chatRoomId, Long messageId) {
+        ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
+        validateActiveParticipant(chatRoom.getId(), userId);
+
+        ChatMessage message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("메시지를 찾을 수 없습니다."));
+
+        if (!Objects.equals(message.getChatRoomId(), chatRoom.getId())) {
+            throw new ResourceNotFoundException("해당 채팅방의 메시지가 아닙니다.");
+        }
+        if (!Objects.equals(message.getSenderId(), userId)) {
+            throw new IllegalArgumentException("본인이 보낸 메시지만 삭제할 수 있습니다.");
+        }
+        if (message.getStatus() == ChatMessage.Status.DELETED) {
+            return;
+        }
+
+        message.delete();
+    }
+
+    private Long findOtherParticipantId(Long chatRoomId, Long userId) {
+        return chatRoomMemberRepository.findAllByChatRoomIdAndLeftAtIsNull(chatRoomId).stream()
+                .map(ChatRoomMember::getUserId)
+                .filter(participantId -> !Objects.equals(participantId, userId))
+                .findFirst()
+                .orElse(null);
     }
 
     private ChatRoom findActiveChatRoom(Long chatRoomId) {
