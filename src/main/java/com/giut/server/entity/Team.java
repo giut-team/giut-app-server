@@ -26,10 +26,17 @@ public class Team extends BaseTimeEntity {
     @Column(name = "max_member_count")
     private Short maxMemberCount;
 
+    @Column(name = "weekly_meeting_count", nullable = false)
+    private Short weeklyMeetingCount;
+
+    @Enumerated(EnumType.STRING) @Column(name = "meeting_place", nullable = false, length = 30)
+    private MeetingPlace meetingPlace;
+
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
     private Status status;
 
     public enum ActivityMode { ONLINE, OFFLINE, HYBRID }
+    public enum MeetingPlace { CAMPUS, SEOUL, METROPOLITAN_AREA, ANYWHERE }
     public enum Status { RECRUITING, CLOSED, ARCHIVED }
 
     public static Team create(
@@ -38,7 +45,9 @@ public class Team extends BaseTimeEntity {
             String name,
             String description,
             ActivityMode activityMode,
-            Short maxMemberCount
+            Short maxMemberCount,
+            Short weeklyMeetingCount,
+            MeetingPlace meetingPlace
     ) {
         Team team = new Team();
         team.competition = competition;
@@ -47,6 +56,8 @@ public class Team extends BaseTimeEntity {
         team.description = description;
         team.activityMode = activityMode;
         team.maxMemberCount = maxMemberCount;
+        team.weeklyMeetingCount = weeklyMeetingCount;
+        team.meetingPlace = meetingPlace;
         team.status = Status.RECRUITING;
         return team;
     }

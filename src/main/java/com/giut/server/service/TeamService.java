@@ -68,7 +68,9 @@ public class TeamService {
                 request.name(),
                 request.description(),
                 request.activityMode(),
-                request.maxMemberCount()
+                request.maxMemberCount(),
+                request.weeklyMeetingCount(),
+                request.meetingPlace()
         ));
 
         teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId()));
@@ -101,6 +103,8 @@ public class TeamService {
                 team.getActivityMode(),
                 team.getMaxMemberCount(),
                 activeMembers.size(),
+                team.getWeeklyMeetingCount(),
+                team.getMeetingPlace(),
                 team.getStatus(),
                 team.getCreatedAt(),
                 applicationQuestions

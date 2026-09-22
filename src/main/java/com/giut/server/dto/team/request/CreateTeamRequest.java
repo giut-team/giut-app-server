@@ -36,6 +36,16 @@ public record CreateTeamRequest(
         @Max(value = 20, message = "최대 팀원 수는 20명 이하여야 합니다.")
         Short maxMemberCount,
 
+        @Schema(description = "주간 회의 횟수", example = "1")
+        @NotNull(message = "주간 회의 횟수는 필수입니다.")
+        @Min(value = 0, message = "주간 회의 횟수는 0회 이상이어야 합니다.")
+        @Max(value = 7, message = "주간 회의 횟수는 7회 이하여야 합니다.")
+        Short weeklyMeetingCount,
+
+        @Schema(description = "주로 만나는 곳", example = "CAMPUS", allowableValues = {"CAMPUS", "SEOUL", "METROPOLITAN_AREA", "ANYWHERE"})
+        @NotNull(message = "주로 만나는 곳은 필수입니다.")
+        Team.MeetingPlace meetingPlace,
+
         @Schema(description = "팀장이 설정한 지원서 질문 목록", example = "[{\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true}]")
         @Size(max = 5, message = "지원서 질문은 최대 5개까지 등록할 수 있습니다.")
         List<@Valid CreateTeamQuestionRequest> applicationQuestions

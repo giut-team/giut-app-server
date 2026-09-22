@@ -23,6 +23,12 @@ public record CreateTeamResponse(
         @Schema(description = "팀 상태", example = "RECRUITING")
         Team.Status status,
 
+        @Schema(description = "주간 회의 횟수", example = "1")
+        Short weeklyMeetingCount,
+
+        @Schema(description = "주로 만나는 곳", example = "CAMPUS")
+        Team.MeetingPlace meetingPlace,
+
         @Schema(description = "생성일시", example = "2026-09-08T10:30:00Z")
         Instant createdAt,
 
@@ -37,6 +43,8 @@ public record CreateTeamResponse(
                 team.getLeaderUserId(),
                 team.getName(),
                 team.getStatus(),
+                team.getWeeklyMeetingCount(),
+                team.getMeetingPlace(),
                 team.getCreatedAt(),
                 applicationQuestions
         );

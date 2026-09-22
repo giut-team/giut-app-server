@@ -32,6 +32,12 @@ public record TeamDetailResponse(
         @Schema(description = "현재 활성 팀원 수", example = "2")
         int currentMemberCount,
 
+        @Schema(description = "주간 회의 횟수", example = "1")
+        Short weeklyMeetingCount,
+
+        @Schema(description = "주로 만나는 곳", example = "CAMPUS")
+        Team.MeetingPlace meetingPlace,
+
         @Schema(description = "팀 상태", example = "RECRUITING")
         Team.Status status,
 
