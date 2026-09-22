@@ -9,6 +9,7 @@ import com.giut.server.dto.team.response.TeamApplicationListResponse;
 import com.giut.server.dto.team.response.TeamApplicationResponse;
 import com.giut.server.dto.team.response.TeamDetailResponse;
 import com.giut.server.dto.team.response.TeamMemberListResponse;
+import com.giut.server.dto.team.response.TeamRecruitmentListResponse;
 import com.giut.server.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -127,6 +128,29 @@ public class TeamController {
     })
     public ResponseEntity<TeamMemberListResponse> getTeamMembers(@PathVariable Long teamId) {
         return ResponseEntity.ok(teamService.getTeamMembers(teamId));
+    }
+
+    @GetMapping("/{teamId}/recruitments")
+    @Operation(
+            summary = "팀 모집 분야 목록 조회",
+            description = "팀에서 모집 중인 분야와 분야별 필요 인원을 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "팀 모집 분야 목록 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = TeamRecruitmentListResponse.class),
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"recruitments\":[{\"recruitmentId\":1,\"roleCode\":\"BACKEND_DEVELOPER\",\"requiredCount\":1},{\"recruitmentId\":2,\"roleCode\":\"FRONTEND_DEVELOPER\",\"requiredCount\":2}]}")
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    })
+    public ResponseEntity<TeamRecruitmentListResponse> getTeamRecruitments(@PathVariable Long teamId) {
+        return ResponseEntity.ok(teamService.getTeamRecruitments(teamId));
     }
 
     @PostMapping("/{teamId}/applications")

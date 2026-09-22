@@ -4,6 +4,7 @@ import com.giut.server.dto.team.request.CreateTeamRequest;
 import com.giut.server.dto.team.request.ApplyTeamRequest;
 import com.giut.server.dto.team.request.CreateTeamQuestionRequest;
 import com.giut.server.dto.team.request.TeamApplicationAnswerRequest;
+import com.giut.server.dto.team.request.CreateTeamRecruitmentRequest;
 import com.giut.server.dto.team.response.ApproveTeamApplicationResponse;
 import com.giut.server.dto.team.response.CreateTeamResponse;
 import com.giut.server.dto.team.response.TeamApplicationAnswerResponse;
@@ -13,12 +14,15 @@ import com.giut.server.dto.team.response.TeamApplicationResponse;
 import com.giut.server.dto.team.response.TeamDetailResponse;
 import com.giut.server.dto.team.response.TeamMemberListResponse;
 import com.giut.server.dto.team.response.TeamMemberResponse;
+import com.giut.server.dto.team.response.TeamRecruitmentResponse;
+import com.giut.server.dto.team.response.TeamRecruitmentListResponse;
 import com.giut.server.entity.Competition;
 import com.giut.server.entity.Team;
 import com.giut.server.entity.TeamApplicationAnswer;
 import com.giut.server.entity.TeamApplicationQuestion;
 import com.giut.server.entity.TeamApplication;
 import com.giut.server.entity.TeamMember;
+import com.giut.server.entity.TeamRecruitment;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.CompetitionRepository;
@@ -27,6 +31,8 @@ import com.giut.server.repository.TeamApplicationQuestionRepository;
 import com.giut.server.repository.TeamApplicationRepository;
 import com.giut.server.repository.TeamMemberRepository;
 import com.giut.server.repository.TeamRepository;
+import com.giut.server.repository.TeamRecruitmentRepository;
+import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -46,12 +52,14 @@ import java.util.stream.Collectors;
 public class TeamService {
 
     private final TeamRepository teamRepository;
+    private final TeamRecruitmentRepository teamRecruitmentRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
     private final TeamApplicationQuestionRepository teamApplicationQuestionRepository;
     private final TeamApplicationAnswerRepository teamApplicationAnswerRepository;
     private final CompetitionRepository competitionRepository;
     private final UserRepository userRepository;
+    private final ProfileRoleRepository profileRoleRepository;
 
     @Transactional
     public CreateTeamResponse createTeam(Long leaderUserId, CreateTeamRequest request) {
@@ -75,12 +83,17 @@ public class TeamService {
 
         teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId()));
 
+        List<TeamRecruitmentResponse> recruitments = saveRecruitments(
+                team.getId(),
+                request.recruitments()
+        );
+
         List<TeamApplicationQuestionResponse> applicationQuestions = saveApplicationQuestions(
                 team.getId(),
                 request.applicationQuestions()
         );
 
-        return CreateTeamResponse.of(team, applicationQuestions);
+        return CreateTeamResponse.of(team, recruitments, applicationQuestions);
     }
 
     @Transactional(readOnly = true)
@@ -92,6 +105,11 @@ public class TeamService {
         );
         List<TeamApplicationQuestionResponse> applicationQuestions = findActiveQuestions(teamId).stream()
                 .map(TeamApplicationQuestionResponse::from)
+                .toList();
+        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
+                .findAllByTeamIdOrderByIdAsc(teamId)
+                .stream()
+                .map(TeamRecruitmentResponse::from)
                 .toList();
 
         return new TeamDetailResponse(
@@ -105,6 +123,7 @@ public class TeamService {
                 activeMembers.size(),
                 team.getWeeklyMeetingCount(),
                 team.getMeetingPlace(),
+                recruitments,
                 team.getStatus(),
                 team.getCreatedAt(),
                 applicationQuestions
@@ -145,6 +164,19 @@ public class TeamService {
                 .toList();
 
         return new TeamMemberListResponse(teamId, members);
+    }
+
+    @Transactional(readOnly = true)
+    public TeamRecruitmentListResponse getTeamRecruitments(Long teamId) {
+        findTeam(teamId);
+
+        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
+                .findAllByTeamIdOrderByIdAsc(teamId)
+                .stream()
+                .map(TeamRecruitmentResponse::from)
+                .toList();
+
+        return new TeamRecruitmentListResponse(teamId, recruitments);
     }
 
     @Transactional
@@ -296,6 +328,43 @@ public class TeamService {
         return teamApplicationQuestionRepository.saveAll(questions)
                 .stream()
                 .map(TeamApplicationQuestionResponse::from)
+                .toList();
+    }
+
+    private List<TeamRecruitmentResponse> saveRecruitments(
+            Long teamId,
+            List<CreateTeamRecruitmentRequest> recruitmentRequests
+    ) {
+        if (recruitmentRequests == null || recruitmentRequests.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> requestedRoleCodes = recruitmentRequests.stream()
+                .map(CreateTeamRecruitmentRequest::roleCode)
+                .collect(Collectors.toSet());
+        if (requestedRoleCodes.size() != recruitmentRequests.size()) {
+            throw new IllegalArgumentException("같은 모집 분야를 중복 등록할 수 없습니다.");
+        }
+
+        Set<String> existingRoleCodes = profileRoleRepository.findAllByCodeIn(requestedRoleCodes)
+                .stream()
+                .map(com.giut.server.entity.ProfileRole::getCode)
+                .collect(Collectors.toSet());
+        if (!existingRoleCodes.equals(requestedRoleCodes)) {
+            throw new IllegalArgumentException("존재하지 않는 모집 분야 코드가 포함되어 있습니다.");
+        }
+
+        List<TeamRecruitment> recruitments = recruitmentRequests.stream()
+                .map(request -> TeamRecruitment.create(
+                        teamId,
+                        request.roleCode(),
+                        request.requiredCount()
+                ))
+                .toList();
+
+        return teamRecruitmentRepository.saveAll(recruitments)
+                .stream()
+                .map(TeamRecruitmentResponse::from)
                 .toList();
     }
 

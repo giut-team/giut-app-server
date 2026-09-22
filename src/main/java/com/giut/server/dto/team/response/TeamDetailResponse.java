@@ -38,6 +38,9 @@ public record TeamDetailResponse(
         @Schema(description = "주로 만나는 곳", example = "CAMPUS")
         Team.MeetingPlace meetingPlace,
 
+        @Schema(description = "팀 모집 분야 목록")
+        List<TeamRecruitmentResponse> recruitments,
+
         @Schema(description = "팀 상태", example = "RECRUITING")
         Team.Status status,
 

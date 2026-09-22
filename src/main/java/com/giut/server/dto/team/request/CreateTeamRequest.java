@@ -46,6 +46,10 @@ public record CreateTeamRequest(
         @NotNull(message = "주로 만나는 곳은 필수입니다.")
         Team.MeetingPlace meetingPlace,
 
+        @Schema(description = "팀 모집 분야 목록", example = "[{\"roleCode\":\"BACKEND_DEVELOPER\",\"requiredCount\":1}]")
+        @Size(max = 10, message = "모집 분야는 최대 10개까지 등록할 수 있습니다.")
+        List<@Valid CreateTeamRecruitmentRequest> recruitments,
+
         @Schema(description = "팀장이 설정한 지원서 질문 목록", example = "[{\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true}]")
         @Size(max = 5, message = "지원서 질문은 최대 5개까지 등록할 수 있습니다.")
         List<@Valid CreateTeamQuestionRequest> applicationQuestions

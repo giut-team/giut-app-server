@@ -29,6 +29,9 @@ public record CreateTeamResponse(
         @Schema(description = "주로 만나는 곳", example = "CAMPUS")
         Team.MeetingPlace meetingPlace,
 
+        @Schema(description = "팀 모집 분야 목록")
+        List<TeamRecruitmentResponse> recruitments,
+
         @Schema(description = "생성일시", example = "2026-09-08T10:30:00Z")
         Instant createdAt,
 
@@ -36,7 +39,11 @@ public record CreateTeamResponse(
         List<TeamApplicationQuestionResponse> applicationQuestions
 ) {
 
-    public static CreateTeamResponse of(Team team, List<TeamApplicationQuestionResponse> applicationQuestions) {
+    public static CreateTeamResponse of(
+            Team team,
+            List<TeamRecruitmentResponse> recruitments,
+            List<TeamApplicationQuestionResponse> applicationQuestions
+    ) {
         return new CreateTeamResponse(
                 team.getId(),
                 team.getCompetition().getId(),
@@ -45,6 +52,7 @@ public record CreateTeamResponse(
                 team.getStatus(),
                 team.getWeeklyMeetingCount(),
                 team.getMeetingPlace(),
+                recruitments,
                 team.getCreatedAt(),
                 applicationQuestions
         );
