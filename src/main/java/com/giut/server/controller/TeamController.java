@@ -7,6 +7,8 @@ import com.giut.server.dto.team.response.ApproveTeamApplicationResponse;
 import com.giut.server.dto.team.response.CreateTeamResponse;
 import com.giut.server.dto.team.response.TeamApplicationListResponse;
 import com.giut.server.dto.team.response.TeamApplicationResponse;
+import com.giut.server.dto.team.response.TeamDetailResponse;
+import com.giut.server.dto.team.response.TeamMemberListResponse;
 import com.giut.server.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -79,6 +81,52 @@ public class TeamController {
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(teamService.createTeam(userId, request));
+    }
+
+    @GetMapping("/{teamId}")
+    @Operation(
+            summary = "팀 상세 조회",
+            description = "팀의 기본 정보, 현재 팀원 수, 모집 상태와 지원서 질문을 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "팀 상세 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = TeamDetailResponse.class),
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[]}")
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    })
+    public ResponseEntity<TeamDetailResponse> getTeamDetail(@PathVariable Long teamId) {
+        return ResponseEntity.ok(teamService.getTeamDetail(teamId));
+    }
+
+    @GetMapping("/{teamId}/members")
+    @Operation(
+            summary = "팀원 목록 조회",
+            description = "팀에 현재 소속된 활성 팀원 목록을 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "팀원 목록 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = TeamMemberListResponse.class),
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"members\":[{\"teamMemberId\":1,\"userId\":12,\"nickname\":\"팀장\",\"role\":\"LEADER\",\"status\":\"ACTIVE\",\"joinedAt\":\"2026-09-08T10:30:00Z\"}]}")
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    })
+    public ResponseEntity<TeamMemberListResponse> getTeamMembers(@PathVariable Long teamId) {
+        return ResponseEntity.ok(teamService.getTeamMembers(teamId));
     }
 
     @PostMapping("/{teamId}/applications")

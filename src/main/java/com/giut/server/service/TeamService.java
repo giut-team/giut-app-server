@@ -10,6 +10,9 @@ import com.giut.server.dto.team.response.TeamApplicationAnswerResponse;
 import com.giut.server.dto.team.response.TeamApplicationListResponse;
 import com.giut.server.dto.team.response.TeamApplicationQuestionResponse;
 import com.giut.server.dto.team.response.TeamApplicationResponse;
+import com.giut.server.dto.team.response.TeamDetailResponse;
+import com.giut.server.dto.team.response.TeamMemberListResponse;
+import com.giut.server.dto.team.response.TeamMemberResponse;
 import com.giut.server.entity.Competition;
 import com.giut.server.entity.Team;
 import com.giut.server.entity.TeamApplicationAnswer;
@@ -76,6 +79,68 @@ public class TeamService {
         );
 
         return CreateTeamResponse.of(team, applicationQuestions);
+    }
+
+    @Transactional(readOnly = true)
+    public TeamDetailResponse getTeamDetail(Long teamId) {
+        Team team = findTeam(teamId);
+        List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
+                teamId,
+                TeamMember.Status.ACTIVE
+        );
+        List<TeamApplicationQuestionResponse> applicationQuestions = findActiveQuestions(teamId).stream()
+                .map(TeamApplicationQuestionResponse::from)
+                .toList();
+
+        return new TeamDetailResponse(
+                team.getId(),
+                team.getCompetition().getId(),
+                team.getLeaderUserId(),
+                team.getName(),
+                team.getDescription(),
+                team.getActivityMode(),
+                team.getMaxMemberCount(),
+                activeMembers.size(),
+                team.getStatus(),
+                team.getCreatedAt(),
+                applicationQuestions
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TeamMemberListResponse getTeamMembers(Long teamId) {
+        findTeam(teamId);
+
+        List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
+                teamId,
+                TeamMember.Status.ACTIVE
+        );
+        List<Long> userIds = activeMembers.stream()
+                .map(TeamMember::getUserId)
+                .toList();
+        Map<Long, User> usersById = userRepository.findAllByIdInAndStatus(userIds, User.Status.ACTIVE)
+                .stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        List<TeamMemberResponse> members = activeMembers.stream()
+                .map(teamMember -> {
+                    User user = usersById.get(teamMember.getUserId());
+                    if (user == null) {
+                        return null;
+                    }
+                    return new TeamMemberResponse(
+                            teamMember.getId(),
+                            user.getId(),
+                            user.getNickname(),
+                            teamMember.getRole(),
+                            teamMember.getStatus(),
+                            teamMember.getJoinedAt()
+                    );
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        return new TeamMemberListResponse(teamId, members);
     }
 
     @Transactional
