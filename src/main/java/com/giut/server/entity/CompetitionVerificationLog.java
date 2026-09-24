@@ -23,8 +23,9 @@ public class CompetitionVerificationLog {
     @Enumerated(EnumType.STRING) @Column(name = "verification_method", nullable = false, length = 20)
     private Method verificationMethod;
 
-    @Column(name = "actor_user_id")
-    private Long actorUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "actor_user_id", foreignKey = @ForeignKey(name = "fk_verification_logs_actor_user"))
+    private User actorUser;
 
     @Column(columnDefinition = "text")
     private String reason;
@@ -34,6 +35,23 @@ public class CompetitionVerificationLog {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public static CompetitionVerificationLog createAdminReviewLog(
+            Competition competition,
+            Competition.VerificationStatus fromStatus,
+            Competition.VerificationStatus toStatus,
+            User actorUser,
+            String reason
+    ) {
+        CompetitionVerificationLog log = new CompetitionVerificationLog();
+        log.competition = competition;
+        log.fromStatus = fromStatus;
+        log.toStatus = toStatus;
+        log.verificationMethod = Method.ADMIN_REVIEW;
+        log.actorUser = actorUser;
+        log.reason = reason;
+        return log;
+    }
 
     @PrePersist
     void onCreate() {

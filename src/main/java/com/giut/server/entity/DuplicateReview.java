@@ -28,8 +28,9 @@ public class DuplicateReview {
     @Enumerated(EnumType.STRING) @Column(name = "review_status", nullable = false, length = 20)
     private Status reviewStatus;
 
-    @Column(name = "reviewed_by_user_id")
-    private Long reviewedByUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id", foreignKey = @ForeignKey(name = "fk_duplicate_reviews_reviewer"))
+    private User reviewedByUser;
 
     @Column(name = "review_note", columnDefinition = "text")
     private String reviewNote;

@@ -2,10 +2,14 @@ package com.giut.server.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -24,8 +28,9 @@ public class PortfolioItem extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_portfolio_items_user"))
+    private User user;
 
     @Column(name = "image_url", nullable = false, length = 2048)
     private String imageUrl;
@@ -43,7 +48,7 @@ public class PortfolioItem extends BaseTimeEntity {
     private int displayOrder;
 
     public static PortfolioItem create(
-            Long userId,
+            User user,
             String imageUrl,
             String title,
             String caption,
@@ -51,7 +56,7 @@ public class PortfolioItem extends BaseTimeEntity {
             int displayOrder
     ) {
         PortfolioItem portfolioItem = new PortfolioItem();
-        portfolioItem.userId = userId;
+        portfolioItem.user = user;
         portfolioItem.imageUrl = imageUrl;
         portfolioItem.title = title;
         portfolioItem.caption = caption;

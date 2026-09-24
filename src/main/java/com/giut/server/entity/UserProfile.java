@@ -11,6 +11,11 @@ public class UserProfile extends BaseTimeEntity {
     @Id @Column(name = "user_id")
     private Long userId;
 
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @MapsId
+    @JoinColumn(name = "user_id", foreignKey = @ForeignKey(name = "fk_user_profiles_user"))
+    private User user;
+
     @Enumerated(EnumType.STRING) @Column(name = "department_type", nullable = false, length = 50)
     private DepartmentType department;
 
@@ -45,7 +50,7 @@ public class UserProfile extends BaseTimeEntity {
     private String externalLinksJson;
 
     public static UserProfile create(
-            Long userId,
+            User user,
             DepartmentType department,
             ActivityStatus activityStatus,
             Short grade,
@@ -57,7 +62,7 @@ public class UserProfile extends BaseTimeEntity {
             String externalLinksJson
     ) {
         UserProfile profile = new UserProfile();
-        profile.userId = userId;
+        profile.user = user;
         profile.update(
                 department,
                 activityStatus,
