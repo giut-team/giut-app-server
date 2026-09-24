@@ -18,6 +18,7 @@ public record PublicCompetitionDetailResponse(
         CompetitionRecruitmentStatus recruitmentStatus,
         String recruitmentStatusName,
         long viewCount,
+        long scrapCount,
         boolean scrapped,
         List<CompetitionUrlResponse> urls
 ) {
@@ -25,6 +26,7 @@ public record PublicCompetitionDetailResponse(
     public static PublicCompetitionDetailResponse from(
             Competition competition,
             CompetitionRecruitmentStatus recruitmentStatus,
+            long scrapCount,
             boolean scrapped,
             List<CompetitionUrlResponse> urls
     ) {
@@ -41,6 +43,7 @@ public record PublicCompetitionDetailResponse(
                 recruitmentStatus,
                 recruitmentStatus.getDisplayName(),
                 competition.getViewCount(),
+                scrapCount,
                 scrapped,
                 urls
         );
