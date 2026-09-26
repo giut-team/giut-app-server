@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
 import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.*;
+import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
 import com.giut.server.dto.profile.common.ProfileLinkDto;
@@ -18,8 +19,10 @@ import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
 import com.giut.server.entity.UserProfileTag;
+import com.giut.server.exception.ConflictException;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileRoleRepository;
+import com.giut.server.repository.ActivityHistoryRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.PortfolioItemRepository;
@@ -65,6 +68,8 @@ public class UserProfileService {
     private final PortfolioItemRepository portfolioItemRepository;
 
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
+
+    private final ActivityHistoryRepository activityHistoryRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -155,7 +160,20 @@ public class UserProfileService {
     }
 
     @Transactional
-    public MyProfileSaveResponse saveMyProfile(Long userId, PutMyProfileRequest request) {
+    public MyProfileResponse createMyProfile(Long userId, PutMyProfileRequest request) {
+        return saveMyProfile(userId, request, true);
+    }
+
+    @Transactional
+    public MyProfileResponse updateMyProfile(Long userId, PutMyProfileRequest request) {
+        return saveMyProfile(userId, request, false);
+    }
+
+    private MyProfileResponse saveMyProfile(
+            Long userId,
+            PutMyProfileRequest request,
+            boolean creating
+    ) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
@@ -167,9 +185,14 @@ public class UserProfileService {
                 .toList());
 
         UserProfile profile = userProfileRepository.findById(userId).orElse(null);
-        boolean created = profile == null;
+        if (creating && profile != null) {
+            throw new ConflictException("이미 프로필이 등록되어 있습니다.");
+        }
+        if (!creating && profile == null) {
+            throw new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다.");
+        }
 
-        if (created) {
+        if (creating) {
             profile = userProfileRepository.save(UserProfile.create(
                     user,
                     request.department(),
@@ -196,10 +219,11 @@ public class UserProfileService {
             );
         }
 
+        user.updateNickname(request.nickname());
         replaceRoles(profile, roles);
         replaceTags(profile, request);
 
-        return new MyProfileSaveResponse(toMyProfileResponse(profile), created);
+        return toMyProfileResponse(profile);
     }
 
     private List<ProfileRole.PrimaryRole> findPrimaryRoles(List<String> primaryRoleCodes) {
@@ -341,7 +365,7 @@ public class UserProfileService {
                 .toList();
 
         List<PortfolioItem> portfolioItemEntities = includeHiddenPortfolioItems
-                ? portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(profile.getUserId())
+                ? portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(profile.getUserId())
                 : portfolioItemRepository.findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(profile.getUserId());
         Map<Long, List<ProfileTagSummaryResponse>> portfolioSkillTagsByItemId = findPortfolioSkillTagsByItemId(portfolioItemEntities);
         List<PortfolioItemDto> portfolioItems = portfolioItemEntities
@@ -352,7 +376,13 @@ public class UserProfileService {
                 ))
                 .toList();
 
-        return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems);
+        List<ActivityHistoryDto> activityHistories = activityHistoryRepository
+                .findAllByUser_IdOrderByStartMonthDescEndMonthDescIdDesc(profile.getUserId())
+                .stream()
+                .map(ActivityHistoryDto::from)
+                .toList();
+
+        return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems, activityHistories);
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {

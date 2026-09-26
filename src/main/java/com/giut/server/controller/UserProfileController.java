@@ -3,7 +3,6 @@ package com.giut.server.controller;
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
 import com.giut.server.dto.profile.response.MyProfileResponse;
-import com.giut.server.dto.profile.response.MyProfileSaveResponse;
 import com.giut.server.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -46,7 +46,7 @@ public class UserProfileController {
                             examples = {
                                     @ExampleObject(
                                             name = "프로필 등록 완료",
-                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
+                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
@@ -73,35 +73,23 @@ public class UserProfileController {
         return ResponseEntity.ok(userProfileService.getMyProfile(userId));
     }
 
-    @PutMapping("/me/profile")
+    @PostMapping("/me/profile")
     @Operation(
-            summary = "내 프로필 등록 또는 전체 수정",
-            description = "프로필이 없으면 생성하고 201을 반환합니다. 이미 존재하면 전달한 값으로 전체 수정하고 200을 반환합니다."
+            summary = "내 프로필 최초 생성",
+            description = "프로필 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 최초 등록합니다. 활동 이력과 포트폴리오는 각각의 전용 API로 관리합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
             @ApiResponse(
                     responseCode = "201",
-                    description = "프로필 최초 등록 성공",
+                    description = "프로필 생성 성공",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 생성 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
-                            )
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "프로필 전체 수정 성공",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = MyProfileResponse.class),
-                            examples = @ExampleObject(
-                                    name = "프로필 수정 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":4,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"OPEN_TO_OFFERS\",\"activityStatusName\":\"프로필 쓰는 중\",\"profileImageUrl\":null,\"bio\":\"백엔드 공모전 팀원을 찾고 있습니다.\",\"searchable\":false,\"roles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"},{\"code\":\"PROJECT_MANAGER\",\"name\":\"프로젝트 매니저\"}],\"tags\":[],\"links\":[]}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
                             )
                     )
             ),
@@ -131,6 +119,11 @@ public class UserProfileController {
                     )
             ),
             @ApiResponse(
+                    responseCode = "409",
+                    description = "이미 프로필이 등록됨",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"ConflictException : 이미 프로필이 등록되어 있습니다.\",\"code\":409}"))
+            ),
+            @ApiResponse(
                     responseCode = "500",
                     description = "서버 내부 오류",
                     content = @Content(
@@ -143,17 +136,33 @@ public class UserProfileController {
                     )
             )
     })
-    public ResponseEntity<MyProfileResponse> saveMyProfile(
+    public ResponseEntity<MyProfileResponse> createMyProfile(
             Authentication authentication,
             @Valid @RequestBody PutMyProfileRequest request
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        MyProfileSaveResponse result = userProfileService.saveMyProfile(userId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(userProfileService.createMyProfile(userId, request));
+    }
 
-        if (result.created()) {
-            return ResponseEntity.status(HttpStatus.CREATED).body(result.response());
-        }
-
-        return ResponseEntity.ok(result.response());
+    @PutMapping("/me/profile")
+    @Operation(
+            summary = "내 프로필 전체 수정",
+            description = "이미 등록된 내 프로필의 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 요청 본문 전체로 교체합니다. 활동 이력과 포트폴리오는 각각의 전용 API로 관리합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "프로필 수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MyProfileResponse.class))),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 요청값 또는 태그/역할 조합", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
+            @ApiResponse(responseCode = "404", description = "수정할 프로필을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
+    })
+    public ResponseEntity<MyProfileResponse> updateMyProfile(
+            Authentication authentication,
+            @Valid @RequestBody PutMyProfileRequest request
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(userProfileService.updateMyProfile(userId, request));
     }
 }

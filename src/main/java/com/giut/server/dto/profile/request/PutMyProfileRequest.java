@@ -14,6 +14,11 @@ import java.util.List;
 
 @Schema(description = "내 프로필 등록 또는 전체 수정 요청")
 public record PutMyProfileRequest(
+        @Schema(description = "프로필에 표시할 이름", example = "김민재")
+        @NotBlank(message = "이름은 필수입니다.")
+        @Size(max = 50, message = "이름은 50자 이하여야 합니다.")
+        String nickname,
+
         @Schema(description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
         @NotNull(message = "학과는 필수입니다.")
         UserProfile.DepartmentType department,
@@ -47,7 +52,7 @@ public record PutMyProfileRequest(
         String profileImageUrl,
 
         @Schema(description = "자기소개", example = "백엔드와 AI 프로젝트에 관심이 있습니다.", nullable = true)
-        @Size(max = 500, message = "자기소개는 500자 이하여야 합니다.")
+        @Size(max = 200, message = "자기소개는 200자 이하여야 합니다.")
         String bio,
 
         @Schema(description = "기웃허브 공개 여부", example = "true")
@@ -56,7 +61,7 @@ public record PutMyProfileRequest(
 
         @Schema(description = "기존 기술 스택 태그 ID 목록", example = "[1, 4]")
         @NotNull(message = "기술 스택 목록은 필수입니다. 선택하지 않았다면 빈 배열을 입력하세요.")
-        @Size(max = 3, message = "기술 스택은 최대 3개까지 선택할 수 있습니다.")
+        @Size(max = 10, message = "기술 스택은 최대 10개까지 선택할 수 있습니다.")
         List<Long> skillTagIds,
 
         @Schema(description = "관심 분야 태그 ID 목록", example = "[21, 25]")

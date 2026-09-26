@@ -1,7 +1,6 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
-import com.giut.server.dto.profile.request.PortfolioItemOrderRequest;
 import com.giut.server.dto.profile.request.PortfolioShowcaseRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.response.PortfolioShowcaseResponse;
@@ -40,7 +39,7 @@ public class PortfolioItemController {
     private final PortfolioItemService portfolioItemService;
 
     @GetMapping
-    @Operation(summary = "내 포트폴리오 전체 목록 조회", description = "공개 여부와 관계없이 등록한 모든 포트폴리오를 조회합니다.")
+    @Operation(summary = "내 포트폴리오 전체 목록 조회", description = "공개 여부와 관계없이 등록한 모든 포트폴리오를 최신 등록순으로 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemListResponse.class))),
@@ -55,7 +54,7 @@ public class PortfolioItemController {
     @Operation(summary = "포트폴리오 항목 추가", description = "대표 사진 한 장, 프로젝트 기간·팀 인원·기술 스택 및 Markdown 상세 내용을 등록합니다. 새 항목은 기본적으로 공개 프로필에 숨김 처리됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class), examples = @ExampleObject(value = "{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/esg-campaign.png\",\"title\":\"ESG 캠페인 팀 회의\",\"caption\":\"일정 정리와 데이터 집계를 담당했어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":5,\"markdownContent\":\"## 프로젝트 소개\\n\\n분리배출 캠페인의 일정과 산출물을 정리했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"displayOrder\":1}"))),
+            @ApiResponse(responseCode = "201", description = "등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class), examples = @ExampleObject(value = "{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/esg-campaign.png\",\"title\":\"ESG 캠페인 팀 회의\",\"caption\":\"일정 정리와 데이터 집계를 담당했어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":5,\"markdownContent\":\"## 프로젝트 소개\\n\\n분리배출 캠페인의 일정과 산출물을 정리했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"showcaseOrder\":null,\"representative\":false}"))),
             @ApiResponse(responseCode = "400", description = "요청값 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
@@ -103,23 +102,6 @@ public class PortfolioItemController {
     ) {
         portfolioItemService.deletePortfolioItem(currentUserId(authentication), portfolioItemId);
         return ResponseEntity.noContent().build();
-    }
-
-    @PutMapping("/order")
-    @Operation(summary = "내 포트폴리오 전체 순서 변경", description = "현재 내 포트폴리오 ID 전체를 원하는 순서로 전달합니다. 공개 프로필 노출 순서는 showcase API에서 별도로 관리합니다.")
-    @SecurityRequirement(name = "JWT")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "순서 변경 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemListResponse.class))),
-            @ApiResponse(responseCode = "400", description = "누락·중복·다른 사용자의 항목이 포함된 요청", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
-            @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
-            @ApiResponse(responseCode = "404", description = "항목을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
-            @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
-    })
-    public ResponseEntity<PortfolioItemListResponse> changePortfolioItemOrder(
-            Authentication authentication,
-            @Valid @RequestBody PortfolioItemOrderRequest request
-    ) {
-        return ResponseEntity.ok(portfolioItemService.changePortfolioItemOrder(currentUserId(authentication), request));
     }
 
     @PutMapping("/showcase")

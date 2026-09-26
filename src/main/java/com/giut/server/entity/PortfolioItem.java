@@ -20,7 +20,7 @@ import java.time.LocalDate;
 @Entity
 @Table(
         name = "portfolio_items",
-        indexes = @Index(name = "idx_portfolio_items_user_order", columnList = "user_id, display_order")
+        indexes = @Index(name = "idx_portfolio_items_user_showcase", columnList = "user_id, showcase_order")
 )
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -55,9 +55,6 @@ public class PortfolioItem extends BaseTimeEntity {
     @Column(name = "markdown_content", nullable = false, columnDefinition = "text")
     private String markdownContent;
 
-    @Column(name = "display_order", nullable = false)
-    private int displayOrder;
-
     @Column(name = "showcase_order")
     private Integer showcaseOrder;
 
@@ -72,8 +69,7 @@ public class PortfolioItem extends BaseTimeEntity {
             LocalDate projectStartDate,
             LocalDate projectEndDate,
             Integer teamSize,
-            String markdownContent,
-            int displayOrder
+            String markdownContent
     ) {
         PortfolioItem portfolioItem = new PortfolioItem();
         portfolioItem.user = user;
@@ -84,7 +80,6 @@ public class PortfolioItem extends BaseTimeEntity {
         portfolioItem.projectEndDate = projectEndDate;
         portfolioItem.teamSize = teamSize;
         portfolioItem.markdownContent = markdownContent;
-        portfolioItem.displayOrder = displayOrder;
         return portfolioItem;
     }
 
@@ -104,10 +99,6 @@ public class PortfolioItem extends BaseTimeEntity {
         this.projectEndDate = projectEndDate;
         this.teamSize = teamSize;
         this.markdownContent = markdownContent;
-    }
-
-    public void changeDisplayOrder(int displayOrder) {
-        this.displayOrder = displayOrder;
     }
 
     public void changeShowcaseOrder(Integer showcaseOrder) {

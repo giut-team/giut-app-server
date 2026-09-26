@@ -59,10 +59,6 @@ public record PortfolioItemDto(
         List<ProfileTagSummaryResponse> skillTags,
 
         @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-        @Schema(description = "내 포트폴리오 전체 목록에서의 정렬 순서", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
-        Integer displayOrder,
-
-        @JsonProperty(access = JsonProperty.Access.READ_ONLY)
         @Schema(description = "공개 프로필 내 노출 순서. null이면 숨김", example = "1", nullable = true, accessMode = Schema.AccessMode.READ_ONLY)
         Integer showcaseOrder,
 
@@ -85,7 +81,6 @@ public record PortfolioItemDto(
                 portfolioItem.getMarkdownContent(),
                 null,
                 skillTags,
-                portfolioItem.getDisplayOrder(),
                 portfolioItem.getShowcaseOrder(),
                 portfolioItem.isRepresentative()
         );

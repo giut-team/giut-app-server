@@ -6,7 +6,6 @@ import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.CreateSkillTagResponse;
 import com.giut.server.dto.profile.response.ProfileRoleListResponse;
 import com.giut.server.dto.profile.response.ProfileTagListResponse;
-import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.response.PublicProfileListResponse;
 import com.giut.server.dto.profile.response.PublicProfileDetailResponse;
 import com.giut.server.entity.ProfileTag;
@@ -292,7 +291,7 @@ public class ProfileController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicProfileDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}],\"portfolioItems\":[{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"content\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"displayOrder\":1}]}}")
+                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}],\"portfolioItems\":[{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"markdownContent\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"showcaseOrder\":1,\"representative\":true}]}}")
                     )
             ),
             // 실패 응답
@@ -323,46 +322,4 @@ public class ProfileController {
         return ResponseEntity.ok(userProfileService.getPublicProfile(userId));
     }
 
-    @GetMapping("/{userId}/portfolio-items")
-    @Operation(
-            summary = "공개 포트폴리오 목록 조회",
-            description = "공개 프로필에 노출하도록 선택한 포트폴리오만 노출 순서대로 조회합니다. 최대 6개가 반환되며, 숨김 처리된 포트폴리오는 포함되지 않습니다."
-    )
-    @SecurityRequirement(name = "JWT")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "공개 포트폴리오 목록 조회 성공",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = PortfolioItemListResponse.class),
-                            examples = @ExampleObject(value = "{\"portfolioItems\":[{\"id\":15,\"imageUrl\":\"https://cdn.giut.com/portfolio/esg.png\",\"title\":\"ESG 캠페인 팀 회의\",\"caption\":\"일정 정리와 회의록 작성을 맡았어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":5,\"markdownContent\":\"## 프로젝트 소개\\n\\n회의 일정과 산출물을 관리했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"displayOrder\":1,\"showcaseOrder\":1,\"representative\":true}]}")
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "userId 형식 오류",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"MethodArgumentTypeMismatchException : userId는 숫자여야 합니다.\",\"code\":400}"))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 실패 또는 토큰 누락",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "공개 프로필을 찾을 수 없음",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 공개 프로필을 찾을 수 없습니다.\",\"code\":404}"))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 내부 오류",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}"))
-            )
-    })
-    public ResponseEntity<PortfolioItemListResponse> getPublicPortfolioItems(
-            @PathVariable Long userId
-    ) {
-        return ResponseEntity.ok(userProfileService.getPublicPortfolioItems(userId));
-    }
 }
