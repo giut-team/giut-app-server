@@ -46,7 +46,7 @@ public class UserProfileController {
                             examples = {
                                     @ExampleObject(
                                             name = "프로필 등록 완료",
-                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
+                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"portfolioItems\":[],\"activityHistories\":[]}}"
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
@@ -76,7 +76,7 @@ public class UserProfileController {
     @PostMapping("/me/profile")
     @Operation(
             summary = "내 프로필 최초 생성",
-            description = "프로필 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 최초 등록합니다. 활동 이력과 포트폴리오는 각각의 전용 API로 관리합니다."
+            description = "프로필 기본 정보와 선택한 activityHistories를 한 번에 등록합니다. 활동 이력은 생략하거나 빈 배열로 보낼 수 있습니다. 포트폴리오는 기존 전용 API로 등록합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -89,7 +89,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 생성 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"links\":[{\"type\":\"GITHUB\",\"typeName\":\"GitHub\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]}}"
+                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"portfolioItems\":[],\"activityHistories\":[{\"id\":1,\"category\":\"AWARD\",\"categoryName\":\"수상\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]}}"
                             )
                     )
             ),
@@ -148,7 +148,7 @@ public class UserProfileController {
     @PutMapping("/me/profile")
     @Operation(
             summary = "내 프로필 전체 수정",
-            description = "이미 등록된 내 프로필의 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 요청 본문 전체로 교체합니다. 활동 이력과 포트폴리오는 각각의 전용 API로 관리합니다."
+            description = "이미 등록된 내 프로필의 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 요청 본문 전체로 교체합니다. activityHistories는 보내지 말고 활동 이력 전용 API로 관리합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({

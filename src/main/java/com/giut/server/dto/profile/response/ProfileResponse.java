@@ -4,7 +4,6 @@ import com.giut.server.entity.UserProfile;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
-import com.giut.server.dto.profile.common.ProfileLinkDto;
 
 import java.util.List;
 
@@ -23,7 +22,6 @@ public record ProfileResponse(
         boolean searchable,
         List<ProfileCodeNameResponse> roles,
         List<ProfileTagResponse> tags,
-        List<ProfileLinkDto> links,
         List<PortfolioItemDto> portfolioItems,
         List<ActivityHistoryDto> activityHistories
 ) {
@@ -32,7 +30,6 @@ public record ProfileResponse(
             List<ProfileCodeNameResponse> primaryRoles,
             List<ProfileCodeNameResponse> roles,
             List<ProfileTagResponse> tags,
-            List<ProfileLinkDto> links,
             List<PortfolioItemDto> portfolioItems,
             List<ActivityHistoryDto> activityHistories
     ) {
@@ -51,7 +48,6 @@ public record ProfileResponse(
                 profile.isSearchable(),
                 roles,
                 tags,
-                links,
                 portfolioItems,
                 activityHistories
         );

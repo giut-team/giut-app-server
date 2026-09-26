@@ -43,12 +43,6 @@ public class UserProfile extends BaseTimeEntity {
     @Column(name = "primary_roles", columnDefinition = "json", nullable = false)
     private String primaryRolesJson;
 
-    /**
-     * 프로필 전체 수정 시 함께 교체되는 외부 링크 목록이다.
-     */
-    @Column(name = "external_links", columnDefinition = "json", nullable = false)
-    private String externalLinksJson;
-
     public static UserProfile create(
             User user,
             DepartmentType department,
@@ -58,8 +52,7 @@ public class UserProfile extends BaseTimeEntity {
             String profileImageUrl,
             String bio,
             boolean searchable,
-            String primaryRolesJson,
-            String externalLinksJson
+            String primaryRolesJson
     ) {
         UserProfile profile = new UserProfile();
         profile.user = user;
@@ -71,8 +64,7 @@ public class UserProfile extends BaseTimeEntity {
                 profileImageUrl,
                 bio,
                 searchable,
-                primaryRolesJson,
-                externalLinksJson
+                primaryRolesJson
         );
         return profile;
     }
@@ -85,8 +77,7 @@ public class UserProfile extends BaseTimeEntity {
             String profileImageUrl,
             String bio,
             boolean searchable,
-            String primaryRolesJson,
-            String externalLinksJson
+            String primaryRolesJson
     ) {
         this.department = department;
         this.activityStatus = activityStatus;
@@ -96,7 +87,6 @@ public class UserProfile extends BaseTimeEntity {
         this.bio = bio;
         this.searchable = searchable;
         this.primaryRolesJson = primaryRolesJson;
-        this.externalLinksJson = externalLinksJson;
     }
 
     @Getter

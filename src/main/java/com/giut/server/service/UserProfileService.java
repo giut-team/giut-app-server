@@ -9,8 +9,6 @@ import com.giut.server.dto.profile.response.*;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
-import com.giut.server.dto.profile.common.ProfileLinkDto;
-import com.giut.server.entity.ProfileLink;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
@@ -70,6 +68,8 @@ public class UserProfileService {
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
 
     private final ActivityHistoryRepository activityHistoryRepository;
+
+    private final ActivityHistoryService activityHistoryService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -178,11 +178,7 @@ public class UserProfileService {
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
-        validateLinkTypes(request.links()); // 같은 링크로 등록하는게 있는지 체크
         String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
-        String externalLinksJson = writeJson(request.links().stream()
-                .map(link -> new ProfileLink(link.type(), link.url(), link.title()))
-                .toList());
 
         UserProfile profile = userProfileRepository.findById(userId).orElse(null);
         if (creating && profile != null) {
@@ -190,6 +186,9 @@ public class UserProfileService {
         }
         if (!creating && profile == null) {
             throw new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다.");
+        }
+        if (!creating && request.activityHistories() != null) {
+            throw new IllegalArgumentException("활동 이력 수정은 활동 이력 전용 API를 이용해 주세요.");
         }
 
         if (creating) {
@@ -202,8 +201,7 @@ public class UserProfileService {
                     request.profileImageUrl(),
                     request.bio(),
                     request.searchable(),
-                    primaryRolesJson,
-                    externalLinksJson
+                    primaryRolesJson
             ));
         } else {
             profile.update(
@@ -214,14 +212,16 @@ public class UserProfileService {
                     request.profileImageUrl(),
                     request.bio(),
                     request.searchable(),
-                    primaryRolesJson,
-                    externalLinksJson
+                    primaryRolesJson
             );
         }
 
         user.updateNickname(request.nickname());
         replaceRoles(profile, roles);
         replaceTags(profile, request);
+        if (creating) {
+            activityHistoryService.createForProfile(user, request.activityHistories());
+        }
 
         return toMyProfileResponse(profile);
     }
@@ -255,15 +255,6 @@ public class UserProfileService {
         Map<String, ProfileRole> roleByCode = new HashMap<>();
         roles.forEach(role -> roleByCode.put(role.getCode(), role));
         return roleCodes.stream().map(roleByCode::get).toList();
-    }
-
-    private void validateLinkTypes(List<ProfileLinkDto> links) {
-        Set<ProfileLink.Type> linkTypes = new HashSet<>();
-        for (ProfileLinkDto link : links) {
-            if (!linkTypes.add(link.type())) {
-                throw new IllegalArgumentException("같은 유형의 외부 링크는 하나만 등록할 수 있습니다.");
-            }
-        }
     }
 
     private void replaceRoles(UserProfile profile, List<ProfileRole> roles) {
@@ -359,11 +350,6 @@ public class UserProfileService {
                 ))
                 .toList();
 
-        List<ProfileLinkDto> links = readLinks(profile)
-                .stream()
-                .map(ProfileLinkDto::from)
-                .toList();
-
         List<PortfolioItem> portfolioItemEntities = includeHiddenPortfolioItems
                 ? portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(profile.getUserId())
                 : portfolioItemRepository.findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(profile.getUserId());
@@ -382,7 +368,7 @@ public class UserProfileService {
                 .map(ActivityHistoryDto::from)
                 .toList();
 
-        return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems, activityHistories);
+        return ProfileResponse.from(profile, primaryRoles, roles, tags, portfolioItems, activityHistories);
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {
@@ -469,10 +455,6 @@ public class UserProfileService {
 
     private List<String> readPrimaryRoleCodes(UserProfile profile) {
         return readJson(profile.getPrimaryRolesJson(), new TypeReference<>() {});
-    }
-
-    private List<ProfileLink> readLinks(UserProfile profile) {
-        return readJson(profile.getExternalLinksJson(), new TypeReference<>() {});
     }
 
     private <T> T readJson(String json, TypeReference<T> typeReference) {
