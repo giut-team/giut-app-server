@@ -23,6 +23,7 @@ import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.PortfolioItemSkillTagRepository;
 import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
@@ -62,6 +63,8 @@ public class UserProfileService {
     private final ProfileRoleSkillTagRepository profileRoleSkillTagRepository;
 
     private final PortfolioItemRepository portfolioItemRepository;
+
+    private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -123,20 +126,32 @@ public class UserProfileService {
 
     @Transactional(readOnly = true)
     public PublicProfileDetailResponse getPublicProfile(Long userId) {
-        UserProfile profile = userProfileRepository.findById(userId)
-                .filter(UserProfile::isSearchable)
-                .filter(userProfile -> userProfile.getActivityStatus() != UserProfile.ActivityStatus.RESTING)
-                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
-
-        User user = userRepository.findById(userId)
-                .filter(foundUser -> foundUser.getStatus() == User.Status.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
+        UserProfile profile = findPublicProfile(userId);
+        User user = findActiveUser(userId);
 
         return new PublicProfileDetailResponse(
                 user.getNickname(),
                 user.getUniversityVerifiedAt() != null,
-                toProfileResponse(profile)
+                toProfileResponse(profile, false)
         );
+    }
+
+    @Transactional(readOnly = true)
+    public PortfolioItemListResponse getPublicPortfolioItems(Long userId) {
+        findPublicProfile(userId);
+        findActiveUser(userId);
+
+        List<PortfolioItem> portfolioItems = portfolioItemRepository
+                .findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(userId);
+        Map<Long, List<ProfileTagSummaryResponse>> skillTagsByPortfolioItemId =
+                findPortfolioSkillTagsByItemId(portfolioItems);
+
+        return new PortfolioItemListResponse(portfolioItems.stream()
+                .map(portfolioItem -> PortfolioItemDto.from(
+                        portfolioItem,
+                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
+                ))
+                .toList());
     }
 
     @Transactional
@@ -274,10 +289,23 @@ public class UserProfileService {
     }
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
-        return MyProfileResponse.completed(toProfileResponse(profile));
+        return MyProfileResponse.completed(toProfileResponse(profile, true));
     }
 
-    private ProfileResponse toProfileResponse(UserProfile profile) {
+    private UserProfile findPublicProfile(Long userId) {
+        return userProfileRepository.findById(userId)
+                .filter(UserProfile::isSearchable)
+                .filter(profile -> profile.getActivityStatus() != UserProfile.ActivityStatus.RESTING)
+                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
+    }
+
+    private User findActiveUser(Long userId) {
+        return userRepository.findById(userId)
+                .filter(user -> user.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다."));
+    }
+
+    private ProfileResponse toProfileResponse(UserProfile profile, boolean includeHiddenPortfolioItems) {
         List<ProfileCodeNameResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile))
                 .stream()
                 .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
@@ -312,10 +340,16 @@ public class UserProfileService {
                 .map(ProfileLinkDto::from)
                 .toList();
 
-        List<PortfolioItemDto> portfolioItems = portfolioItemRepository
-                .findAllByUser_IdOrderByDisplayOrderAsc(profile.getUserId())
+        List<PortfolioItem> portfolioItemEntities = includeHiddenPortfolioItems
+                ? portfolioItemRepository.findAllByUser_IdOrderByDisplayOrderAsc(profile.getUserId())
+                : portfolioItemRepository.findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(profile.getUserId());
+        Map<Long, List<ProfileTagSummaryResponse>> portfolioSkillTagsByItemId = findPortfolioSkillTagsByItemId(portfolioItemEntities);
+        List<PortfolioItemDto> portfolioItems = portfolioItemEntities
                 .stream()
-                .map(PortfolioItemDto::from)
+                .map(portfolioItem -> PortfolioItemDto.from(
+                        portfolioItem,
+                        portfolioSkillTagsByItemId.getOrDefault(portfolioItem.getId(), List.of())
+                ))
                 .toList();
 
         return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems);
@@ -337,6 +371,23 @@ public class UserProfileService {
             }
         });
         return tagsByUserId;
+    }
+
+    private Map<Long, List<ProfileTagSummaryResponse>> findPortfolioSkillTagsByItemId(
+            List<PortfolioItem> portfolioItems
+    ) {
+        if (portfolioItems.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<ProfileTagSummaryResponse>> tagsByPortfolioItemId = new HashMap<>();
+        portfolioItemSkillTagRepository.findAllByPortfolioItem_IdIn(
+                        portfolioItems.stream().map(PortfolioItem::getId).toList()
+                )
+                .forEach(link -> tagsByPortfolioItemId
+                        .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new ArrayList<>())
+                        .add(ProfileTagSummaryResponse.from(link.getTag())));
+        return tagsByPortfolioItemId;
     }
 
     private PublicProfileResponse toPublicProfileResponse(
