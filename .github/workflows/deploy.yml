@@ -1,0 +1,52 @@
+name: Deploy Giut Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: ./gradlew clean bootJar -x test
+
+      - name: Prepare JAR
+        run: |
+          JAR_FILE=$(find build/libs -maxdepth 1 -name 'giut-server-*.jar' ! -name '*-plain.jar' | head -n 1)
+          cp "$JAR_FILE" deploy.jar
+
+      - name: Upload JAR to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: deploy.jar
+          target: /home/ec2-user
+
+      - name: Restart Spring Boot
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mv /home/ec2-user/deploy.jar /home/ec2-user/giut-server.jar
+            sudo systemctl restart giut-server
+            sudo systemctl is-active giut-server
