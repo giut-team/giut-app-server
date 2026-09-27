@@ -3,9 +3,9 @@ package com.giut.server.service;
 import com.giut.server.dto.profile.request.CreateSkillTagRequest;
 import com.giut.server.dto.profile.response.CreateSkillTagResponse;
 import com.giut.server.dto.profile.response.ProfileRoleListResponse;
-import com.giut.server.dto.profile.response.ProfileRoleResponse;
 import com.giut.server.dto.profile.response.ProfileTagListResponse;
 import com.giut.server.dto.profile.response.ProfileTagResponse;
+import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
@@ -40,9 +40,9 @@ public class ProfileOptionService {
     public ProfileRoleListResponse getRoles(String primaryRoleCode) {
         ProfileRole.PrimaryRole primaryRole = findPrimaryRole(primaryRoleCode);
 
-        List<ProfileRoleResponse> roles = profileRoleRepository
+        List<ProfileCodeNameResponse> roles = profileRoleRepository
                 .findAllByPrimaryRoleOrderByDisplayOrderAsc(primaryRole).stream()
-                .map(ProfileRoleResponse::from)
+                .map(ProfileCodeNameResponse::from)
                 .toList();
 
         if (roles.isEmpty()) {
@@ -143,11 +143,11 @@ public class ProfileOptionService {
             return List.of();
         }
 
-        Map<Long, List<ProfileRoleResponse>> relatedRolesByTagId = new HashMap<>();
+        Map<Long, List<ProfileCodeNameResponse>> relatedRolesByTagId = new HashMap<>();
         profileRoleSkillTagRepository.findAllByTag_IdIn(tags.stream().map(ProfileTag::getId).toList())
                 .forEach(link -> relatedRolesByTagId
                         .computeIfAbsent(link.getTag().getId(), ignored -> new ArrayList<>())
-                        .add(ProfileRoleResponse.from(link.getRole())));
+                        .add(ProfileCodeNameResponse.from(link.getRole())));
 
         return tags.stream()
                 .map(tag -> ProfileTagResponse.from(

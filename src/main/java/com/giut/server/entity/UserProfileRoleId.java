@@ -11,7 +11,7 @@ import java.io.Serializable;
 @EqualsAndHashCode
 public class UserProfileRoleId implements Serializable {
 
-    private Long userId;
+    private Long profile;
 
     private Long role;
 }

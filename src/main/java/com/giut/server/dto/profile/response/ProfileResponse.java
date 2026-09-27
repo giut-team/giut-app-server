@@ -1,6 +1,9 @@
 package com.giut.server.dto.profile.response;
 
 import com.giut.server.entity.UserProfile;
+import com.giut.server.dto.profile.common.PortfolioItemDto;
+import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
+import com.giut.server.dto.profile.common.ProfileLinkDto;
 
 import java.util.List;
 
@@ -10,24 +13,24 @@ public record ProfileResponse(
         String departmentName,
         Short grade,
         UserProfile.Gender gender,
-        List<ProfilePrimaryRoleResponse> primaryRoles,
+        List<ProfileCodeNameResponse> primaryRoles,
         UserProfile.ActivityStatus activityStatus,
         String activityStatusName,
         String profileImageUrl,
         String bio,
         boolean searchable,
-        List<ProfileRoleResponse> roles,
+        List<ProfileCodeNameResponse> roles,
         List<ProfileTagResponse> tags,
-        List<ProfileLinkResponse> links,
-        List<PortfolioItemResponse> portfolioItems
+        List<ProfileLinkDto> links,
+        List<PortfolioItemDto> portfolioItems
 ) {
     public static ProfileResponse from(
             UserProfile profile,
-            List<ProfilePrimaryRoleResponse> primaryRoles,
-            List<ProfileRoleResponse> roles,
+            List<ProfileCodeNameResponse> primaryRoles,
+            List<ProfileCodeNameResponse> roles,
             List<ProfileTagResponse> tags,
-            List<ProfileLinkResponse> links,
-            List<PortfolioItemResponse> portfolioItems
+            List<ProfileLinkDto> links,
+            List<PortfolioItemDto> portfolioItems
     ) {
         return new ProfileResponse(
                 profile.getUserId(),

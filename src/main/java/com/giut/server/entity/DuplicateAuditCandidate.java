@@ -33,8 +33,9 @@ public class DuplicateAuditCandidate {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "merged_into_competition_id")
     private Competition mergedIntoCompetition;
 
-    @Column(name = "reviewed_by_user_id")
-    private Long reviewedByUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id", foreignKey = @ForeignKey(name = "fk_duplicate_audit_candidates_reviewer"))
+    private User reviewedByUser;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

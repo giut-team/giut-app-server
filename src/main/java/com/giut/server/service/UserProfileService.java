@@ -4,7 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.*;
+import com.giut.server.dto.profile.common.PortfolioItemDto;
+import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
+import com.giut.server.dto.profile.common.ProfileLinkDto;
 import com.giut.server.entity.ProfileLink;
 import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
@@ -23,11 +27,9 @@ import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
 import com.giut.server.repository.UserRepository;
-import com.giut.server.dto.profile.request.ProfileLinkRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,11 +77,17 @@ public class UserProfileService {
      * 프로필 수와 관계없이 프로필, 사용자, 역할, 사용자 태그, 태그를 각각 한 번씩 조회한다.
      */
     @Transactional(readOnly = true)
-    public PublicProfileListResponse getPublicProfiles(int page) {
+    public PublicProfileListResponse getPublicProfiles(Long currentUserId, PublicProfileSearchRequest request) {
         Page<UserProfile> profilePage = userProfileRepository.findPublicProfiles(
-                UserProfile.ActivityStatus.RESTING,
-                User.Status.ACTIVE,
-                PageRequest.of(page, PUBLIC_PROFILE_PAGE_SIZE, Sort.by(Sort.Direction.DESC, "userId"))
+                UserProfile.ActivityStatus.RESTING.name(),
+                User.Status.ACTIVE.name(),
+                currentUserId,
+                request.primaryRole() == null ? null : request.primaryRole().name(),
+                request.normalizedRole(),
+                request.activityStatus() == null ? null : request.activityStatus().name(),
+                request.departmentType() == null ? null : request.departmentType().name(),
+                request.skillTagId(),
+                PageRequest.of(request.pageOrDefault(), PUBLIC_PROFILE_PAGE_SIZE)
         );
         List<UserProfile> profiles = profilePage.getContent();
         if (profiles.isEmpty()) {
@@ -133,6 +141,8 @@ public class UserProfileService {
 
     @Transactional
     public MyProfileSaveResponse saveMyProfile(Long userId, PutMyProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
         validateLinkTypes(request.links()); // 같은 링크로 등록하는게 있는지 체크
@@ -146,7 +156,7 @@ public class UserProfileService {
 
         if (created) {
             profile = userProfileRepository.save(UserProfile.create(
-                    userId,
+                    user,
                     request.department(),
                     request.activityStatus(),
                     request.grade(),
@@ -171,8 +181,8 @@ public class UserProfileService {
             );
         }
 
-        replaceRoles(userId, roles);
-        replaceTags(userId, request);
+        replaceRoles(profile, roles);
+        replaceTags(profile, request);
 
         return new MyProfileSaveResponse(toMyProfileResponse(profile), created);
     }
@@ -208,34 +218,34 @@ public class UserProfileService {
         return roleCodes.stream().map(roleByCode::get).toList();
     }
 
-    private void validateLinkTypes(List<ProfileLinkRequest> links) {
+    private void validateLinkTypes(List<ProfileLinkDto> links) {
         Set<ProfileLink.Type> linkTypes = new HashSet<>();
-        for (ProfileLinkRequest link : links) {
+        for (ProfileLinkDto link : links) {
             if (!linkTypes.add(link.type())) {
                 throw new IllegalArgumentException("같은 유형의 외부 링크는 하나만 등록할 수 있습니다.");
             }
         }
     }
 
-    private void replaceRoles(Long userId, List<ProfileRole> roles) {
-        userProfileRoleRepository.deleteByUserId(userId);
+    private void replaceRoles(UserProfile profile, List<ProfileRole> roles) {
+        userProfileRoleRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileRoleRepository.flush();
 
         userProfileRoleRepository.saveAll(roles.stream()
-                .map(role -> UserProfileRole.create(userId, role))
+                .map(role -> UserProfileRole.create(profile, role))
                 .toList());
     }
 
-    private void replaceTags(Long userId, PutMyProfileRequest request) {
+    private void replaceTags(UserProfile profile, PutMyProfileRequest request) {
         List<ProfileTag> allTags = new ArrayList<>(findTags(request.skillTagIds(), ProfileTag.TagType.SKILL));
         allTags.addAll(findTags(request.interestTagIds(), ProfileTag.TagType.INTEREST));
         allTags.addAll(findTags(request.experienceTagIds(), ProfileTag.TagType.EXPERIENCE));
 
-        userProfileTagRepository.deleteByUserId(userId);
+        userProfileTagRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileTagRepository.flush();
 
         userProfileTagRepository.saveAll(allTags.stream()
-                .map(tag -> UserProfileTag.create(userId, tag.getId()))
+                .map(tag -> UserProfileTag.create(profile, tag))
                 .toList());
     }
 
@@ -268,26 +278,26 @@ public class UserProfileService {
     }
 
     private ProfileResponse toProfileResponse(UserProfile profile) {
-        List<ProfilePrimaryRoleResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile))
+        List<ProfileCodeNameResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile))
                 .stream()
                 .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
-                .map(ProfilePrimaryRoleResponse::from)
+                .map(ProfileCodeNameResponse::from)
                 .toList();
 
-        List<ProfileRoleResponse> roles = userProfileRoleRepository.findAllByUserId(profile.getUserId()).stream()
+        List<ProfileCodeNameResponse> roles = userProfileRoleRepository.findAllByProfile_UserId(profile.getUserId()).stream()
                 .map(UserProfileRole::getRole)
-                .map(ProfileRoleResponse::from)
+                .map(ProfileCodeNameResponse::from)
                 .toList();
 
-        List<Long> tagIds = userProfileTagRepository.findAllByUserId(profile.getUserId()).stream()
-                .map(UserProfileTag::getTagId)
+        List<Long> tagIds = userProfileTagRepository.findAllByProfile_UserId(profile.getUserId()).stream()
+                .map(userProfileTag -> userProfileTag.getTag().getId())
                 .toList();
         Map<Long, ProfileTag> tagById = new HashMap<>();
         profileTagRepository.findAllById(tagIds).forEach(tag -> tagById.put(tag.getId(), tag));
-        Map<Long, List<ProfileRoleResponse>> relatedRolesByTagId = new HashMap<>();
+        Map<Long, List<ProfileCodeNameResponse>> relatedRolesByTagId = new HashMap<>();
         profileRoleSkillTagRepository.findAllByTag_IdIn(tagIds).forEach(link -> relatedRolesByTagId
                 .computeIfAbsent(link.getTag().getId(), ignored -> new ArrayList<>())
-                .add(ProfileRoleResponse.from(link.getRole())));
+                .add(ProfileCodeNameResponse.from(link.getRole())));
         List<ProfileTagResponse> tags = tagIds.stream()
                 .map(tagById::get)
                 .filter(java.util.Objects::nonNull)
@@ -297,32 +307,32 @@ public class UserProfileService {
                 ))
                 .toList();
 
-        List<ProfileLinkResponse> links = readLinks(profile)
+        List<ProfileLinkDto> links = readLinks(profile)
                 .stream()
-                .map(ProfileLinkResponse::from)
+                .map(ProfileLinkDto::from)
                 .toList();
 
-        List<PortfolioItemResponse> portfolioItems = portfolioItemRepository
-                .findAllByUserIdOrderByDisplayOrderAsc(profile.getUserId())
+        List<PortfolioItemDto> portfolioItems = portfolioItemRepository
+                .findAllByUser_IdOrderByDisplayOrderAsc(profile.getUserId())
                 .stream()
-                .map(PortfolioItemResponse::from)
+                .map(PortfolioItemDto::from)
                 .toList();
 
         return ProfileResponse.from(profile, primaryRoles, roles, tags, links, portfolioItems);
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillsByUserId(List<Long> userIds) {
-        List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByUserIdIn(userIds);
+        List<UserProfileTag> userProfileTags = userProfileTagRepository.findAllByProfile_UserIdIn(userIds);
         Map<Long, ProfileTag> tagById = new HashMap<>();
-        profileTagRepository.findAllById(userProfileTags.stream().map(UserProfileTag::getTagId).toList())
+        profileTagRepository.findAllById(userProfileTags.stream().map(userProfileTag -> userProfileTag.getTag().getId()).toList())
                 .forEach(tag -> tagById.put(tag.getId(), tag));
 
         Map<Long, List<ProfileTagSummaryResponse>> tagsByUserId = new HashMap<>();
         userProfileTags.forEach(userProfileTag -> {
-            ProfileTag tag = tagById.get(userProfileTag.getTagId());
+            ProfileTag tag = tagById.get(userProfileTag.getTag().getId());
             if (tag != null && tag.getTagType() == ProfileTag.TagType.SKILL) {
                 tagsByUserId
-                        .computeIfAbsent(userProfileTag.getUserId(), ignored -> new ArrayList<>())
+                        .computeIfAbsent(userProfileTag.getProfile().getUserId(), ignored -> new ArrayList<>())
                         .add(ProfileTagSummaryResponse.from(tag));
             }
         });
@@ -334,9 +344,9 @@ public class UserProfileService {
             User user,
             List<ProfileTagSummaryResponse> skills
     ) {
-        List<ProfilePrimaryRoleResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile)).stream()
+        List<ProfileCodeNameResponse> primaryRoles = findPrimaryRoles(readPrimaryRoleCodes(profile)).stream()
                 .sorted(java.util.Comparator.comparingInt(ProfileRole.PrimaryRole::getDisplayOrder))
-                .map(ProfilePrimaryRoleResponse::from)
+                .map(ProfileCodeNameResponse::from)
                 .toList();
 
         return new PublicProfileResponse(

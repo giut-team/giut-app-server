@@ -1,6 +1,7 @@
 package com.giut.server.dto.profile.response;
 
 import com.giut.server.entity.UserProfile;
+import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
 
 import java.util.List;
 
@@ -11,7 +12,7 @@ public record PublicProfileResponse(
         String profileImageUrl,
         UserProfile.ActivityStatus activityStatus,
         String activityStatusName,
-        List<ProfilePrimaryRoleResponse> primaryRoles,
+        List<ProfileCodeNameResponse> primaryRoles,
         String departmentName,
         Short grade,
         String bio,

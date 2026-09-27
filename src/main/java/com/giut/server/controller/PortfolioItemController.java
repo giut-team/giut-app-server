@@ -2,9 +2,8 @@ package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.profile.request.PortfolioItemOrderRequest;
-import com.giut.server.dto.profile.request.PortfolioItemRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
-import com.giut.server.dto.profile.response.PortfolioItemResponse;
+import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.service.PortfolioItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -52,14 +51,14 @@ public class PortfolioItemController {
     @Operation(summary = "포트폴리오 항목 추가", description = "활동 사진 URL, 제목, 카드용 캡션, 상세 내용을 등록합니다. 한 프로필에는 최대 6개까지 등록할 수 있습니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemResponse.class), examples = @ExampleObject(value = "{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"content\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"displayOrder\":1}"))),
+            @ApiResponse(responseCode = "201", description = "등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class), examples = @ExampleObject(value = "{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"content\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"displayOrder\":1}"))),
             @ApiResponse(responseCode = "400", description = "요청값 오류 또는 최대 개수 초과", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"IllegalStateException : 포트폴리오는 최대 6개까지 등록할 수 있습니다.\",\"code\":400}"))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
     })
-    public ResponseEntity<PortfolioItemResponse> createPortfolioItem(
+    public ResponseEntity<PortfolioItemDto> createPortfolioItem(
             Authentication authentication,
-            @Valid @RequestBody PortfolioItemRequest request
+            @Valid @RequestBody PortfolioItemDto request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(portfolioItemService.createPortfolioItem(currentUserId(authentication), request));
@@ -69,16 +68,16 @@ public class PortfolioItemController {
     @Operation(summary = "포트폴리오 항목 수정", description = "내 포트폴리오 항목의 사진, 제목, 캡션, 상세 내용을 전체 수정합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemResponse.class))),
+            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class))),
             @ApiResponse(responseCode = "400", description = "요청값 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "404", description = "항목을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
     })
-    public ResponseEntity<PortfolioItemResponse> updatePortfolioItem(
+    public ResponseEntity<PortfolioItemDto> updatePortfolioItem(
             Authentication authentication,
             @PathVariable Long portfolioItemId,
-            @Valid @RequestBody PortfolioItemRequest request
+            @Valid @RequestBody PortfolioItemDto request
     ) {
         return ResponseEntity.ok(portfolioItemService.updatePortfolioItem(
                 currentUserId(authentication), portfolioItemId, request

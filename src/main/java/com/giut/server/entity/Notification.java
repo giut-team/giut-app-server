@@ -11,8 +11,9 @@ public class Notification {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_notifications_user"))
+    private User user;
 
     @Enumerated(EnumType.STRING) @Column(name = "notification_type", nullable = false, length = 40)
     private Type notificationType;

@@ -34,8 +34,7 @@ public class AuthService {
         User user = User.createAdmin(
                 request.getEmail(),
                 encodedPassword,
-                request.getNickname(),
-                request.getPhone()
+                request.getNickname()
         );
 
         User savedUser = userRepository.save(user);
