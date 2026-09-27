@@ -47,7 +47,7 @@ public record CreateTeamResponse(
         return new CreateTeamResponse(
                 team.getId(),
                 team.getCompetition().getId(),
-                team.getLeaderUserId(),
+                team.getLeader().getId(),
                 team.getName(),
                 team.getStatus(),
                 team.getWeeklyMeetingCount(),

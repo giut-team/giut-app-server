@@ -72,7 +72,7 @@ public class TeamService {
 
         Team team = teamRepository.save(Team.create(
                 competition,
-                leader.getId(),
+                leader,
                 request.name(),
                 request.description(),
                 request.activityMode(),
@@ -115,7 +115,7 @@ public class TeamService {
         return new TeamDetailResponse(
                 team.getId(),
                 team.getCompetition().getId(),
-                team.getLeaderUserId(),
+                team.getLeader().getId(),
                 team.getName(),
                 team.getDescription(),
                 team.getActivityMode(),
@@ -188,7 +188,7 @@ public class TeamService {
             throw new IllegalArgumentException("모집 중인 팀에만 참가 신청할 수 있습니다.");
         }
 
-        if (team.getLeaderUserId().equals(user.getId())) {
+        if (team.getLeader().getId().equals(user.getId())) {
             throw new IllegalArgumentException("팀장은 자신의 팀에 참가 신청할 수 없습니다.");
         }
 
@@ -300,7 +300,7 @@ public class TeamService {
     }
 
     private void validateTeamLeader(Team team, Long userId) {
-        if (!team.getLeaderUserId().equals(userId)) {
+        if (!team.getLeader().getId().equals(userId)) {
             throw new IllegalArgumentException("팀장만 참가 신청을 처리할 수 있습니다.");
         }
     }

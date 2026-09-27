@@ -9,5 +9,5 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     List<Team> findAllByCompetitionId(Long competitionId);
 
-    List<Team> findAllByLeaderUserId(Long leaderUserId);
+    List<Team> findAllByLeader_Id(Long leaderUserId);
 }

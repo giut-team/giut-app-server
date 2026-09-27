@@ -42,7 +42,7 @@ public class Team extends BaseTimeEntity {
 
     public static Team create(
             Competition competition,
-            Long leaderUserId,
+            User leader,
             String name,
             String description,
             ActivityMode activityMode,
@@ -52,7 +52,7 @@ public class Team extends BaseTimeEntity {
     ) {
         Team team = new Team();
         team.competition = competition;
-        team.leaderUserId = leaderUserId;
+        team.leader = leader;
         team.name = name;
         team.description = description;
         team.activityMode = activityMode;
