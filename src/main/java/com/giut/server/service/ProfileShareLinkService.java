@@ -4,10 +4,10 @@ import com.giut.server.dto.profile.response.ProfileShareLinkResponse;
 import com.giut.server.dto.profile.response.SharedProfileResponse;
 import com.giut.server.entity.ProfileShareLink;
 import com.giut.server.entity.User;
+import com.giut.server.entity.UserProfile;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileShareLinkRepository;
 import com.giut.server.repository.UserProfileRepository;
-import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,24 +28,20 @@ public class ProfileShareLinkService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final ProfileShareLinkRepository profileShareLinkRepository;
-    private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserProfileService userProfileService;
 
     @Transactional
     public ProfileShareLinkResponse createLink(Long userId) {
-        User user = userRepository.findById(userId)
-                .filter(found -> found.getStatus() == User.Status.ACTIVE)
+        UserProfile profile = userProfileRepository.findById(userId)
+                .filter(found -> found.getUser().getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("공유할 프로필을 찾을 수 없습니다."));
-        if (!userProfileRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("공유할 프로필을 찾을 수 없습니다.");
-        }
 
         byte[] tokenBytes = new byte[32];
         SECURE_RANDOM.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
         ProfileShareLink link = profileShareLinkRepository.save(ProfileShareLink.create(
-                user,
+                profile,
                 hashToken(token),
                 Instant.now().plus(LINK_VALIDITY)
         ));
@@ -62,7 +58,7 @@ public class ProfileShareLinkService {
     @Transactional(readOnly = true)
     public ProfileShareLinkListResponse getActiveLinks(Long userId) {
         return new ProfileShareLinkListResponse(profileShareLinkRepository
-                .findAllByUser_IdAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(userId, Instant.now())
+                .findAllByProfile_UserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(userId, Instant.now())
                 .stream()
                 .map(ProfileShareLinkSummaryResponse::from)
                 .toList());
@@ -79,12 +75,12 @@ public class ProfileShareLinkService {
                 .filter(found -> found.isActive(now))
                 .filter(found -> found.getCreatedAt().plus(LINK_VALIDITY).isAfter(now))
                 .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
-        return userProfileService.getSharedProfile(link.getUser().getId());
+        return userProfileService.getSharedProfile(link.getProfile().getUserId());
     }
 
     @Transactional
     public void revokeLink(Long userId, Long linkId) {
-        ProfileShareLink link = profileShareLinkRepository.findByIdAndUser_Id(linkId, userId)
+        ProfileShareLink link = profileShareLinkRepository.findByIdAndProfile_UserId(linkId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("공유 링크를 찾을 수 없습니다."));
         link.revoke(Instant.now());
     }

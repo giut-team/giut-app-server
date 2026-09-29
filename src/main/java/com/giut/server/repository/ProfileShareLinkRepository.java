@@ -11,9 +11,9 @@ public interface ProfileShareLinkRepository extends JpaRepository<ProfileShareLi
 
     Optional<ProfileShareLink> findByTokenHash(String tokenHash);
 
-    Optional<ProfileShareLink> findByIdAndUser_Id(Long id, Long userId);
+    Optional<ProfileShareLink> findByIdAndProfile_UserId(Long id, Long userId);
 
-    List<ProfileShareLink> findAllByUser_IdAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(
+    List<ProfileShareLink> findAllByProfile_UserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(
             Long userId,
             Instant now
     );

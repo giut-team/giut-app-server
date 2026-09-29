@@ -8,7 +8,6 @@ import com.giut.server.entity.UserProfile;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileShareLinkRepository;
 import com.giut.server.repository.UserProfileRepository;
-import com.giut.server.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -34,7 +33,6 @@ import static org.mockito.Mockito.when;
 class ProfileShareLinkServiceTest {
 
     @Mock private ProfileShareLinkRepository profileShareLinkRepository;
-    @Mock private UserRepository userRepository;
     @Mock private UserProfileRepository userProfileRepository;
     @Mock private UserProfileService userProfileService;
     @InjectMocks private ProfileShareLinkService profileShareLinkService;
@@ -42,8 +40,12 @@ class ProfileShareLinkServiceTest {
     @Test
     void createLinkStoresOnlyTokenHashEvenWhenProfileIsNotSearchable() {
         User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
-        when(userRepository.findById(12L)).thenReturn(Optional.of(user));
-        when(userProfileRepository.existsById(12L)).thenReturn(true);
+        UserProfile profile = UserProfile.create(
+                user, UserProfile.DepartmentType.COMPUTER_SCIENCE,
+                UserProfile.ActivityStatus.LOOKING_FOR_TEAM, (short) 3, null,
+                null, null, false, "[\"DEVELOPMENT\"]"
+        );
+        when(userProfileRepository.findById(12L)).thenReturn(Optional.of(profile));
         when(profileShareLinkRepository.save(any(ProfileShareLink.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -55,14 +57,15 @@ class ProfileShareLinkServiceTest {
         ArgumentCaptor<ProfileShareLink> saved = ArgumentCaptor.forClass(ProfileShareLink.class);
         verify(profileShareLinkRepository).save(saved.capture());
         assertThat(token).matches("[A-Za-z0-9_-]{43}");
+        assertThat(profile.isSearchable()).isFalse();
+        assertThat(saved.getValue().getProfile()).isSameAs(profile);
         assertThat(saved.getValue().getTokenHash()).hasSize(64).isNotEqualTo(token);
         assertThat(response.expiresAt()).isBetween(before.plus(Duration.ofHours(3)), after.plus(Duration.ofHours(3)));
     }
 
     @Test
     void revokedLinkCannotReadSharedProfile() {
-        User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
-        ProfileShareLink link = ProfileShareLink.create(user, "hash", Instant.now().plusSeconds(3600));
+        ProfileShareLink link = ProfileShareLink.create(mock(UserProfile.class), "hash", Instant.now().plusSeconds(3600));
         ReflectionTestUtils.setField(link, "createdAt", Instant.now());
         link.revoke(Instant.now());
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
@@ -74,9 +77,9 @@ class ProfileShareLinkServiceTest {
 
     @Test
     void validLinkReturnsOnlyTheSharedProfileResponse() {
-        User user = mock(User.class);
-        when(user.getId()).thenReturn(12L);
-        ProfileShareLink link = ProfileShareLink.create(user, "hash", Instant.now().plusSeconds(2 * 3600));
+        UserProfile profile = mock(UserProfile.class);
+        when(profile.getUserId()).thenReturn(12L);
+        ProfileShareLink link = ProfileShareLink.create(profile, "hash", Instant.now().plusSeconds(2 * 3600));
         ReflectionTestUtils.setField(link, "createdAt", Instant.now().minusSeconds(3600));
         SharedProfileResponse expected = new SharedProfileResponse(
                 "회원", false, null, UserProfile.ActivityStatus.LOOKING_FOR_TEAM,
@@ -90,8 +93,7 @@ class ProfileShareLinkServiceTest {
 
     @Test
     void expiredLinkCannotReadSharedProfile() {
-        User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
-        ProfileShareLink link = ProfileShareLink.create(user, "hash", Instant.now().minusSeconds(1));
+        ProfileShareLink link = ProfileShareLink.create(mock(UserProfile.class), "hash", Instant.now().minusSeconds(1));
         ReflectionTestUtils.setField(link, "createdAt", Instant.now().minusSeconds(3600));
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
 
@@ -102,13 +104,22 @@ class ProfileShareLinkServiceTest {
 
     @Test
     void previouslyIssuedLongLivedLinkAlsoExpiresAfterThreeHours() {
-        User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
-        ProfileShareLink link = ProfileShareLink.create(user, "hash", Instant.now().plus(Duration.ofDays(30)));
+        ProfileShareLink link = ProfileShareLink.create(mock(UserProfile.class), "hash", Instant.now().plus(Duration.ofDays(30)));
         ReflectionTestUtils.setField(link, "createdAt", Instant.now().minus(Duration.ofHours(4)));
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
 
         assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43)))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(userProfileService, never()).getSharedProfile(any());
+    }
+
+    @Test
+    void revokeLinkLooksUpTheOwningProfile() {
+        ProfileShareLink link = ProfileShareLink.create(mock(UserProfile.class), "hash", Instant.now().plusSeconds(3600));
+        when(profileShareLinkRepository.findByIdAndProfile_UserId(7L, 12L)).thenReturn(Optional.of(link));
+
+        profileShareLinkService.revokeLink(12L, 7L);
+
+        assertThat(link.getRevokedAt()).isNotNull();
     }
 }

@@ -30,8 +30,9 @@ public class ProfileShareLink extends BaseTimeEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_profile_share_links_user"))
-    private User user;
+    @JoinColumn(name = "user_id", referencedColumnName = "user_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_profile_share_links_profile"))
+    private UserProfile profile;
 
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
@@ -42,9 +43,9 @@ public class ProfileShareLink extends BaseTimeEntity {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
-    public static ProfileShareLink create(User user, String tokenHash, Instant expiresAt) {
+    public static ProfileShareLink create(UserProfile profile, String tokenHash, Instant expiresAt) {
         ProfileShareLink link = new ProfileShareLink();
-        link.user = user;
+        link.profile = profile;
         link.tokenHash = tokenHash;
         link.expiresAt = expiresAt;
         return link;
