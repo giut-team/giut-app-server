@@ -6,6 +6,7 @@ import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
 import com.giut.server.dto.chat.response.ChatRoomResponse;
 import com.giut.server.dto.chat.response.ChatRoomListResponse;
+import com.giut.server.dto.chat.response.ChatRoomUnreadCountResponse;
 import com.giut.server.entity.ChatMessage;
 import com.giut.server.entity.ChatRoom;
 import com.giut.server.entity.ChatRoomMember;
@@ -123,6 +124,46 @@ public class ChatService {
         validateActiveParticipant(chatRoom.getId(), userId);
 
         return ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false);
+    }
+
+    @Transactional
+    public void leaveChatRoom(Long userId, Long chatRoomId) {
+        ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
+        ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+        participant.leave();
+    }
+
+    @Transactional
+    public void markChatRoomAsRead(Long userId, Long chatRoomId, Long messageId) {
+        ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
+        ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+
+        ChatMessage message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("메시지를 찾을 수 없습니다."));
+
+        if (!Objects.equals(message.getChatRoomId(), chatRoom.getId())) {
+            throw new ResourceNotFoundException("해당 채팅방의 메시지가 아닙니다.");
+        }
+
+        participant.updateLastReadMessage(messageId);
+    }
+
+    @Transactional(readOnly = true)
+    public ChatRoomUnreadCountResponse getUnreadMessageCount(Long userId, Long chatRoomId) {
+        ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
+        ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+
+        long unreadCount = participant.getLastReadMessageId() == null
+                ? chatMessageRepository.countByChatRoomIdAndStatusAndSenderIdNot(
+                        chatRoom.getId(), ChatMessage.Status.ACTIVE, userId)
+                : chatMessageRepository.countByChatRoomIdAndStatusAndIdGreaterThanAndSenderIdNot(
+                        chatRoom.getId(),
+                        ChatMessage.Status.ACTIVE,
+                        participant.getLastReadMessageId(),
+                        userId
+                );
+
+        return new ChatRoomUnreadCountResponse(chatRoom.getId(), unreadCount);
     }
 
     @Transactional

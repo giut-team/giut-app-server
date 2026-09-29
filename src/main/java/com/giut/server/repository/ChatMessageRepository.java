@@ -18,4 +18,17 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             ChatMessage.Status status,
             Pageable pageable
     );
+
+    long countByChatRoomIdAndStatusAndSenderIdNot(
+            Long chatRoomId,
+            ChatMessage.Status status,
+            Long senderId
+    );
+
+    long countByChatRoomIdAndStatusAndIdGreaterThanAndSenderIdNot(
+            Long chatRoomId,
+            ChatMessage.Status status,
+            Long messageId,
+            Long senderId
+    );
 }

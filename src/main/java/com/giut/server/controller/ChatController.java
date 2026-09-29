@@ -7,6 +7,7 @@ import com.giut.server.dto.chat.response.ChatMessageListResponse;
 import com.giut.server.dto.chat.response.ChatMessageResponse;
 import com.giut.server.dto.chat.response.ChatRoomResponse;
 import com.giut.server.dto.chat.response.ChatRoomListResponse;
+import com.giut.server.dto.chat.response.ChatRoomUnreadCountResponse;
 import com.giut.server.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -146,6 +148,54 @@ public class ChatController {
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(chatService.getChatRoom(userId, chatRoomId));
+    }
+
+    @DeleteMapping("/{chatRoomId}")
+    @Operation(
+            summary = "채팅방 나가기",
+            description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않습니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "204", description = "채팅방 나가기 성공")
+    public ResponseEntity<Void> leaveChatRoom(
+            Authentication authentication,
+            @PathVariable Long chatRoomId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        chatService.leaveChatRoom(userId, chatRoomId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{chatRoomId}/read")
+    @Operation(
+            summary = "채팅방 읽음 처리",
+            description = "현재 로그인한 사용자의 마지막 읽은 메시지를 저장합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "204", description = "읽음 처리 성공")
+    public ResponseEntity<Void> markChatRoomAsRead(
+            Authentication authentication,
+            @PathVariable Long chatRoomId,
+            @RequestParam Long messageId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        chatService.markChatRoomAsRead(userId, chatRoomId, messageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{chatRoomId}/unread-count")
+    @Operation(
+            summary = "읽지 않은 메시지 수 조회",
+            description = "현재 로그인한 사용자가 아직 읽지 않은 상대방의 메시지 수를 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공")
+    public ResponseEntity<ChatRoomUnreadCountResponse> getUnreadMessageCount(
+            Authentication authentication,
+            @PathVariable Long chatRoomId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(chatService.getUnreadMessageCount(userId, chatRoomId));
     }
 
     @GetMapping("/{chatRoomId}/messages")
