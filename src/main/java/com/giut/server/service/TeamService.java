@@ -16,6 +16,9 @@ import com.giut.server.dto.team.response.TeamMemberListResponse;
 import com.giut.server.dto.team.response.TeamMemberResponse;
 import com.giut.server.dto.team.response.TeamRecruitmentResponse;
 import com.giut.server.dto.team.response.TeamRecruitmentListResponse;
+import com.giut.server.dto.team.response.MyTeamApplicationListResponse;
+import com.giut.server.dto.team.response.TeamPageResponse;
+import com.giut.server.dto.team.response.TeamSummaryResponse;
 import com.giut.server.entity.Competition;
 import com.giut.server.entity.Team;
 import com.giut.server.entity.TeamApplicationAnswer;
@@ -37,6 +40,9 @@ import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.Comparator;
 import java.util.HashSet;
@@ -60,6 +66,25 @@ public class TeamService {
     private final CompetitionRepository competitionRepository;
     private final UserRepository userRepository;
     private final ProfileRoleRepository profileRoleRepository;
+
+    @Transactional(readOnly = true)
+    public TeamPageResponse getRecruitingTeams(Long competitionId, int page, int size) {
+        int normalizedPage = Math.max(page, 0);
+        int normalizedSize = size <= 0 ? 10 : Math.min(size, 20);
+        Page<Team> teams = teamRepository.findAllByCompetition_IdAndStatus(
+                competitionId,
+                Team.Status.RECRUITING,
+                PageRequest.of(normalizedPage, normalizedSize, Sort.by(Sort.Direction.DESC, "id"))
+        );
+        List<TeamSummaryResponse> summaries = teams.getContent().stream()
+                .map(team -> TeamSummaryResponse.of(
+                        team,
+                        teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE)
+                ))
+                .toList();
+        return new TeamPageResponse(summaries, normalizedPage, normalizedSize,
+                teams.getTotalElements(), teams.getTotalPages(), teams.hasNext());
+    }
 
     @Transactional
     public CreateTeamResponse createTeam(Long leaderUserId, CreateTeamRequest request) {
@@ -109,7 +134,7 @@ public class TeamService {
         List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
                 .findAllByTeamIdOrderByIdAsc(teamId)
                 .stream()
-                .map(TeamRecruitmentResponse::from)
+                .map(recruitment -> toRecruitmentResponse(recruitment))
                 .toList();
 
         return new TeamDetailResponse(
@@ -156,6 +181,7 @@ public class TeamService {
                             user.getId(),
                             user.getNickname(),
                             teamMember.getRole(),
+                            teamMember.getRoleCode(),
                             teamMember.getStatus(),
                             teamMember.getJoinedAt()
                     );
@@ -173,7 +199,7 @@ public class TeamService {
         List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
                 .findAllByTeamIdOrderByIdAsc(teamId)
                 .stream()
-                .map(TeamRecruitmentResponse::from)
+                .map(recruitment -> toRecruitmentResponse(recruitment))
                 .toList();
 
         return new TeamRecruitmentListResponse(teamId, recruitments);
@@ -182,7 +208,7 @@ public class TeamService {
     @Transactional
     public TeamApplicationResponse applyTeam(Long userId, Long teamId, ApplyTeamRequest request) {
         User user = findActiveUser(userId, "신청자를 찾을 수 없습니다.");
-        Team team = findTeam(teamId);
+        Team team = findTeamForUpdate(teamId);
 
         if (team.getStatus() != Team.Status.RECRUITING) {
             throw new IllegalArgumentException("모집 중인 팀에만 참가 신청할 수 있습니다.");
@@ -200,8 +226,13 @@ public class TeamService {
             throw new IllegalArgumentException("이미 승인 대기 중인 참가 신청이 있습니다.");
         }
 
+        TeamRecruitment recruitment = findRecruitment(teamId, request.roleCode());
+        if (countFilledRecruitment(recruitment) >= recruitment.getRequiredCount()) {
+            throw new IllegalArgumentException("해당 모집 분야의 정원이 마감되었습니다.");
+        }
+
         TeamApplication application = teamApplicationRepository.save(
-                TeamApplication.create(team.getId(), user.getId(), request.message())
+                TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message())
         );
 
         List<TeamApplicationQuestion> questions = findActiveQuestions(team.getId());
@@ -211,11 +242,18 @@ public class TeamService {
     }
 
     @Transactional
-    public ApproveTeamApplicationResponse approveApplication(Long leaderUserId, Long teamId, Long applicationId) {
-        Team team = findTeam(teamId);
+    public ApproveTeamApplicationResponse approveApplication(
+            Long leaderUserId, Long teamId, Long applicationId, String roleCode
+    ) {
+        Team team = findTeamForUpdate(teamId);
         validateTeamLeader(team, leaderUserId);
 
+        if (team.getStatus() != Team.Status.RECRUITING) {
+            throw new IllegalArgumentException("모집 중인 팀의 신청만 승인할 수 있습니다.");
+        }
+
         TeamApplication application = findPendingApplication(teamId, applicationId);
+        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
 
         if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(teamId, application.getUserId(), TeamMember.Status.ACTIVE)) {
             throw new IllegalArgumentException("이미 참여 중인 사용자입니다.");
@@ -226,25 +264,34 @@ public class TeamService {
             throw new IllegalArgumentException("팀 정원이 이미 마감되었습니다.");
         }
 
-        application.approve();
-        TeamMember teamMember = teamMemberRepository.save(TeamMember.createMember(teamId, application.getUserId()));
+        if (countFilledRecruitment(recruitment) >= recruitment.getRequiredCount()) {
+            throw new IllegalArgumentException("해당 모집 분야의 정원이 이미 마감되었습니다.");
+        }
+
+        application.approve(roleCode);
+        TeamMember teamMember = teamMemberRepository.save(
+                TeamMember.createMember(teamId, application.getUserId(), roleCode)
+        );
 
         return new ApproveTeamApplicationResponse(
                 application.getId(),
                 application.getTeamId(),
                 application.getUserId(),
                 application.getStatus(),
+                roleCode,
                 teamMember.getId()
         );
     }
 
     @Transactional
-    public TeamApplicationResponse rejectApplication(Long leaderUserId, Long teamId, Long applicationId) {
-        Team team = findTeam(teamId);
+    public TeamApplicationResponse rejectApplication(
+            Long leaderUserId, Long teamId, Long applicationId, String reason
+    ) {
+        Team team = findTeamForUpdate(teamId);
         validateTeamLeader(team, leaderUserId);
 
         TeamApplication application = findPendingApplication(teamId, applicationId);
-        application.reject();
+        application.reject(reason);
 
         return TeamApplicationResponse.of(application, findAnswerResponses(application));
     }
@@ -282,6 +329,37 @@ public class TeamService {
         return new TeamApplicationListResponse(teamId, responses);
     }
 
+    @Transactional(readOnly = true)
+    public MyTeamApplicationListResponse getMyApplications(Long userId) {
+        List<TeamApplicationResponse> applications = teamApplicationRepository
+                .findAllByUserIdOrderByAppliedAtDesc(userId)
+                .stream()
+                .map(application -> TeamApplicationResponse.of(application, findAnswerResponses(application)))
+                .toList();
+        return new MyTeamApplicationListResponse(applications);
+    }
+
+    @Transactional
+    public void cancelApplication(Long userId, Long teamId, Long applicationId) {
+        findTeamForUpdate(teamId);
+        TeamApplication application = findPendingApplication(teamId, applicationId);
+        if (!application.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("본인의 참가 신청만 취소할 수 있습니다.");
+        }
+        application.cancel();
+    }
+
+    @Transactional
+    public TeamDetailResponse closeRecruitment(Long leaderUserId, Long teamId) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, leaderUserId);
+        if (team.getStatus() != Team.Status.RECRUITING) {
+            throw new IllegalArgumentException("모집 중인 팀만 마감할 수 있습니다.");
+        }
+        team.closeRecruitment();
+        return getTeamDetail(teamId);
+    }
+
     private User findActiveUser(Long userId, String notFoundMessage) {
         return userRepository.findById(userId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
@@ -291,6 +369,26 @@ public class TeamService {
     private Team findTeam(Long teamId) {
         return teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
+    }
+
+    private Team findTeamForUpdate(Long teamId) {
+        return teamRepository.findByIdForUpdate(teamId)
+                .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
+    }
+
+    private TeamRecruitment findRecruitment(Long teamId, String roleCode) {
+        return teamRecruitmentRepository.findByTeamIdAndRoleCode(teamId, roleCode)
+                .orElseThrow(() -> new IllegalArgumentException("해당 팀의 모집 분야가 아닙니다."));
+    }
+
+    private long countFilledRecruitment(TeamRecruitment recruitment) {
+        return teamMemberRepository.countByTeamIdAndRoleCodeAndStatus(
+                recruitment.getTeamId(), recruitment.getRoleCode(), TeamMember.Status.ACTIVE
+        );
+    }
+
+    private TeamRecruitmentResponse toRecruitmentResponse(TeamRecruitment recruitment) {
+        return TeamRecruitmentResponse.from(recruitment, countFilledRecruitment(recruitment));
     }
 
     private TeamApplication findPendingApplication(Long teamId, Long applicationId) {

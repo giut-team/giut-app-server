@@ -12,6 +12,8 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     long countByTeamIdAndStatus(Long teamId, TeamMember.Status status);
 
+    long countByTeamIdAndRoleCodeAndStatus(Long teamId, String roleCode, TeamMember.Status status);
+
     List<TeamMember> findAllByTeamIdAndStatus(Long teamId, TeamMember.Status status);
 
     List<TeamMember> findAllByUserIdAndStatus(Long userId, TeamMember.Status status);

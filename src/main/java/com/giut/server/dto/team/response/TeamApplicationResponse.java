@@ -17,6 +17,15 @@ public record TeamApplicationResponse(
         @Schema(description = "신청자 사용자 ID", example = "15")
         Long userId,
 
+        @Schema(description = "지원 분야 코드", example = "BACKEND_DEVELOPER", nullable = true)
+        String roleCode,
+
+        @Schema(description = "승인된 합류 분야 코드", example = "BACKEND_DEVELOPER", nullable = true)
+        String assignedRoleCode,
+
+        @Schema(description = "거절 사유", nullable = true)
+        String rejectionReason,
+
         @Schema(description = "지원 메시지", example = "백엔드 개발로 참여하고 싶습니다.")
         String message,
 
@@ -41,6 +50,9 @@ public record TeamApplicationResponse(
                 application.getId(),
                 application.getTeamId(),
                 application.getUserId(),
+                application.getRoleCode(),
+                application.getAssignedRoleCode(),
+                application.getRejectionReason(),
                 application.getMessage(),
                 application.getStatus(),
                 application.getAppliedAt(),

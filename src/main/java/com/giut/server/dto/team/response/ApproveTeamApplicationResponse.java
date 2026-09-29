@@ -17,6 +17,9 @@ public record ApproveTeamApplicationResponse(
         @Schema(description = "신청 상태", example = "APPROVED")
         TeamApplication.Status status,
 
+        @Schema(description = "합류 분야 코드", example = "BACKEND_DEVELOPER")
+        String roleCode,
+
         @Schema(description = "팀원 ID", example = "3")
         Long teamMemberId
 ) {

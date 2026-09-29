@@ -42,6 +42,9 @@ public class TeamMember extends BaseTimeEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "role_code", length = 40)
+    private String roleCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role;
@@ -68,8 +71,10 @@ public class TeamMember extends BaseTimeEntity {
         return create(teamId, userId, Role.LEADER);
     }
 
-    public static TeamMember createMember(Long teamId, Long userId) {
-        return create(teamId, userId, Role.MEMBER);
+    public static TeamMember createMember(Long teamId, Long userId, String roleCode) {
+        TeamMember member = create(teamId, userId, Role.MEMBER);
+        member.roleCode = roleCode;
+        return member;
     }
 
     private static TeamMember create(Long teamId, Long userId, Role role) {

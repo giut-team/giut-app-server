@@ -41,6 +41,15 @@ public class TeamApplication extends BaseTimeEntity {
     @Column(length = 500)
     private String message;
 
+    @Column(name = "role_code", length = 40)
+    private String roleCode;
+
+    @Column(name = "assigned_role_code", length = 40)
+    private String assignedRoleCode;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status;
@@ -58,23 +67,26 @@ public class TeamApplication extends BaseTimeEntity {
         CANCELED
     }
 
-    public static TeamApplication create(Long teamId, Long userId, String message) {
+    public static TeamApplication create(Long teamId, Long userId, String roleCode, String message) {
         TeamApplication application = new TeamApplication();
         application.teamId = teamId;
         application.userId = userId;
+        application.roleCode = roleCode;
         application.message = message;
         application.status = Status.PENDING;
         application.appliedAt = Instant.now();
         return application;
     }
 
-    public void approve() {
+    public void approve(String assignedRoleCode) {
         this.status = Status.APPROVED;
+        this.assignedRoleCode = assignedRoleCode;
         this.decidedAt = Instant.now();
     }
 
-    public void reject() {
+    public void reject(String rejectionReason) {
         this.status = Status.REJECTED;
+        this.rejectionReason = rejectionReason;
         this.decidedAt = Instant.now();
     }
 
