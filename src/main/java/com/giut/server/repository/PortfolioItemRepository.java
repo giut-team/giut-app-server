@@ -8,7 +8,9 @@ import java.util.Optional;
 
 public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Long> {
 
-    List<PortfolioItem> findAllByUser_IdOrderByDisplayOrderAsc(Long userId);
+    List<PortfolioItem> findAllByUser_IdOrderByCreatedAtDescIdDesc(Long userId);
+
+    List<PortfolioItem> findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(Long userId);
 
     Optional<PortfolioItem> findByIdAndUser_Id(Long id, Long userId);
 

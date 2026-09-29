@@ -1,14 +1,15 @@
 package com.giut.server.dto.profile.response;
 
 import com.giut.server.entity.UserProfile;
+import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
 import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
-import com.giut.server.dto.profile.common.ProfileLinkDto;
 
 import java.util.List;
 
 public record ProfileResponse(
         Long userId,
+        String nickname,
         UserProfile.DepartmentType department,
         String departmentName,
         Short grade,
@@ -21,19 +22,20 @@ public record ProfileResponse(
         boolean searchable,
         List<ProfileCodeNameResponse> roles,
         List<ProfileTagResponse> tags,
-        List<ProfileLinkDto> links,
-        List<PortfolioItemDto> portfolioItems
+        List<PortfolioItemDto> portfolioItems,
+        List<ActivityHistoryDto> activityHistories
 ) {
     public static ProfileResponse from(
             UserProfile profile,
             List<ProfileCodeNameResponse> primaryRoles,
             List<ProfileCodeNameResponse> roles,
             List<ProfileTagResponse> tags,
-            List<ProfileLinkDto> links,
-            List<PortfolioItemDto> portfolioItems
+            List<PortfolioItemDto> portfolioItems,
+            List<ActivityHistoryDto> activityHistories
     ) {
         return new ProfileResponse(
                 profile.getUserId(),
+                profile.getUser().getNickname(),
                 profile.getDepartment(),
                 profile.getDepartment().getDisplayName(),
                 profile.getGrade(),
@@ -46,8 +48,8 @@ public record ProfileResponse(
                 profile.isSearchable(),
                 roles,
                 tags,
-                links,
-                portfolioItems
+                portfolioItems,
+                activityHistories
         );
     }
 }

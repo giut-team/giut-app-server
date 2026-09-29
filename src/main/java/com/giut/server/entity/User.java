@@ -110,4 +110,9 @@ public class User {
         this.universityVerifiedAt = LocalDateTime.now();
         this.updatedAt = this.universityVerifiedAt;
     }
+
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
