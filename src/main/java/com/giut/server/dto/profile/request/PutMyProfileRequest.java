@@ -1,8 +1,9 @@
 package com.giut.server.dto.profile.request;
 
 import com.giut.server.entity.UserProfile;
-import com.giut.server.dto.profile.common.ProfileLinkDto;
+import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -14,6 +15,11 @@ import java.util.List;
 
 @Schema(description = "내 프로필 등록 또는 전체 수정 요청")
 public record PutMyProfileRequest(
+        @Schema(description = "프로필에 표시할 이름", example = "김민재")
+        @NotBlank(message = "이름은 필수입니다.")
+        @Size(max = 50, message = "이름은 50자 이하여야 합니다.")
+        String nickname,
+
         @Schema(description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
         @NotNull(message = "학과는 필수입니다.")
         UserProfile.DepartmentType department,
@@ -47,7 +53,7 @@ public record PutMyProfileRequest(
         String profileImageUrl,
 
         @Schema(description = "자기소개", example = "백엔드와 AI 프로젝트에 관심이 있습니다.", nullable = true)
-        @Size(max = 500, message = "자기소개는 500자 이하여야 합니다.")
+        @Size(max = 200, message = "자기소개는 200자 이하여야 합니다.")
         String bio,
 
         @Schema(description = "기웃허브 공개 여부", example = "true")
@@ -56,7 +62,7 @@ public record PutMyProfileRequest(
 
         @Schema(description = "기존 기술 스택 태그 ID 목록", example = "[1, 4]")
         @NotNull(message = "기술 스택 목록은 필수입니다. 선택하지 않았다면 빈 배열을 입력하세요.")
-        @Size(max = 3, message = "기술 스택은 최대 3개까지 선택할 수 있습니다.")
+        @Size(max = 10, message = "기술 스택은 최대 10개까지 선택할 수 있습니다.")
         List<Long> skillTagIds,
 
         @Schema(description = "관심 분야 태그 ID 목록", example = "[21, 25]")
@@ -69,9 +75,11 @@ public record PutMyProfileRequest(
         @Size(max = 3, message = "활동 경험은 최대 3개까지 선택할 수 있습니다.")
         List<Long> experienceTagIds,
 
-        @Schema(description = "GitHub, Notion, 포트폴리오 PDF 등 외부 링크 목록", example = "[{\"type\":\"GITHUB\",\"url\":\"https://github.com/giut\",\"title\":\"GitHub\"}]")
-        @NotNull(message = "외부 링크 목록은 필수입니다. 없다면 빈 배열을 입력하세요.")
-        @Size(max = 4, message = "외부 링크는 최대 4개까지 등록할 수 있습니다.")
-        List<@jakarta.validation.Valid ProfileLinkDto> links
+        @Schema(
+                description = "최초 등록 시 함께 추가할 활동 이력. 선택 사항이며, 프로필 수정 시에는 전달하지 않습니다.",
+                example = "[{\"category\":\"AWARD\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]",
+                nullable = true
+        )
+        List<@NotNull(message = "활동 이력 목록에는 null을 넣을 수 없습니다.") @Valid ActivityHistoryDto> activityHistories
 ) {
 }

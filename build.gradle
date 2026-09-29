@@ -58,6 +58,9 @@ dependencies {
 	// Apple Login
 	implementation "com.nimbusds:nimbus-jose-jwt:9.37.3"
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	// WebClient
+	implementation 'org.springframework.boot:spring-boot-starter-webclient'
 }
 
 tasks.named('test') {
