@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Profile Share", description = "프로필 공유 링크 발급·해제 및 비회원 공유 프로필 조회")
+@Tag(name = "Profile", description = "프로필 조회·신고·공유")
 @RestController
 @RequiredArgsConstructor
 public class ProfileShareController {

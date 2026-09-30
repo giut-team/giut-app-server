@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Profile Report", description = "프로필 신고 접수")
+@Tag(name = "Profile", description = "프로필 조회·신고·공유")
 @RestController
 @RequiredArgsConstructor
 public class ProfileReportController {
