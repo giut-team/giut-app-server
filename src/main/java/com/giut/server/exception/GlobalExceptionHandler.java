@@ -1,6 +1,5 @@
 package com.giut.server.exception;
 
-
 import com.giut.server.dto.ResultDto;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -8,220 +7,75 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.validation.BindException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // 걍 일반적인 예외
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ResultDto> handleAllExceptions(Exception e) {
-        logger.error("An unexpected error occurred", e);
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("Internal server error")
-                .code(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(resultDto);
-    }
-
-    // NotFound 예외
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ResultDto> handleResourceNotFound(ResourceNotFoundException e) {
-        logger.error("Resource Not Found : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("Resource not Found : " + e.getMessage())
-                .code(HttpStatus.NOT_FOUND.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(resultDto);
+        return error(HttpStatus.NOT_FOUND, e.getMessage());
     }
 
-    // 유효하지 않은 토큰 예외
-    @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<ResultDto> handleInvalidToken(InvalidTokenException e) {
-        logger.error("Invalid Token : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("Invalid Token : " + e.getMessage())
-                .code(HttpStatus.UNAUTHORIZED.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(resultDto);
-    }
-
-    // AuthenticationFailed
-    @ExceptionHandler(AuthenticationFailedException.class)
-    public ResponseEntity<ResultDto> handleAuthenticationFailed(AuthenticationFailedException e) {
-        logger.error("AuthenticationFailed : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("AuthenticationFailed : " + e.getMessage())
-                .code(HttpStatus.UNAUTHORIZED.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(resultDto);
+    @ExceptionHandler({InvalidTokenException.class, AuthenticationFailedException.class})
+    public ResponseEntity<ResultDto> handleAuthentication(RuntimeException e) {
+        return error(HttpStatus.UNAUTHORIZED, e.getMessage());
     }
 
     @ExceptionHandler(KakaoApiException.class)
     public ResponseEntity<ResultDto> handleKakaoApiException(KakaoApiException e) {
-        logger.error("KakaoApiException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("KakaoApiException : " + e.getMessage())
-                .code(e.getStatus().value())
-                .build();
-
-        return ResponseEntity
-                .status(e.getStatus())
-                .body(resultDto);
+        return error(e.getStatus(), e.getMessage());
     }
 
     @ExceptionHandler(AppleApiException.class)
     public ResponseEntity<ResultDto> handleAppleApiException(AppleApiException e) {
-        logger.error("AppleApiException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("AppleApiException : " + e.getMessage())
-                .code(e.getStatus().value())
-                .build();
-
-        return ResponseEntity
-                .status(e.getStatus())
-                .body(resultDto);
+        return error(e.getStatus(), e.getMessage());
     }
 
-    // Conflict
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ResultDto> handleConflict(ConflictException e) {
-        logger.error("ConflictException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("ConflictException : " + e.getMessage())
-                .code(HttpStatus.CONFLICT.value())
-                .build();
-
-        return new ResponseEntity<>(resultDto, HttpStatus.CONFLICT);
+        return error(HttpStatus.CONFLICT, e.getMessage());
     }
 
-    // Forbidden
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ResultDto> handleForbidden(ForbiddenException e) {
-        logger.error("ForbiddenException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("ForbiddenException : " + e.getMessage())
-                .code(HttpStatus.FORBIDDEN.value())
-                .build();
-
-        return new ResponseEntity<>(resultDto, HttpStatus.FORBIDDEN);
+        return error(HttpStatus.FORBIDDEN, e.getMessage());
     }
 
-    // UnsupportedMediaType
     @ExceptionHandler(UnsupportedMediaTypeException.class)
     public ResponseEntity<ResultDto> handleUnsupportedMediaType(UnsupportedMediaTypeException e) {
-        logger.error("UnsupportedMediaTypeException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("UnsupportedMediaTypeException : " + e.getMessage())
-                .code(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value())
-                .build();
-
-        return new ResponseEntity<>(resultDto, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, e.getMessage());
     }
 
-    // IllegalArgumentException
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ResultDto> handleIllegalArgument(IllegalArgumentException e) {
-        logger.error("IllegalArgumentException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("IllegalArgumentException : " + e.getMessage())
-                .code(HttpStatus.BAD_REQUEST.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(resultDto);
+        return error(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ResultDto> handleIllegalState(IllegalStateException e) {
-        logger.error("IllegalStateException : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message("IllegalStateException : " + e.getMessage())
-                .code(HttpStatus.BAD_REQUEST.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(resultDto);
-    }
-
-    // 요청 형식 오류
-    @ExceptionHandler({
-            MethodArgumentTypeMismatchException.class,
-            MissingServletRequestParameterException.class,
-            HttpMessageNotReadableException.class,
-            BindException.class
-    })
-    public ResponseEntity<ResultDto> handleBadRequest(Exception e) {
-        logger.error(e.getClass().getSimpleName() + " : {}", e.getMessage());
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message(e.getClass().getSimpleName() + " : " + e.getMessage())
-                .code(HttpStatus.BAD_REQUEST.value())
-                .build();
-
-        return new ResponseEntity<>(resultDto, HttpStatus.BAD_REQUEST);
+        logger.error("Internal state failure", e);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ResultDto> handleValidationException(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult()
-                .getFieldErrors()
-                .get(0)
-                .getDefaultMessage();
-
-        ResultDto resultDto = ResultDto.builder()
-                .success(false)
-                .message(message)
-                .code(HttpStatus.BAD_REQUEST.value())
-                .build();
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(resultDto);
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fieldError -> fieldError.getDefaultMessage())
+                .orElse("요청 값이 올바르지 않습니다.");
+        return error(HttpStatus.BAD_REQUEST, message);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -230,13 +84,55 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .map(violation -> violation.getMessage())
                 .orElse("요청 값이 올바르지 않습니다.");
+        return error(HttpStatus.BAD_REQUEST, message);
+    }
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ResultDto.builder()
-                        .success(false)
-                        .message(message)
-                        .code(HttpStatus.BAD_REQUEST.value())
-                        .build());
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ResultDto> handleMissingParameter(MissingServletRequestParameterException e) {
+        return error(HttpStatus.BAD_REQUEST, "필수 요청 파라미터가 없습니다: " + e.getParameterName());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ResultDto> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return error(HttpStatus.BAD_REQUEST, "요청 값의 형식이 올바르지 않습니다: " + e.getName());
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, BindException.class})
+    public ResponseEntity<ResultDto> handleMalformedRequest(Exception e) {
+        return error(HttpStatus.BAD_REQUEST, "요청 본문이 올바르지 않습니다.");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ResultDto> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        return error(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다.");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ResultDto> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type입니다.");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ResultDto> handleMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException e) {
+        return error(HttpStatus.NOT_ACCEPTABLE, "요청한 응답 형식을 지원하지 않습니다.");
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ResultDto> handleNoResource(NoResourceFoundException e) {
+        return error(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다.");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ResultDto> handleAllExceptions(Exception e) {
+        logger.error("Unexpected server error", e);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+    }
+
+    private ResponseEntity<ResultDto> error(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(ResultDto.builder()
+                .success(false)
+                .message(message)
+                .code(status.value())
+                .build());
     }
 }

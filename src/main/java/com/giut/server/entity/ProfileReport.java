@@ -1,5 +1,6 @@
 package com.giut.server.entity;
 
+import com.giut.server.exception.ConflictException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -102,7 +103,7 @@ public class ProfileReport extends BaseTimeEntity {
 
     public void review(User reviewer, Status decision, String note) {
         if (status != Status.PENDING) {
-            throw new IllegalStateException("이미 처리된 신고입니다.");
+            throw new ConflictException("이미 처리된 신고입니다.");
         }
         if (decision == Status.PENDING) {
             throw new IllegalArgumentException("검토 결과는 ACTIONED 또는 DISMISSED여야 합니다.");

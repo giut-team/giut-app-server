@@ -112,7 +112,7 @@ public class ChatController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "유효하지 않은 요청값 또는 채팅방 참여자가 아닌 사용자",
+                    description = "유효하지 않은 요청값",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
             ),
             @ApiResponse(
@@ -216,7 +216,7 @@ public class ChatController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "채팅방 참여자가 아닌 사용자",
+                    description = "페이지 또는 요청 값 오류",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
             ),
             @ApiResponse(

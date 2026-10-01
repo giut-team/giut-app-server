@@ -110,7 +110,7 @@ public class PortfolioItem extends BaseTimeEntity {
 
     public void makeRepresentative() {
         if (showcaseOrder == null) {
-            throw new IllegalStateException("공개 프로필에 노출 중인 포트폴리오만 대표로 지정할 수 있습니다.");
+            throw new IllegalArgumentException("공개 프로필에 노출 중인 포트폴리오만 대표로 지정할 수 있습니다.");
         }
         this.representative = true;
     }
