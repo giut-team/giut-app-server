@@ -6,6 +6,7 @@ import com.giut.server.dto.university.response.UniversityEmailSendResponse;
 import com.giut.server.dto.university.response.UniversityEmailVerifyResponse;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
+import com.giut.server.exception.ConflictException;
 import com.giut.server.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -92,7 +93,7 @@ public class UniversityEmailVerificationService {
 
     private void validateNotUsedUniversityEmail(String universityEmail) {
         if (userRepository.existsByUniversityEmail(universityEmail)) {
-            throw new IllegalArgumentException("이미 인증에 사용된 학교 이메일입니다.");
+            throw new ConflictException("이미 인증에 사용된 학교 이메일입니다.");
         }
     }
 

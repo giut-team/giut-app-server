@@ -198,7 +198,7 @@ public class TeamController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "400",
+                    responseCode = "409",
                     description = "모집 중이 아니거나 이미 참여/신청 중인 팀",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"이미 승인 대기 중인 참가 신청이 있습니다.\",\"code\":400}"))
             ),
@@ -239,7 +239,7 @@ public class TeamController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "400",
+                    responseCode = "403",
                     description = "팀장이 아닌 사용자의 조회 요청",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"팀장만 참가 신청을 처리할 수 있습니다.\",\"code\":400}"))
             ),
@@ -305,8 +305,8 @@ public class TeamController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "400",
-                    description = "팀장이 아니거나 정원 마감 또는 이미 참여 중인 사용자",
+                    responseCode = "409",
+                    description = "정원 마감 또는 이미 참여 중인 사용자",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"팀장만 참가 신청을 처리할 수 있습니다.\",\"code\":400}"))
             ),
             @ApiResponse(
@@ -347,7 +347,7 @@ public class TeamController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "400",
+                    responseCode = "403",
                     description = "팀장이 아닌 사용자의 처리 요청",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"팀장만 참가 신청을 처리할 수 있습니다.\",\"code\":400}"))
             ),

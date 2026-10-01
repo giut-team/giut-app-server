@@ -5,6 +5,7 @@ import com.giut.server.dto.university.request.UniversityEmailSendRequest;
 import com.giut.server.dto.university.request.UniversityEmailVerifyRequest;
 import com.giut.server.dto.university.response.UniversityEmailSendResponse;
 import com.giut.server.dto.university.response.UniversityEmailVerifyResponse;
+import com.giut.server.exception.AuthenticationFailedException;
 import com.giut.server.service.UniversityEmailVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -48,7 +49,7 @@ public class UniversityEmailVerificationController {
             // 실패 응답
             @ApiResponse(
                     responseCode = "400",
-                    description = "학교 이메일 형식 오류 또는 이미 사용 중인 이메일",
+                    description = "학교 이메일 형식 오류",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"서울시립대 이메일(@uos.ac.kr)만 사용할 수 있습니다.\",\"code\":400}"))
             ),
             @ApiResponse(
@@ -116,7 +117,7 @@ public class UniversityEmailVerificationController {
 
     private Long getCurrentMemberId(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {
-            throw new IllegalArgumentException("인증 정보가 없습니다.");
+            throw new AuthenticationFailedException("인증 정보가 없습니다.");
         }
 
         return Long.valueOf(authentication.getName());

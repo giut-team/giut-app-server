@@ -28,6 +28,8 @@ import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.TeamRecruitment;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
+import com.giut.server.exception.ForbiddenException;
+import com.giut.server.exception.ConflictException;
 import com.giut.server.repository.CompetitionRepository;
 import com.giut.server.repository.TeamApplicationAnswerRepository;
 import com.giut.server.repository.TeamApplicationQuestionRepository;
@@ -211,7 +213,7 @@ public class TeamService {
         Team team = findTeamForUpdate(teamId);
 
         if (team.getStatus() != Team.Status.RECRUITING) {
-            throw new IllegalArgumentException("모집 중인 팀에만 참가 신청할 수 있습니다.");
+            throw new ConflictException("모집 중인 팀에만 참가 신청할 수 있습니다.");
         }
 
         if (team.getLeader().getId().equals(user.getId())) {
@@ -219,11 +221,11 @@ public class TeamService {
         }
 
         if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(teamId, user.getId(), TeamMember.Status.ACTIVE)) {
-            throw new IllegalArgumentException("이미 참여 중인 팀입니다.");
+            throw new ConflictException("이미 참여 중인 팀입니다.");
         }
 
         if (teamApplicationRepository.existsByTeamIdAndUserIdAndStatus(teamId, user.getId(), TeamApplication.Status.PENDING)) {
-            throw new IllegalArgumentException("이미 승인 대기 중인 참가 신청이 있습니다.");
+            throw new ConflictException("이미 승인 대기 중인 참가 신청이 있습니다.");
         }
 
         TeamRecruitment recruitment = findRecruitment(teamId, request.roleCode());
@@ -256,12 +258,12 @@ public class TeamService {
         TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
 
         if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(teamId, application.getUserId(), TeamMember.Status.ACTIVE)) {
-            throw new IllegalArgumentException("이미 참여 중인 사용자입니다.");
+            throw new ConflictException("이미 참여 중인 사용자입니다.");
         }
 
         long activeMemberCount = teamMemberRepository.countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE);
         if (team.getMaxMemberCount() != null && activeMemberCount >= team.getMaxMemberCount()) {
-            throw new IllegalArgumentException("팀 정원이 이미 마감되었습니다.");
+            throw new ConflictException("팀 정원이 이미 마감되었습니다.");
         }
 
         if (countFilledRecruitment(recruitment) >= recruitment.getRequiredCount()) {
@@ -399,7 +401,7 @@ public class TeamService {
 
     private void validateTeamLeader(Team team, Long userId) {
         if (!team.getLeader().getId().equals(userId)) {
-            throw new IllegalArgumentException("팀장만 참가 신청을 처리할 수 있습니다.");
+            throw new ForbiddenException("팀장만 참가 신청을 처리할 수 있습니다.");
         }
     }
 

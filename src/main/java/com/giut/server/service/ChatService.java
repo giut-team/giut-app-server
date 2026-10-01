@@ -12,6 +12,7 @@ import com.giut.server.entity.ChatRoom;
 import com.giut.server.entity.ChatRoomMember;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ResourceNotFoundException;
+import com.giut.server.exception.ForbiddenException;
 import com.giut.server.repository.ChatMessageRepository;
 import com.giut.server.repository.ChatRoomMemberRepository;
 import com.giut.server.repository.ChatRoomRepository;
@@ -178,7 +179,7 @@ public class ChatService {
             throw new ResourceNotFoundException("해당 채팅방의 메시지가 아닙니다.");
         }
         if (!Objects.equals(message.getSenderId(), userId)) {
-            throw new IllegalArgumentException("본인이 보낸 메시지만 삭제할 수 있습니다.");
+            throw new ForbiddenException("본인이 보낸 메시지만 삭제할 수 있습니다.");
         }
         if (message.getStatus() == ChatMessage.Status.DELETED) {
             return;
@@ -204,7 +205,7 @@ public class ChatService {
     private ChatRoomMember validateActiveParticipant(Long chatRoomId, Long userId) {
         return chatRoomMemberRepository.findByChatRoomIdAndUserId(chatRoomId, userId)
                 .filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new IllegalArgumentException("채팅방 참여자만 메시지를 이용할 수 있습니다."));
+                .orElseThrow(() -> new ForbiddenException("채팅방 참여자만 메시지를 이용할 수 있습니다."));
     }
 
     private int normalizeSize(int size) {
