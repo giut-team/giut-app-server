@@ -58,7 +58,9 @@ public class ChatRoomMember extends BaseTimeEntity {
     }
 
     public void updateLastReadMessage(Long messageId) {
-        this.lastReadMessageId = messageId;
+        if (lastReadMessageId == null || messageId > lastReadMessageId) {
+            this.lastReadMessageId = messageId;
+        }
     }
 
     public void leave() {
