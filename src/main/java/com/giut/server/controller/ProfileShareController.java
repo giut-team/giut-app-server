@@ -1,0 +1,51 @@
+package com.giut.server.controller;
+
+import com.giut.server.dto.profile.response.ProfileShareLinkResponse;
+import com.giut.server.dto.profile.response.SharedProfileResponse;
+import com.giut.server.service.ProfileShareLinkService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "Profile", description = "프로필 조회·신고·공유")
+@RestController
+@RequiredArgsConstructor
+public class ProfileShareController {
+
+    private final ProfileShareLinkService profileShareLinkService;
+
+    @PostMapping("/api/users/me/profile-share-links")
+    @Operation(summary = "프로필 공유 링크 발급", description = "3시간 동안 유효한 새 링크를 발급합니다. 링크를 가진 비회원은 만료 전까지 공유 프로필을 볼 수 있습니다. 검색 노출 여부와 무관하며, 반환된 sharePath 앞에 프론트엔드 origin을 붙여 공유합니다.")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<ProfileShareLinkResponse> createLink(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.status(201).body(profileShareLinkService.createLink(userId));
+    }
+
+    @DeleteMapping("/api/users/me/profile-share-links/{linkId}")
+    @Operation(summary = "내 프로필 공유 링크 해제")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<Void> revokeLink(Authentication authentication, @PathVariable Long linkId) {
+        Long userId = Long.valueOf(authentication.getName());
+        profileShareLinkService.revokeLink(userId, linkId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/profile/shares/{token}")
+    @Operation(summary = "비회원 공유 프로필 조회", description = "유효한 공유 링크 토큰으로 프로필 카드 정보만 조회합니다. 포트폴리오와 활동 이력은 반환하지 않습니다.")
+    public ResponseEntity<SharedProfileResponse> getSharedProfile(@PathVariable String token) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("Referrer-Policy", "no-referrer")
+                .body(profileShareLinkService.getSharedProfile(token));
+    }
+}

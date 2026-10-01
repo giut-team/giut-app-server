@@ -142,6 +142,19 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
+    public SharedProfileResponse getSharedProfile(Long userId) {
+        UserProfile profile = userProfileRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
+        User user = userRepository.findById(userId)
+                .filter(found -> found.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
+
+        List<ProfileTagSummaryResponse> skills = findSkillsByUserId(List.of(userId))
+                .getOrDefault(userId, List.of());
+        return SharedProfileResponse.from(toPublicProfileResponse(profile, user, skills));
+    }
+
+    @Transactional(readOnly = true)
     public PortfolioItemListResponse getPublicPortfolioItems(Long userId) {
         findPublicProfile(userId);
         findActiveUser(userId);
