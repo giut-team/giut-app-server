@@ -71,9 +71,9 @@ public class OAuthCookieService {
     }
 
     public void writeLoginCookies(HttpServletResponse response, LoginResponse loginResponse) {
-        addCookie(response, ACCESS_TOKEN_COOKIE, loginResponse.getAccessToken(), "Lax",
+        addCookie(response, ACCESS_TOKEN_COOKIE, loginResponse.getAccessToken(), "None",
                 Duration.ofMillis(accessTokenMaxAgeMillis));
-        addCookie(response, REFRESH_TOKEN_COOKIE, loginResponse.getRefreshToken(), "Lax",
+        addCookie(response, REFRESH_TOKEN_COOKIE, loginResponse.getRefreshToken(), "None",
                 Duration.ofMillis(refreshTokenMaxAgeMillis));
     }
 
