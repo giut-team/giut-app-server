@@ -5,11 +5,11 @@ AWS_REGION="$1"
 IMAGE_URI="$2"
 ECR_REGISTRY="${IMAGE_URI%%/*}"
 CONTAINER_NAME=giut-dev
-ENV_FILE=/home/ec2-user/giut-dev.env
-SECRET_DIR=/home/ec2-user/giut-dev-secrets
+ENV_FILE=/home/ubuntu/giut-dev.env
+SECRET_DIR=/home/ubuntu/giut-dev-secrets
 
 test -f "$ENV_FILE"
-install -d -o ec2-user -g ec2-user -m 700 "$SECRET_DIR"
+install -d -o ubuntu -g ubuntu -m 700 "$SECRET_DIR"
 
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "$ECR_REGISTRY"
@@ -23,7 +23,7 @@ fi
 
 run_container() {
   docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
-    --user "$(id -u ec2-user):$(id -g ec2-user)" \
+    --user "$(id -u ubuntu):$(id -g ubuntu)" \
     --env-file "$ENV_FILE" \
     --mount "type=bind,source=$SECRET_DIR,target=/run/secrets,readonly" \
     -p 127.0.0.1:8080:8080 \
