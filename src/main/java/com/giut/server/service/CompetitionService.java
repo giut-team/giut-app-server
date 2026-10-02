@@ -6,6 +6,7 @@ import com.giut.server.dto.competition.request.UpsertCompetitionRequest;
 import com.giut.server.dto.competition.response.AdminCompetitionResponse;
 import com.giut.server.dto.competition.response.CompetitionRecruitmentStatus;
 import com.giut.server.dto.competition.response.CompetitionScrapResponse;
+import com.giut.server.dto.competition.response.CompetitionTeamResponse;
 import com.giut.server.dto.competition.response.CompetitionUrlResponse;
 import com.giut.server.dto.competition.response.PublicCompetitionDetailResponse;
 import com.giut.server.dto.competition.response.PublicCompetitionListResponse;
@@ -14,6 +15,8 @@ import com.giut.server.entity.Competition;
 import com.giut.server.entity.CompetitionScrap;
 import com.giut.server.entity.CompetitionUrl;
 import com.giut.server.entity.CompetitionVerificationLog;
+import com.giut.server.entity.Team;
+import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.User;
 import com.giut.server.exception.ConflictException;
 import com.giut.server.exception.ForbiddenException;
@@ -22,6 +25,8 @@ import com.giut.server.repository.CompetitionRepository;
 import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.CompetitionUrlRepository;
 import com.giut.server.repository.CompetitionVerificationLogRepository;
+import com.giut.server.repository.TeamMemberRepository;
+import com.giut.server.repository.TeamRepository;
 import com.giut.server.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +53,8 @@ public class CompetitionService {
     private final CompetitionScrapRepository competitionScrapRepository;
     private final CompetitionUrlRepository competitionUrlRepository;
     private final CompetitionVerificationLogRepository competitionVerificationLogRepository;
+    private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
 
@@ -123,13 +131,36 @@ public class CompetitionService {
         List<CompetitionUrlResponse> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId).stream()
                 .map(CompetitionUrlResponse::from)
                 .toList();
+        List<Team> competitionTeams = teamRepository.findAllByCompetition_IdOrderByIdDesc(competitionId);
+        Map<Long, Long> activeMemberCounts = competitionTeams.isEmpty()
+                ? Map.of()
+                : teamMemberRepository.countByTeamIdsAndStatus(
+                        competitionTeams.stream().map(Team::getId).toList(),
+                        TeamMember.Status.ACTIVE
+                ).stream().collect(Collectors.toMap(
+                        TeamMemberRepository.TeamMemberCount::getTeamId,
+                        TeamMemberRepository.TeamMemberCount::getMemberCount
+                ));
+        List<CompetitionTeamResponse> teams = competitionTeams.stream()
+                .map(team -> CompetitionTeamResponse.from(
+                        team,
+                        userId,
+                        activeMemberCounts.getOrDefault(team.getId(), 0L)
+                ))
+                .toList();
+        long recruitingTeamCount = competitionTeams.stream()
+                .filter(team -> team.getStatus() == Team.Status.RECRUITING)
+                .count();
 
         return PublicCompetitionDetailResponse.from(
                 competition,
                 recruitmentStatusOf(competition, Instant.now()),
                 scrapCount,
                 scrapped,
-                urls
+                urls,
+                competitionTeams.size(),
+                recruitingTeamCount,
+                teams
         );
     }
 
@@ -315,12 +346,14 @@ public class CompetitionService {
     private List<PublicCompetitionResponse> toPublicResponses(List<Competition> competitions, Instant now) {
         Map<Long, String> primaryUrlByCompetitionId = findPrimaryUrls(competitions);
         Map<Long, Long> scrapCountByCompetitionId = findScrapCounts(competitions);
+        Map<Long, Long> teamCountByCompetitionId = findTeamCounts(competitions);
         return competitions.stream()
                 .map(competition -> PublicCompetitionResponse.from(
                         competition,
                         recruitmentStatusOf(competition, now),
                         primaryUrlByCompetitionId.get(competition.getId()),
-                        scrapCountByCompetitionId.getOrDefault(competition.getId(), 0L)
+                        scrapCountByCompetitionId.getOrDefault(competition.getId(), 0L),
+                        teamCountByCompetitionId.getOrDefault(competition.getId(), 0L)
                 ))
                 .toList();
     }
@@ -339,6 +372,20 @@ public class CompetitionService {
                         count.getScrapCount()
                 ));
         return scrapCountByCompetitionId;
+    }
+
+    private Map<Long, Long> findTeamCounts(List<Competition> competitions) {
+        if (competitions.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Long> teamCountByCompetitionId = new HashMap<>();
+        teamRepository.countByCompetitionIds(competitions.stream().map(Competition::getId).toList())
+                .forEach(count -> teamCountByCompetitionId.put(
+                        count.getCompetitionId(),
+                        count.getTeamCount()
+                ));
+        return teamCountByCompetitionId;
     }
 
     private CompetitionRecruitmentStatus recruitmentStatusOf(Competition competition, Instant now) {

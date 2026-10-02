@@ -39,7 +39,7 @@ public class PublicPortfolioController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PortfolioItemListResponse.class),
-                            examples = @ExampleObject(value = "{\"portfolioItems\":[{\"id\":15,\"imageUrl\":\"https://cdn.giut.com/portfolio/esg.png\",\"title\":\"ESG 캠페인 팀 회의\",\"caption\":\"일정 정리와 회의록 작성을 맡았어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":5,\"markdownContent\":\"## 프로젝트 소개\\n\\n회의 일정과 산출물을 관리했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"showcaseOrder\":1,\"representative\":true}]}")
+                            examples = @ExampleObject(value = "{\"portfolioItems\":[{\"id\":15,\"imageUrl\":\"https://cdn.giut.com/portfolio/esg.png\",\"title\":\"ESG 캠페인 팀 회의\",\"caption\":\"일정 정리와 회의록 작성을 맡았어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":5,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}],\"markdownContent\":\"## 프로젝트 소개\\n\\n회의 일정과 산출물을 관리했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"showcaseOrder\":1,\"representative\":true}]}")
                     )
             ),
             @ApiResponse(

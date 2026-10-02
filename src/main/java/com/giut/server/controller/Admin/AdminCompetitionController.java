@@ -1,6 +1,7 @@
 package com.giut.server.controller.Admin;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.SwaggerExamples;
 import com.giut.server.dto.competition.request.UpsertCompetitionRequest;
 import com.giut.server.dto.competition.response.AdminCompetitionResponse;
 import com.giut.server.service.CompetitionService;
@@ -37,7 +38,7 @@ public class AdminCompetitionController {
     @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class))),
+            @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
             @ApiResponse(responseCode = "400", description = "필수값, 일정 또는 대표 URL 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"IllegalArgumentException : 대표 URL은 정확히 하나여야 합니다.\",\"code\":400}"))),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
@@ -57,7 +58,7 @@ public class AdminCompetitionController {
     @Operation(summary = "관리자 공모전 수정", description = "관리자가 공모전 기본 정보와 URL 전체 목록을 수정합니다. URL 목록은 요청 값으로 완전히 교체됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공모전 수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class))),
+            @ApiResponse(responseCode = "200", description = "공모전 수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
             @ApiResponse(responseCode = "400", description = "필수값, 일정 또는 대표 URL 오류"),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
@@ -81,7 +82,7 @@ public class AdminCompetitionController {
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공모전 공개 승인 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class))),
+            @ApiResponse(responseCode = "200", description = "공모전 공개 승인 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION_PUBLISHED))),
             @ApiResponse(responseCode = "400", description = "DRAFT 상태가 아닌 공모전 승인 시도"),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),

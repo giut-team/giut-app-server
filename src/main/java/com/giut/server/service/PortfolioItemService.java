@@ -1,18 +1,24 @@
 package com.giut.server.service;
 
 import com.giut.server.dto.profile.request.PortfolioShowcaseRequest;
+import com.giut.server.dto.profile.request.UpsertPortfolioItemRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.response.PortfolioShowcaseResponse;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
+import com.giut.server.dto.profile.common.ProfileCodeNameResponse;
 import com.giut.server.dto.profile.response.RepresentativePortfolioResponse;
 import com.giut.server.entity.PortfolioItem;
+import com.giut.server.entity.PortfolioItemRole;
 import com.giut.server.entity.PortfolioItemSkillTag;
+import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.entity.User;
 import com.giut.server.dto.profile.response.ProfileTagSummaryResponse;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.PortfolioItemRoleRepository;
 import com.giut.server.repository.PortfolioItemSkillTagRepository;
+import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +40,11 @@ public class PortfolioItemService {
 
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
 
+    private final PortfolioItemRoleRepository portfolioItemRoleRepository;
+
     private final ProfileTagRepository profileTagRepository;
+
+    private final ProfileRoleRepository profileRoleRepository;
 
     private final UserRepository userRepository;
 
@@ -44,12 +54,19 @@ public class PortfolioItemService {
     }
 
     @Transactional
-    public PortfolioItemDto createPortfolioItem(Long userId, PortfolioItemDto request) {
-        User user = userRepository.findById(userId)
+    public PortfolioItemDto createPortfolioItem(Long userId, UpsertPortfolioItemRequest request) {
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
-        PortfolioItem portfolioItem = portfolioItemRepository.save(PortfolioItem.create(
+        List<ProfileRole> roles = findRoles(request.roles());
+        List<PortfolioItem> showcaseItems = portfolioItemRepository
+                .findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(userId);
+        for (int index = showcaseItems.size() - 1; index >= 0; index--) {
+            showcaseItems.get(index).changeShowcaseOrder(index < 5 ? index + 2 : null);
+        }
+
+        PortfolioItem newItem = PortfolioItem.create(
                 user,
                 request.imageUrl(),
                 request.title(),
@@ -58,17 +75,25 @@ public class PortfolioItemService {
                 request.projectEndDate(),
                 request.teamSize(),
                 request.markdownContent()
-        ));
+        );
+        newItem.changeShowcaseOrder(1);
+        PortfolioItem portfolioItem = portfolioItemRepository.save(newItem);
 
         replaceSkillTags(portfolioItem, skillTags);
-        return PortfolioItemDto.from(portfolioItem, skillTags.stream().map(ProfileTagSummaryResponse::from).toList());
+        replaceRoles(portfolioItem, roles);
+        return PortfolioItemDto.from(
+                portfolioItem,
+                skillTags.stream().map(ProfileTagSummaryResponse::from).toList(),
+                roles.stream().map(ProfileCodeNameResponse::from).toList()
+        );
     }
 
     @Transactional
-    public PortfolioItemDto updatePortfolioItem(Long userId, Long portfolioItemId, PortfolioItemDto request) {
+    public PortfolioItemDto updatePortfolioItem(Long userId, Long portfolioItemId, UpsertPortfolioItemRequest request) {
         PortfolioItem portfolioItem = findPortfolioItem(userId, portfolioItemId);
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
+        List<ProfileRole> roles = findRoles(request.roles());
         portfolioItem.update(
                 request.imageUrl(),
                 request.title(),
@@ -79,13 +104,23 @@ public class PortfolioItemService {
                 request.markdownContent()
         );
         replaceSkillTags(portfolioItem, skillTags);
+        replaceRoles(portfolioItem, roles);
 
-        return PortfolioItemDto.from(portfolioItem, skillTags.stream().map(ProfileTagSummaryResponse::from).toList());
+        return PortfolioItemDto.from(
+                portfolioItem,
+                skillTags.stream().map(ProfileTagSummaryResponse::from).toList(),
+                roles.stream().map(ProfileCodeNameResponse::from).toList()
+        );
     }
 
     @Transactional
     public void deletePortfolioItem(Long userId, Long portfolioItemId) {
-        portfolioItemRepository.delete(findPortfolioItem(userId, portfolioItemId));
+        PortfolioItem portfolioItem = findPortfolioItem(userId, portfolioItemId);
+        portfolioItemRoleRepository.deleteByPortfolioItem_Id(portfolioItemId);
+        portfolioItemRoleRepository.flush();
+        portfolioItemSkillTagRepository.deleteByPortfolioItem_Id(portfolioItemId);
+        portfolioItemSkillTagRepository.flush();
+        portfolioItemRepository.delete(portfolioItem);
         portfolioItemRepository.flush();
         reassignShowcaseOrder(userId);
     }
@@ -153,16 +188,18 @@ public class PortfolioItemService {
 
     private List<PortfolioItemDto> toDtos(List<PortfolioItem> portfolioItems) {
         Map<Long, List<ProfileTagSummaryResponse>> skillTagsByPortfolioItemId = findSkillTagsByPortfolioItemId(portfolioItems);
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId = findRolesByPortfolioItemId(portfolioItems);
         return portfolioItems.stream()
                 .map(portfolioItem -> PortfolioItemDto.from(
                         portfolioItem,
-                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
+                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of()),
+                        rolesByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
                 ))
                 .toList();
     }
 
     private void validateDistinctOwnedPortfolioIds(List<PortfolioItem> portfolioItems, List<Long> requestedIds) {
-        if (requestedIds.contains(null)) {
+        if (requestedIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("공개 포트폴리오 ID에는 null을 넣을 수 없습니다.");
         }
         Set<Long> requestedIdSet = new HashSet<>(requestedIds);
@@ -178,7 +215,7 @@ public class PortfolioItemService {
         }
     }
 
-    private void validateProjectPeriod(PortfolioItemDto request) {
+    private void validateProjectPeriod(UpsertPortfolioItemRequest request) {
         if (request.projectStartDate() != null
                 && request.projectEndDate() != null
                 && request.projectEndDate().isBefore(request.projectStartDate())) {
@@ -188,7 +225,7 @@ public class PortfolioItemService {
 
     private List<ProfileTag> findSkillTags(List<Long> skillTagIds) {
         List<Long> requestedIds = skillTagIds == null ? List.of() : skillTagIds;
-        if (requestedIds.contains(null)) {
+        if (requestedIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("기술 스택 태그 ID에는 null을 넣을 수 없습니다.");
         }
 
@@ -210,12 +247,60 @@ public class PortfolioItemService {
         return requestedIds.stream().map(tagById::get).toList();
     }
 
+    private List<ProfileRole> findRoles(List<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            throw new IllegalArgumentException("포트폴리오 역할은 1개 이상 선택해야 합니다.");
+        }
+        if (roleCodes.size() > 3) {
+            throw new IllegalArgumentException("포트폴리오 역할은 최대 3개까지 선택할 수 있습니다.");
+        }
+        if (roleCodes.stream().anyMatch(code -> code == null || code.isBlank())) {
+            throw new IllegalArgumentException("역할 코드는 비어 있을 수 없습니다.");
+        }
+        if (new HashSet<>(roleCodes).size() != roleCodes.size()) {
+            throw new IllegalArgumentException("포트폴리오 역할은 중복해서 선택할 수 없습니다.");
+        }
+
+        List<ProfileRole> roles = profileRoleRepository.findAllByCodeIn(roleCodes);
+        if (roles.size() != roleCodes.size()) {
+            throw new IllegalArgumentException("지원하지 않는 세부 역할이 포함되어 있습니다.");
+        }
+        Map<String, ProfileRole> roleByCode = new HashMap<>();
+        roles.forEach(role -> roleByCode.put(role.getCode(), role));
+        return roleCodes.stream().map(roleByCode::get).toList();
+    }
+
     private void replaceSkillTags(PortfolioItem portfolioItem, List<ProfileTag> skillTags) {
         portfolioItemSkillTagRepository.deleteByPortfolioItem_Id(portfolioItem.getId());
         portfolioItemSkillTagRepository.flush();
         portfolioItemSkillTagRepository.saveAll(skillTags.stream()
                 .map(tag -> PortfolioItemSkillTag.create(portfolioItem, tag))
                 .toList());
+    }
+
+    private void replaceRoles(PortfolioItem portfolioItem, List<ProfileRole> roles) {
+        portfolioItemRoleRepository.deleteByPortfolioItem_Id(portfolioItem.getId());
+        portfolioItemRoleRepository.flush();
+        List<PortfolioItemRole> links = new java.util.ArrayList<>();
+        for (int index = 0; index < roles.size(); index++) {
+            links.add(PortfolioItemRole.create(portfolioItem, roles.get(index), index + 1));
+        }
+        portfolioItemRoleRepository.saveAll(links);
+    }
+
+    private Map<Long, List<ProfileCodeNameResponse>> findRolesByPortfolioItemId(List<PortfolioItem> portfolioItems) {
+        if (portfolioItems.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId = new HashMap<>();
+        portfolioItemRoleRepository.findAllByPortfolioItem_IdIn(
+                        portfolioItems.stream().map(PortfolioItem::getId).toList()
+                ).stream()
+                .sorted(java.util.Comparator.comparingInt(PortfolioItemRole::getSelectionOrder))
+                .forEach(link -> rolesByPortfolioItemId
+                        .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new java.util.ArrayList<>())
+                        .add(ProfileCodeNameResponse.from(link.getRole())));
+        return rolesByPortfolioItemId;
     }
 
     private Map<Long, List<ProfileTagSummaryResponse>> findSkillTagsByPortfolioItemId(

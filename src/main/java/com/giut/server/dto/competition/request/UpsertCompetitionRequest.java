@@ -44,7 +44,7 @@ public record UpsertCompetitionRequest(
         @NotNull(message = "게시 상태는 필수입니다.")
         Competition.PublicationStatus publicationStatus,
 
-        @Schema(description = "공모전 URL 목록")
+        @Schema(description = "공모전 URL 목록", example = "[{\"type\":\"RECRUITMENT\",\"url\":\"https://example.com/recruitment\",\"primary\":true}]")
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
         List<@Valid CompetitionUrlRequest> urls
 ) {

@@ -2,13 +2,14 @@ package com.giut.server.dto.profile.response;
 
 public record MyProfileResponse(
         boolean profileCompleted,
-        ProfileResponse profile
+        ProfileResponse profile,
+        MyProfileSummaryResponse summary
 ) {
-    public static MyProfileResponse completed(ProfileResponse profile) {
-        return new MyProfileResponse(true, profile);
+    public static MyProfileResponse completed(ProfileResponse profile, MyProfileSummaryResponse summary) {
+        return new MyProfileResponse(true, profile, summary);
     }
 
-    public static MyProfileResponse notCompleted() {
-        return new MyProfileResponse(false, null);
+    public static MyProfileResponse notCompleted(MyProfileSummaryResponse summary) {
+        return new MyProfileResponse(false, null, summary);
     }
 }
