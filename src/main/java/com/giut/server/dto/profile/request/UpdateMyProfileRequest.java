@@ -63,7 +63,7 @@ public record UpdateMyProfileRequest(
         @Size(max = 3, message = "관심 분야는 최대 3개까지 선택할 수 있습니다.")
         List<Long> interestTagIds,
 
-        @Schema(description = "활동 경험 태그 ID 목록", example = "[]")
+        @Schema(description = "활동 경험 태그 ID 목록", example = "[31]")
         @NotNull(message = "활동 경험 목록은 필수입니다. 선택하지 않았다면 빈 배열을 입력하세요.")
         @Size(max = 3, message = "활동 경험은 최대 3개까지 선택할 수 있습니다.")
         List<Long> experienceTagIds,

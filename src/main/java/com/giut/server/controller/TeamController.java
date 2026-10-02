@@ -97,7 +97,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}]}")
                     )
             ),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),

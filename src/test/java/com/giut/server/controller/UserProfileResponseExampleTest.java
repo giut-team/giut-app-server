@@ -78,4 +78,21 @@ class UserProfileResponseExampleTest {
             assertThat(factory.getValidator().validate(request)).isEmpty();
         }
     }
+
+    @Test
+    void createResponseExampleShowsPopulatedArrayShapes() throws Exception {
+        ApiResponses responses = UserProfileController.class
+                .getMethod("createMyProfile", Authentication.class, PutMyProfileRequest.class)
+                .getAnnotation(ApiResponses.class);
+        ApiResponse success = Arrays.stream(responses.value())
+                .filter(response -> response.responseCode().equals("201"))
+                .findFirst()
+                .orElseThrow();
+        JsonNode root = new ObjectMapper().readTree(success.content()[0].examples()[0].value());
+
+        assertThat(root.path("profile").path("portfolioItems").size()).isPositive();
+        assertThat(root.path("profile").path("activityHistories").size()).isPositive();
+        assertThat(root.path("summary").path("portfolioCount").asInt())
+                .isEqualTo(root.path("profile").path("portfolioItems").size());
+    }
 }

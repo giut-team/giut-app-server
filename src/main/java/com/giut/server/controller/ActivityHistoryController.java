@@ -1,6 +1,7 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.SwaggerExamples;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.dto.profile.response.ActivityHistoryListResponse;
 import com.giut.server.service.ActivityHistoryService;
@@ -38,7 +39,7 @@ public class ActivityHistoryController {
     @Operation(summary = "내 활동 이력 목록 조회", description = "등록한 활동 이력을 최근 활동순으로 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ActivityHistoryListResponse.class))),
+            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ActivityHistoryListResponse.class), examples = @ExampleObject(value = SwaggerExamples.ACTIVITY_HISTORY_LIST))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
     })
@@ -67,7 +68,7 @@ public class ActivityHistoryController {
     @Operation(summary = "활동 이력 수정", description = "내 활동 이력 하나를 요청 본문 전체로 수정합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ActivityHistoryDto.class))),
+            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ActivityHistoryDto.class), examples = @ExampleObject(value = SwaggerExamples.ACTIVITY_HISTORY))),
             @ApiResponse(responseCode = "400", description = "요청값 오류 또는 기간 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "404", description = "활동 이력을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),

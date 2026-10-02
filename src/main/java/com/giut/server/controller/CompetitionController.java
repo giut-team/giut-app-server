@@ -1,6 +1,7 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.SwaggerExamples;
 import com.giut.server.dto.competition.request.CompetitionSearchRequest;
 import com.giut.server.dto.competition.response.CompetitionScrapResponse;
 import com.giut.server.dto.competition.response.PublicCompetitionDetailResponse;
@@ -9,6 +10,7 @@ import com.giut.server.dto.competition.response.PublicCompetitionResponse;
 import com.giut.server.service.CompetitionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -65,7 +67,7 @@ public class CompetitionController {
     @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionResponse.class))),
+            @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
@@ -77,7 +79,7 @@ public class CompetitionController {
     @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 마감 임박 순으로 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionResponse.class))),
+            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
@@ -89,7 +91,7 @@ public class CompetitionController {
     @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보와 URL을 조회합니다. 조회수는 이 요청마다 1 증가합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class))),
+            @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_DETAIL))),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "404", description = "공개된 공모전을 찾을 수 없음"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")

@@ -1,6 +1,7 @@
 package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
+import com.giut.server.dto.SwaggerExamples;
 import com.giut.server.dto.profile.request.PortfolioShowcaseRequest;
 import com.giut.server.dto.profile.request.UpsertPortfolioItemRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
@@ -57,7 +58,7 @@ public class PortfolioItemController {
     @Operation(summary = "내 포트폴리오 전체 목록 조회", description = "공개 여부와 관계없이 등록한 모든 포트폴리오를 최신 등록순으로 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemListResponse.class))),
+            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemListResponse.class), examples = @ExampleObject(value = SwaggerExamples.PORTFOLIO_LIST))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))
     })
@@ -104,7 +105,7 @@ public class PortfolioItemController {
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class))),
+            @ApiResponse(responseCode = "200", description = "수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioItemDto.class), examples = @ExampleObject(value = SwaggerExamples.PORTFOLIO_ITEM))),
             @ApiResponse(responseCode = "400", description = "요청값 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "404", description = "항목을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
@@ -141,7 +142,7 @@ public class PortfolioItemController {
     @Operation(summary = "공개 포트폴리오 목록 설정", description = "공개 프로필에 노출할 포트폴리오를 최대 6개까지 설정하고 전달한 순서대로 배치합니다. 목록에서 제외된 항목은 삭제되지 않고 숨김 처리됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공개 포트폴리오 목록 설정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioShowcaseResponse.class))),
+            @ApiResponse(responseCode = "200", description = "공개 포트폴리오 목록 설정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PortfolioShowcaseResponse.class), examples = @ExampleObject(value = SwaggerExamples.PORTFOLIO_SHOWCASE))),
             @ApiResponse(responseCode = "400", description = "6개 초과, 중복 ID 또는 내 포트폴리오가 아닌 항목 포함", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class)))

@@ -99,7 +99,20 @@ public class UserProfileController {
                 "searchable": true,
                 "roles": [{"code": "BACKEND_DEVELOPER", "name": "백엔드 개발자"}],
                 "tags": [{"id": 1, "type": "SKILL", "name": "Java"}],
-                "portfolioItems": [],
+                "portfolioItems": [{
+                  "id": 15,
+                  "imageUrl": "https://cdn.giut.com/portfolio/15.png",
+                  "title": "서울시 데이터 공모전 발표",
+                  "caption": "데이터 분석과 발표를 담당했어요.",
+                  "projectStartDate": "2026-03-01",
+                  "projectEndDate": "2026-06-30",
+                  "teamSize": 4,
+                  "roles": [{"code": "BACKEND_DEVELOPER", "name": "백엔드 개발자"}],
+                  "markdownContent": "## 프로젝트 소개",
+                  "skillTags": [{"id": 1, "type": "SKILL", "name": "Python"}],
+                  "showcaseOrder": 1,
+                  "representative": true
+                }],
                 "activityHistories": [{
                   "id": 1,
                   "category": "AWARD",
@@ -111,8 +124,8 @@ public class UserProfileController {
                 }]
               },
               "summary": {
-                "portfolioCount": 0,
-                "showcaseCount": 0,
+                "portfolioCount": 1,
+                "showcaseCount": 1,
                 "myTeamCount": 0,
                 "scrapCount": 0,
                 "competitionScrapCount": 0,
@@ -133,7 +146,7 @@ public class UserProfileController {
               "searchable": true,
               "skillTagIds": [1, 4],
               "interestTagIds": [21, 25],
-              "experienceTagIds": [],
+              "experienceTagIds": [31],
               "activityHistories": [{
                 "category": "AWARD",
                 "title": "서울시 데이터 활용 공모전 우수상",
@@ -156,7 +169,7 @@ public class UserProfileController {
               "searchable": true,
               "skillTagIds": [1, 4],
               "interestTagIds": [21, 25],
-              "experienceTagIds": [],
+              "experienceTagIds": [31],
               "activityHistories": [{
                 "category": "AWARD",
                 "title": "서울시 데이터 활용 공모전 우수상",
@@ -213,7 +226,7 @@ public class UserProfileController {
     @PostMapping("/me/profile")
     @Operation(
             summary = "내 프로필 최초 생성",
-            description = "로그인 사용자의 nickname을 이름으로 사용해 프로필을 생성합니다. 성별은 입력받지 않습니다. 활동 이력은 생략하거나 빈 배열로 보낼 수 있으며, 포트폴리오는 전용 API로 등록합니다.",
+            description = "로그인 사용자의 nickname을 이름으로 사용해 프로필을 생성합니다. 성별은 입력받지 않습니다. 활동 이력은 생략하거나 빈 배열로 보낼 수 있으며, 포트폴리오는 전용 API로 등록합니다. 응답 예시는 배열 필드의 형태를 보여주기 위한 것으로, 최초 생성 직후 portfolioItems는 빈 배열입니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
@@ -233,7 +246,7 @@ public class UserProfileController {
                             mediaType = "application/json",
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
-                                    name = "프로필 생성 성공",
+                                    name = "프로필 생성 응답 형식 예시 (포트폴리오는 별도 등록)",
                                     value = MY_PROFILE_CREATE_EXAMPLE
                             )
                     )
@@ -305,7 +318,7 @@ public class UserProfileController {
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "프로필 수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MyProfileResponse.class))),
+            @ApiResponse(responseCode = "200", description = "프로필 수정 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MyProfileResponse.class), examples = @ExampleObject(value = MY_PROFILE_GET_EXAMPLE))),
             @ApiResponse(responseCode = "400", description = "유효하지 않은 요청값 또는 태그/역할 조합", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
             @ApiResponse(responseCode = "404", description = "수정할 프로필을 찾을 수 없음", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))),
