@@ -2,7 +2,9 @@ package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.team.request.ApplyTeamRequest;
+import com.giut.server.dto.team.request.ApproveTeamApplicationRequest;
 import com.giut.server.dto.team.request.CreateTeamRequest;
+import com.giut.server.dto.team.request.RejectTeamApplicationRequest;
 import com.giut.server.dto.team.response.ApproveTeamApplicationResponse;
 import com.giut.server.dto.team.response.CreateTeamResponse;
 import com.giut.server.dto.team.response.TeamApplicationListResponse;
@@ -10,6 +12,8 @@ import com.giut.server.dto.team.response.TeamApplicationResponse;
 import com.giut.server.dto.team.response.TeamDetailResponse;
 import com.giut.server.dto.team.response.TeamMemberListResponse;
 import com.giut.server.dto.team.response.TeamRecruitmentListResponse;
+import com.giut.server.dto.team.response.MyTeamApplicationListResponse;
+import com.giut.server.dto.team.response.TeamPageResponse;
 import com.giut.server.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -25,10 +29,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Team", description = "팀 생성 및 관리")
@@ -38,6 +45,27 @@ import org.springframework.web.bind.annotation.RestController;
 public class TeamController {
 
     private final TeamService teamService;
+
+    @GetMapping
+    @Operation(summary = "공모전별 모집 중인 팀 목록 조회", description = "공모전 ID로 모집 중인 팀을 최신순으로 조회합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "팀 목록 조회 성공")
+    public ResponseEntity<TeamPageResponse> getRecruitingTeams(
+            @RequestParam Long competitionId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(teamService.getRecruitingTeams(competitionId, page, size));
+    }
+
+    @GetMapping("/applications/me")
+    @Operation(summary = "내 팀 참가 신청 조회", description = "내가 제출한 신청과 처리 상태를 최신순으로 조회합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "내 신청 목록 조회 성공")
+    public ResponseEntity<MyTeamApplicationListResponse> getMyApplications(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.getMyApplications(userId));
+    }
 
     @PostMapping
     @Operation(
@@ -133,7 +161,7 @@ public class TeamController {
     @GetMapping("/{teamId}/recruitments")
     @Operation(
             summary = "팀 모집 분야 목록 조회",
-            description = "팀에서 모집 중인 분야와 분야별 필요 인원을 조회합니다."
+            description = "팀에서 모집 중인 분야와 분야별 필요 인원 및 현재 충원 인원을 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -143,7 +171,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamRecruitmentListResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"recruitments\":[{\"recruitmentId\":1,\"roleCode\":\"BACKEND_DEVELOPER\",\"requiredCount\":1},{\"recruitmentId\":2,\"roleCode\":\"FRONTEND_DEVELOPER\",\"requiredCount\":2}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"recruitments\":[{\"recruitmentId\":1,\"roleCode\":\"BACKEND_DEVELOPER\",\"requiredCount\":1,\"filledCount\":0},{\"recruitmentId\":2,\"roleCode\":\"FRONTEND_DEVELOPER\",\"requiredCount\":2,\"filledCount\":1}]}")
                     )
             ),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
@@ -156,7 +184,7 @@ public class TeamController {
     @PostMapping("/{teamId}/applications")
     @Operation(
             summary = "팀 참가 신청",
-            description = "모집 중인 팀에 참가 신청을 생성합니다. 이미 팀원인 사용자나 승인 대기 중인 신청이 있는 사용자는 신청할 수 없습니다."
+            description = "지원 분야와 지원서 답변을 제출합니다. 이미 팀원인 사용자나 승인 대기 중인 신청이 있는 사용자는 신청할 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -166,7 +194,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamApplicationResponse.class),
-                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
+                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"roleCode\":\"BACKEND_DEVELOPER\",\"assignedRoleCode\":null,\"rejectionReason\":null,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
                     )
             ),
             @ApiResponse(
@@ -234,10 +262,36 @@ public class TeamController {
         return ResponseEntity.ok(teamService.getPendingApplications(userId, teamId));
     }
 
+    @DeleteMapping("/{teamId}/applications/{applicationId}")
+    @Operation(summary = "팀 참가 신청 취소", description = "신청자가 자신의 승인 대기 중인 참가 신청을 취소합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "204", description = "신청 취소 성공")
+    public ResponseEntity<Void> cancelApplication(
+            Authentication authentication,
+            @PathVariable Long teamId,
+            @PathVariable Long applicationId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        teamService.cancelApplication(userId, teamId, applicationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{teamId}/close")
+    @Operation(summary = "팀 모집 마감", description = "팀장이 팀의 모집 상태를 CLOSED로 변경합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "모집 마감 성공")
+    public ResponseEntity<TeamDetailResponse> closeRecruitment(
+            Authentication authentication,
+            @PathVariable Long teamId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.closeRecruitment(userId, teamId));
+    }
+
     @PostMapping("/{teamId}/applications/{applicationId}/approve")
     @Operation(
             summary = "팀 참가 신청 승인",
-            description = "팀장이 참가 신청을 승인합니다. 승인 시 신청자는 팀원으로 추가됩니다."
+            description = "팀장이 합류 분야를 지정하여 신청을 승인합니다. 해당 분야 정원과 팀 전체 정원을 확인합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -247,7 +301,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ApproveTeamApplicationResponse.class),
-                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"status\":\"APPROVED\",\"teamMemberId\":3}")
+                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"status\":\"APPROVED\",\"roleCode\":\"BACKEND_DEVELOPER\",\"teamMemberId\":3}")
                     )
             ),
             @ApiResponse(
@@ -269,16 +323,17 @@ public class TeamController {
     public ResponseEntity<ApproveTeamApplicationResponse> approveApplication(
             Authentication authentication,
             @PathVariable Long teamId,
-            @PathVariable Long applicationId
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApproveTeamApplicationRequest request
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        return ResponseEntity.ok(teamService.approveApplication(userId, teamId, applicationId));
+        return ResponseEntity.ok(teamService.approveApplication(userId, teamId, applicationId, request.roleCode()));
     }
 
     @PostMapping("/{teamId}/applications/{applicationId}/reject")
     @Operation(
             summary = "팀 참가 신청 거절",
-            description = "팀장이 승인 대기 중인 참가 신청을 거절합니다."
+            description = "팀장이 승인 대기 중인 참가 신청을 거절합니다. 거절 사유는 선택적으로 전달할 수 있습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -310,9 +365,12 @@ public class TeamController {
     public ResponseEntity<TeamApplicationResponse> rejectApplication(
             Authentication authentication,
             @PathVariable Long teamId,
-            @PathVariable Long applicationId
+            @PathVariable Long applicationId,
+            @Valid @RequestBody(required = false) RejectTeamApplicationRequest request
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        return ResponseEntity.ok(teamService.rejectApplication(userId, teamId, applicationId));
+        return ResponseEntity.ok(teamService.rejectApplication(
+                userId, teamId, applicationId, request == null ? null : request.reason()
+        ));
     }
 }

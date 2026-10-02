@@ -40,6 +40,10 @@ public class Team extends BaseTimeEntity {
     public enum MeetingPlace { CAMPUS, SEOUL, METROPOLITAN_AREA, ANYWHERE }
     public enum Status { RECRUITING, CLOSED, ARCHIVED }
 
+    public void closeRecruitment() {
+        this.status = Status.CLOSED;
+    }
+
     public static Team create(
             Competition competition,
             User leader,

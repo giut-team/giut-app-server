@@ -19,8 +19,7 @@ public class SwaggerConfig {
         String jwtSchemeName = "JWT";
 
         return new OpenAPI()
-//                .servers(List.of(new Server().url("http://localhost:8080")))
-                .servers(List.of(new Server().url("https://api.giut.store")))
+                .servers(List.of(new Server().url("/")))
                 .components(new Components()
                         .addSecuritySchemes(jwtSchemeName, new SecurityScheme()
                                 .name(jwtSchemeName)

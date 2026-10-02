@@ -12,14 +12,27 @@ public record TeamRecruitmentResponse(
         String roleCode,
 
         @Schema(description = "필요 인원", example = "1")
-        Short requiredCount
+        Short requiredCount,
+
+        @Schema(description = "현재 충원된 인원", example = "1")
+        long filledCount
 ) {
 
     public static TeamRecruitmentResponse from(TeamRecruitment recruitment) {
         return new TeamRecruitmentResponse(
                 recruitment.getId(),
                 recruitment.getRoleCode(),
-                recruitment.getRequiredCount()
+                recruitment.getRequiredCount(),
+                0
+        );
+    }
+
+    public static TeamRecruitmentResponse from(TeamRecruitment recruitment, long filledCount) {
+        return new TeamRecruitmentResponse(
+                recruitment.getId(),
+                recruitment.getRoleCode(),
+                recruitment.getRequiredCount(),
+                filledCount
         );
     }
 }

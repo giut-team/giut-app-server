@@ -19,6 +19,9 @@ public record TeamMemberResponse(
         @Schema(description = "팀 내 역할", example = "MEMBER")
         TeamMember.Role role,
 
+        @Schema(description = "담당 모집 분야 코드", example = "BACKEND_DEVELOPER", nullable = true)
+        String roleCode,
+
         @Schema(description = "팀원 상태", example = "ACTIVE")
         TeamMember.Status status,
 
