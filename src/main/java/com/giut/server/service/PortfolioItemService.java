@@ -1,6 +1,7 @@
 package com.giut.server.service;
 
 import com.giut.server.dto.profile.request.PortfolioShowcaseRequest;
+import com.giut.server.dto.profile.request.UpsertPortfolioItemRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.response.PortfolioShowcaseResponse;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
@@ -44,7 +45,7 @@ public class PortfolioItemService {
     }
 
     @Transactional
-    public PortfolioItemDto createPortfolioItem(Long userId, PortfolioItemDto request) {
+    public PortfolioItemDto createPortfolioItem(Long userId, UpsertPortfolioItemRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         validateProjectPeriod(request);
@@ -65,7 +66,7 @@ public class PortfolioItemService {
     }
 
     @Transactional
-    public PortfolioItemDto updatePortfolioItem(Long userId, Long portfolioItemId, PortfolioItemDto request) {
+    public PortfolioItemDto updatePortfolioItem(Long userId, Long portfolioItemId, UpsertPortfolioItemRequest request) {
         PortfolioItem portfolioItem = findPortfolioItem(userId, portfolioItemId);
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
@@ -178,7 +179,7 @@ public class PortfolioItemService {
         }
     }
 
-    private void validateProjectPeriod(PortfolioItemDto request) {
+    private void validateProjectPeriod(UpsertPortfolioItemRequest request) {
         if (request.projectStartDate() != null
                 && request.projectEndDate() != null
                 && request.projectEndDate().isBefore(request.projectStartDate())) {

@@ -13,6 +13,7 @@ import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.entity.PortfolioItem;
+import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
@@ -21,10 +22,13 @@ import com.giut.server.exception.ConflictException;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ActivityHistoryRepository;
+import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.PortfolioItemRepository;
 import com.giut.server.repository.PortfolioItemSkillTagRepository;
+import com.giut.server.repository.TeamMemberRepository;
+import com.giut.server.repository.TeamScrapRepository;
 import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
@@ -67,6 +71,12 @@ public class UserProfileService {
 
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
 
+    private final TeamMemberRepository teamMemberRepository;
+
+    private final CompetitionScrapRepository competitionScrapRepository;
+
+    private final TeamScrapRepository teamScrapRepository;
+
     private final ActivityHistoryRepository activityHistoryRepository;
 
     private final ActivityHistoryService activityHistoryService;
@@ -77,7 +87,7 @@ public class UserProfileService {
     public MyProfileResponse getMyProfile(Long userId) {
         return userProfileRepository.findById(userId)
                 .map(this::toMyProfileResponse)
-                .orElseGet(MyProfileResponse::notCompleted);
+                .orElseGet(() -> MyProfileResponse.notCompleted(toMyProfileSummary(userId)));
     }
 
     /**
@@ -317,7 +327,23 @@ public class UserProfileService {
     }
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
-        return MyProfileResponse.completed(toProfileResponse(profile, true));
+        return MyProfileResponse.completed(
+                toProfileResponse(profile, true),
+                toMyProfileSummary(profile.getUserId())
+        );
+    }
+
+    private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
+        long competitionScrapCount = competitionScrapRepository.countByUser_Id(userId);
+        long teamScrapCount = teamScrapRepository.countByUser_Id(userId);
+        return new MyProfileSummaryResponse(
+                portfolioItemRepository.countByUser_Id(userId),
+                portfolioItemRepository.countByUser_IdAndShowcaseOrderIsNotNull(userId),
+                teamMemberRepository.countByUserIdAndStatus(userId, TeamMember.Status.ACTIVE),
+                competitionScrapCount + teamScrapCount,
+                competitionScrapCount,
+                teamScrapCount
+        );
     }
 
     private UserProfile findPublicProfile(Long userId) {

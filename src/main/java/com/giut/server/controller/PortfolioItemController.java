@@ -2,6 +2,7 @@ package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.profile.request.PortfolioShowcaseRequest;
+import com.giut.server.dto.profile.request.UpsertPortfolioItemRequest;
 import com.giut.server.dto.profile.response.PortfolioItemListResponse;
 import com.giut.server.dto.profile.response.PortfolioShowcaseResponse;
 import com.giut.server.dto.profile.common.PortfolioItemDto;
@@ -61,7 +62,7 @@ public class PortfolioItemController {
     })
     public ResponseEntity<PortfolioItemDto> createPortfolioItem(
             Authentication authentication,
-            @Valid @RequestBody PortfolioItemDto request
+            @Valid @RequestBody UpsertPortfolioItemRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(portfolioItemService.createPortfolioItem(currentUserId(authentication), request));
@@ -80,7 +81,7 @@ public class PortfolioItemController {
     public ResponseEntity<PortfolioItemDto> updatePortfolioItem(
             Authentication authentication,
             @PathVariable Long portfolioItemId,
-            @Valid @RequestBody PortfolioItemDto request
+            @Valid @RequestBody UpsertPortfolioItemRequest request
     ) {
         return ResponseEntity.ok(portfolioItemService.updatePortfolioItem(
                 currentUserId(authentication), portfolioItemId, request

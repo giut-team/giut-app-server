@@ -30,10 +30,96 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/userprofile")
 public class UserProfileController {
 
+    private static final String MY_PROFILE_GET_EXAMPLE = """
+            {
+              "profileCompleted": true,
+              "profile": {
+                "userId": 12,
+                "nickname": "김민재",
+                "departmentName": "컴퓨터과학부",
+                "grade": 3,
+                "primaryRoles": [{"code": "DEVELOPMENT", "name": "개발"}],
+                "activityStatusName": "팀 찾는 중",
+                "profileImageUrl": "https://cdn.giut.com/profiles/12.png",
+                "bio": "백엔드와 AI 프로젝트에 관심이 있습니다.",
+                "searchable": true,
+                "roles": [{"code": "BACKEND_DEVELOPER", "name": "백엔드 개발자"}],
+                "tags": [{"id": 1, "type": "SKILL", "name": "Python"}],
+                "portfolioItems": [{
+                  "id": 15,
+                  "imageUrl": "https://cdn.giut.com/portfolio/15.png",
+                  "title": "서울시 데이터 공모전 발표",
+                  "caption": "데이터 분석과 발표를 담당했어요.",
+                  "projectStartDate": "2026-03-01",
+                  "projectEndDate": "2026-06-30",
+                  "teamSize": 4,
+                  "markdownContent": "## 프로젝트 소개",
+                  "skillTags": [{"id": 1, "type": "SKILL", "name": "Python"}],
+                  "showcaseOrder": 1,
+                  "representative": true
+                }],
+                "activityHistories": [{
+                  "id": 1,
+                  "category": "AWARD",
+                  "categoryName": "수상",
+                  "title": "서울시 데이터 활용 공모전 우수상",
+                  "organization": "서울특별시",
+                  "startMonth": "2025-03",
+                  "endMonth": "2025-06"
+                }]
+              },
+              "summary": {
+                "portfolioCount": 1,
+                "showcaseCount": 1,
+                "myTeamCount": 2,
+                "scrapCount": 8,
+                "competitionScrapCount": 5,
+                "teamScrapCount": 3
+              }
+            }
+            """;
+
+    private static final String MY_PROFILE_CREATE_EXAMPLE = """
+            {
+              "profileCompleted": true,
+              "profile": {
+                "userId": 12,
+                "nickname": "김민재",
+                "departmentName": "컴퓨터과학부",
+                "grade": 3,
+                "primaryRoles": [{"code": "DEVELOPMENT", "name": "개발"}],
+                "activityStatusName": "팀 찾는 중",
+                "profileImageUrl": "https://cdn.giut.com/profiles/12.png",
+                "bio": "백엔드와 AI 프로젝트에 관심이 있습니다.",
+                "searchable": true,
+                "roles": [{"code": "BACKEND_DEVELOPER", "name": "백엔드 개발자"}],
+                "tags": [{"id": 1, "type": "SKILL", "name": "Java"}],
+                "portfolioItems": [],
+                "activityHistories": [{
+                  "id": 1,
+                  "category": "AWARD",
+                  "categoryName": "수상",
+                  "title": "서울시 데이터 활용 공모전 우수상",
+                  "organization": "서울특별시",
+                  "startMonth": "2025-03",
+                  "endMonth": "2025-06"
+                }]
+              },
+              "summary": {
+                "portfolioCount": 0,
+                "showcaseCount": 0,
+                "myTeamCount": 0,
+                "scrapCount": 0,
+                "competitionScrapCount": 0,
+                "teamScrapCount": 0
+              }
+            }
+            """;
+
     private final UserProfileService userProfileService;
 
     @GetMapping("/me/profile")
-    @Operation(summary = "내 프로필 조회", description = "현재 로그인한 사용자의 프로필과 프로필 등록 여부를 조회합니다.")
+    @Operation(summary = "내 프로필 조회", description = "프로필·포트폴리오와 마이페이지 요약 개수를 함께 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -46,11 +132,11 @@ public class UserProfileController {
                             examples = {
                                     @ExampleObject(
                                             name = "프로필 등록 완료",
-                                            value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"},{\"id\":2,\"type\":\"SKILL\",\"name\":\"SQL\"}],\"portfolioItems\":[],\"activityHistories\":[]}}"
+                                            value = MY_PROFILE_GET_EXAMPLE
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
-                                            value = "{\"profileCompleted\":false,\"profile\":null}"
+                                            value = "{\"profileCompleted\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0}}"
                                     )
                             }
                     )
@@ -89,7 +175,7 @@ public class UserProfileController {
                             schema = @Schema(implementation = MyProfileResponse.class),
                             examples = @ExampleObject(
                                     name = "프로필 생성 성공",
-                                    value = "{\"profileCompleted\":true,\"profile\":{\"userId\":12,\"nickname\":\"김민재\",\"department\":\"COMPUTER_SCIENCE\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"gender\":\"MALE\",\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"},{\"code\":\"PLANNING\",\"name\":\"기획\"}],\"activityStatus\":\"LOOKING_FOR_TEAM\",\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/12.png\",\"bio\":\"백엔드와 AI 프로젝트에 관심이 있습니다.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"SERVICE_PLANNER\",\"name\":\"서비스 기획\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Java\"}],\"portfolioItems\":[],\"activityHistories\":[{\"id\":1,\"category\":\"AWARD\",\"categoryName\":\"수상\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]}}"
+                                    value = MY_PROFILE_CREATE_EXAMPLE
                             )
                     )
             ),
