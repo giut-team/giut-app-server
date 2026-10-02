@@ -16,12 +16,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: dev
+    environment: Giut
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
     steps:
       - name: Checkout
