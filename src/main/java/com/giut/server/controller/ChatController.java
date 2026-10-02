@@ -97,7 +97,7 @@ public class ChatController {
     @PostMapping("/{chatRoomId}/messages")
     @Operation(
             summary = "채팅 메시지 전송",
-            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. 저장 성공 후 /topic/chat-rooms/{chatRoomId} 구독자에게 실시간 전달합니다."
+            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. 저장 성공 후 활성 참여자의 /user/queue/chat-rooms/{chatRoomId} 구독에 실시간 전달합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({

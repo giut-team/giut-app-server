@@ -21,8 +21,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ChatSubscriptionInterceptor implements ChannelInterceptor {
 
-    private static final Pattern ROOM_TOPIC =
-            Pattern.compile("^/topic/chat-rooms/([1-9][0-9]*)$");
+    private static final Pattern ROOM_QUEUE =
+            Pattern.compile("^/user/queue/chat-rooms/([1-9][0-9]*)$");
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
@@ -53,7 +53,7 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        Matcher matcher = ROOM_TOPIC.matcher(
+        Matcher matcher = ROOM_QUEUE.matcher(
                 String.valueOf(accessor.getDestination()));
         if (!matcher.matches()) {
             throw new AccessDeniedException("허용되지 않은 구독 경로입니다.");

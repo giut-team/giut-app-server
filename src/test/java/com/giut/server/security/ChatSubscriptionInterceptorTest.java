@@ -35,7 +35,7 @@ class ChatSubscriptionInterceptorTest {
                 .thenReturn(true);
 
         assertDoesNotThrow(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE,
-                "/topic/chat-rooms/5", () -> "12"), null));
+                "/user/queue/chat-rooms/5", () -> "12"), null));
     }
 
     @Test
@@ -43,7 +43,7 @@ class ChatSubscriptionInterceptorTest {
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom()));
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
-                frame(StompCommand.SUBSCRIBE, "/topic/chat-rooms/5", () -> "12"), null));
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
     }
 
     @Test
@@ -57,7 +57,9 @@ class ChatSubscriptionInterceptorTest {
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/topic/other", () -> "12"), null));
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
-                frame(StompCommand.SEND, "/topic/chat-rooms/5", () -> "12"), null));
+                frame(StompCommand.SUBSCRIBE, "/topic/chat-rooms/5", () -> "12"), null));
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SEND, "/user/queue/chat-rooms/5", () -> "12"), null));
     }
 
     private Message<byte[]> frame(StompCommand command, String destination, Principal user) {

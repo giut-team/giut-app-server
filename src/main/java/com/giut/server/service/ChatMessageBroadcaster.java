@@ -1,5 +1,7 @@
 package com.giut.server.service;
 
+import com.giut.server.entity.ChatRoomMember;
+import com.giut.server.repository.ChatRoomMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -11,10 +13,14 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class ChatMessageBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final ChatRoomMemberRepository chatRoomMemberRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void broadcast(ChatMessageEvent event) {
-        messagingTemplate.convertAndSend(
-                "/topic/chat-rooms/" + event.message().chatRoomId(), event.message());
+        Long chatRoomId = event.message().chatRoomId();
+        for (ChatRoomMember member : chatRoomMemberRepository.findAllByChatRoomIdAndLeftAtIsNull(chatRoomId)) {
+            messagingTemplate.convertAndSendToUser(
+                    member.getUserId().toString(), "/queue/chat-rooms/" + chatRoomId, event.message());
+        }
     }
 }
