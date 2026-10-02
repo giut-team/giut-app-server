@@ -1,6 +1,7 @@
 package com.giut.server.dto.competition.response;
 
 import com.giut.server.entity.Competition;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -17,6 +18,8 @@ public record PublicCompetitionResponse(
         String recruitmentStatusName,
         long viewCount,
         long scrapCount,
+        @Schema(description = "이 공모전에 연결된 전체 팀 수", example = "5")
+        long teamCount,
         String primaryUrl
 ) {
 
@@ -24,7 +27,8 @@ public record PublicCompetitionResponse(
             Competition competition,
             CompetitionRecruitmentStatus recruitmentStatus,
             String primaryUrl,
-            long scrapCount
+            long scrapCount,
+            long teamCount
     ) {
         return new PublicCompetitionResponse(
                 competition.getId(),
@@ -39,6 +43,7 @@ public record PublicCompetitionResponse(
                 recruitmentStatus.getDisplayName(),
                 competition.getViewCount(),
                 scrapCount,
+                teamCount,
                 primaryUrl
         );
     }

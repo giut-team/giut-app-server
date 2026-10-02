@@ -1,6 +1,7 @@
 package com.giut.server.dto.competition.response;
 
 import com.giut.server.entity.Competition;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,7 +21,13 @@ public record PublicCompetitionDetailResponse(
         long viewCount,
         long scrapCount,
         boolean scrapped,
-        List<CompetitionUrlResponse> urls
+        List<CompetitionUrlResponse> urls,
+        @Schema(description = "이 공모전에 연결된 전체 팀 수", example = "5")
+        long teamCount,
+        @Schema(description = "모집 중인 팀 수", example = "4")
+        long recruitingTeamCount,
+        @Schema(description = "이 공모전에 연결된 팀 목록")
+        List<CompetitionTeamResponse> teams
 ) {
 
     public static PublicCompetitionDetailResponse from(
@@ -28,7 +35,10 @@ public record PublicCompetitionDetailResponse(
             CompetitionRecruitmentStatus recruitmentStatus,
             long scrapCount,
             boolean scrapped,
-            List<CompetitionUrlResponse> urls
+            List<CompetitionUrlResponse> urls,
+            long teamCount,
+            long recruitingTeamCount,
+            List<CompetitionTeamResponse> teams
     ) {
         return new PublicCompetitionDetailResponse(
                 competition.getId(),
@@ -45,7 +55,10 @@ public record PublicCompetitionDetailResponse(
                 competition.getViewCount(),
                 scrapCount,
                 scrapped,
-                urls
+                urls,
+                teamCount,
+                recruitingTeamCount,
+                teams
         );
     }
 }
