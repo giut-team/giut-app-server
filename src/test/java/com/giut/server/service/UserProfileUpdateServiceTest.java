@@ -7,6 +7,7 @@ import com.giut.server.entity.UserProfile;
 import com.giut.server.repository.ActivityHistoryRepository;
 import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.PortfolioItemRoleRepository;
 import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
@@ -43,6 +44,7 @@ class UserProfileUpdateServiceTest {
     @Mock private UserProfileTagRepository userProfileTagRepository;
     @Mock private ProfileRoleSkillTagRepository profileRoleSkillTagRepository;
     @Mock private PortfolioItemRepository portfolioItemRepository;
+    @Mock private PortfolioItemRoleRepository portfolioItemRoleRepository;
     @Mock private ActivityHistoryRepository activityHistoryRepository;
     @Mock private ActivityHistoryService activityHistoryService;
     @Mock private CompetitionScrapRepository competitionScrapRepository;

@@ -32,6 +32,8 @@ class UserProfileResponseExampleTest {
 
         assertThat(profile.path("departmentName").asText()).isEqualTo("컴퓨터과학부");
         assertThat(profile.path("portfolioItems").size()).isGreaterThan(0);
+        assertThat(profile.path("portfolioItems").get(0).path("roles").get(0).path("code").asText())
+                .isEqualTo("BACKEND_DEVELOPER");
         assertThat(profile.path("activityHistories").size()).isGreaterThan(0);
         assertThat(profile.has("department")).isFalse();
         assertThat(profile.has("gender")).isFalse();

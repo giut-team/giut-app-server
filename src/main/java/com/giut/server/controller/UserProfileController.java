@@ -54,6 +54,10 @@ public class UserProfileController {
                   "projectStartDate": "2026-03-01",
                   "projectEndDate": "2026-06-30",
                   "teamSize": 4,
+                  "roles": [
+                    {"code": "BACKEND_DEVELOPER", "name": "백엔드 개발자"},
+                    {"code": "DATA_ANALYST", "name": "데이터 분석"}
+                  ],
                   "markdownContent": "## 프로젝트 소개",
                   "skillTags": [{"id": 1, "type": "SKILL", "name": "Python"}],
                   "showcaseOrder": 1,

@@ -3,13 +3,14 @@ package com.giut.server.dto.profile.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.util.List;
 
-@Schema(description = "포트폴리오 항목 생성·수정 요청. 공개 여부와 대표 여부는 별도 API에서 설정합니다.")
+@Schema(description = "포트폴리오 항목 생성·수정 요청. 새 항목은 공개 목록 1번에 추가되며, 대표 여부는 별도 API에서 설정합니다.")
 public record UpsertPortfolioItemRequest(
         @Schema(description = "활동 사진 URL", example = "https://cdn.giut.com/portfolio/data-contest.png")
         @NotBlank(message = "포트폴리오 사진 URL은 필수입니다.")
@@ -36,6 +37,11 @@ public record UpsertPortfolioItemRequest(
         @Schema(description = "프로젝트 팀 인원", example = "5")
         @Min(value = 1, message = "팀 인원은 1명 이상이어야 합니다.")
         Integer teamSize,
+
+        @Schema(description = "프로젝트에서 맡은 세부 역할 코드 목록", example = "[\"BACKEND_DEVELOPER\", \"DATA_ANALYST\"]")
+        @NotEmpty(message = "포트폴리오 역할은 1개 이상 선택해야 합니다.")
+        @Size(max = 3, message = "포트폴리오 역할은 최대 3개까지 선택할 수 있습니다.")
+        List<@NotBlank(message = "역할 코드는 비어 있을 수 없습니다.") String> roles,
 
         @Schema(description = "상세 화면에서 렌더링할 Markdown 원문", example = "## 프로젝트 소개\\n\\n분리배출 캠페인의 일정과 산출물을 관리했습니다.")
         @NotBlank(message = "포트폴리오 마크다운 내용은 필수입니다.")

@@ -14,6 +14,7 @@ import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.entity.PortfolioItem;
+import com.giut.server.entity.PortfolioItemRole;
 import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
@@ -27,6 +28,7 @@ import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.PortfolioItemRoleRepository;
 import com.giut.server.repository.PortfolioItemSkillTagRepository;
 import com.giut.server.repository.TeamMemberRepository;
 import com.giut.server.repository.TeamScrapRepository;
@@ -71,6 +73,8 @@ public class UserProfileService {
     private final PortfolioItemRepository portfolioItemRepository;
 
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
+
+    private final PortfolioItemRoleRepository portfolioItemRoleRepository;
 
     private final TeamMemberRepository teamMemberRepository;
 
@@ -174,11 +178,14 @@ public class UserProfileService {
                 .findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(userId);
         Map<Long, List<ProfileTagSummaryResponse>> skillTagsByPortfolioItemId =
                 findPortfolioSkillTagsByItemId(portfolioItems);
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId =
+                findPortfolioRolesByItemId(portfolioItems);
 
         return new PortfolioItemListResponse(portfolioItems.stream()
                 .map(portfolioItem -> PortfolioItemDto.from(
                         portfolioItem,
-                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
+                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of()),
+                        rolesByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
                 ))
                 .toList());
     }
@@ -394,11 +401,13 @@ public class UserProfileService {
                 ? portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(profile.getUserId())
                 : portfolioItemRepository.findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(profile.getUserId());
         Map<Long, List<ProfileTagSummaryResponse>> portfolioSkillTagsByItemId = findPortfolioSkillTagsByItemId(portfolioItemEntities);
+        Map<Long, List<ProfileCodeNameResponse>> portfolioRolesByItemId = findPortfolioRolesByItemId(portfolioItemEntities);
         List<PortfolioItemDto> portfolioItems = portfolioItemEntities
                 .stream()
                 .map(portfolioItem -> PortfolioItemDto.from(
                         portfolioItem,
-                        portfolioSkillTagsByItemId.getOrDefault(portfolioItem.getId(), List.of())
+                        portfolioSkillTagsByItemId.getOrDefault(portfolioItem.getId(), List.of()),
+                        portfolioRolesByItemId.getOrDefault(portfolioItem.getId(), List.of())
                 ))
                 .toList();
 
@@ -444,6 +453,22 @@ public class UserProfileService {
                         .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new ArrayList<>())
                         .add(ProfileTagSummaryResponse.from(link.getTag())));
         return tagsByPortfolioItemId;
+    }
+
+    private Map<Long, List<ProfileCodeNameResponse>> findPortfolioRolesByItemId(List<PortfolioItem> portfolioItems) {
+        if (portfolioItems.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId = new HashMap<>();
+        portfolioItemRoleRepository.findAllByPortfolioItem_IdIn(
+                        portfolioItems.stream().map(PortfolioItem::getId).toList()
+                ).stream()
+                .sorted(java.util.Comparator.comparingInt(PortfolioItemRole::getSelectionOrder))
+                .forEach(link -> rolesByPortfolioItemId
+                        .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new ArrayList<>())
+                        .add(ProfileCodeNameResponse.from(link.getRole())));
+        return rolesByPortfolioItemId;
     }
 
     private PublicProfileResponse toPublicProfileResponse(

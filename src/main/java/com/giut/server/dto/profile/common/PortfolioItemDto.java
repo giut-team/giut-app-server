@@ -32,6 +32,10 @@ public record PortfolioItemDto(
         @Schema(description = "프로젝트 팀 인원", example = "5")
         Integer teamSize,
 
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+        @Schema(description = "프로젝트에서 맡은 세부 역할", accessMode = Schema.AccessMode.READ_ONLY)
+        List<ProfileCodeNameResponse> roles,
+
         @Schema(description = "상세 화면에서 렌더링할 Markdown 원문", example = "## 프로젝트 소개\\n\\n분리배출 캠페인의 일정과 산출물을 관리했습니다.\\n\\n## 담당한 일\\n\\n- 회의록 작성\\n- 데이터 집계")
         String markdownContent,
 
@@ -49,7 +53,8 @@ public record PortfolioItemDto(
 ) {
     public static PortfolioItemDto from(
             PortfolioItem portfolioItem,
-            List<ProfileTagSummaryResponse> skillTags
+            List<ProfileTagSummaryResponse> skillTags,
+            List<ProfileCodeNameResponse> roles
     ) {
         return new PortfolioItemDto(
                 portfolioItem.getId(),
@@ -59,6 +64,7 @@ public record PortfolioItemDto(
                 portfolioItem.getProjectStartDate(),
                 portfolioItem.getProjectEndDate(),
                 portfolioItem.getTeamSize(),
+                roles,
                 portfolioItem.getMarkdownContent(),
                 skillTags,
                 portfolioItem.getShowcaseOrder(),
