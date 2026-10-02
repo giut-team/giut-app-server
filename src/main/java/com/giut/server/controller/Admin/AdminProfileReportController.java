@@ -1,11 +1,15 @@
 package com.giut.server.controller.Admin;
 
+import com.giut.server.dto.SwaggerExamples;
 import com.giut.server.dto.profile.request.ReviewProfileReportRequest;
 import com.giut.server.dto.profile.response.AdminProfileReportDetailResponse;
 import com.giut.server.dto.profile.response.ProfileReportPageResponse;
 import com.giut.server.entity.ProfileReport;
 import com.giut.server.service.ProfileReportService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -38,6 +42,7 @@ public class AdminProfileReportController {
     @GetMapping
     @Operation(summary = "프로필 신고 목록 조회", description = "신고 상태로 필터링하고 최신순으로 조회합니다.")
     @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "신고 목록 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProfileReportPageResponse.class), examples = @ExampleObject(value = SwaggerExamples.PROFILE_REPORT_LIST)))
     public ResponseEntity<ProfileReportPageResponse> getReports(
             @RequestParam(required = false) ProfileReport.Status status,
             @RequestParam(defaultValue = "0") @Min(0) int page,

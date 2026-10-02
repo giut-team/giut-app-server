@@ -48,7 +48,7 @@ public class ProfileShareLinkService {
 
         return new ProfileShareLinkResponse(
                 link.getId(),
-                "/share/profile/" + token,
+                token,
                 link.getCreatedAt(),
                 link.getExpiresAt()
         );

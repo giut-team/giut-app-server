@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.request.UpdateMyProfileRequest;
 import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.*;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
@@ -13,6 +14,8 @@ import com.giut.server.entity.ProfileRole;
 import com.giut.server.entity.ProfileRoleSkillTag;
 import com.giut.server.entity.ProfileTag;
 import com.giut.server.entity.PortfolioItem;
+import com.giut.server.entity.PortfolioItemRole;
+import com.giut.server.entity.TeamMember;
 import com.giut.server.entity.User;
 import com.giut.server.entity.UserProfile;
 import com.giut.server.entity.UserProfileRole;
@@ -21,10 +24,14 @@ import com.giut.server.exception.ConflictException;
 import com.giut.server.exception.ResourceNotFoundException;
 import com.giut.server.repository.ProfileRoleRepository;
 import com.giut.server.repository.ActivityHistoryRepository;
+import com.giut.server.repository.CompetitionScrapRepository;
 import com.giut.server.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.repository.ProfileTagRepository;
 import com.giut.server.repository.PortfolioItemRepository;
+import com.giut.server.repository.PortfolioItemRoleRepository;
 import com.giut.server.repository.PortfolioItemSkillTagRepository;
+import com.giut.server.repository.TeamMemberRepository;
+import com.giut.server.repository.TeamScrapRepository;
 import com.giut.server.repository.UserProfileRoleRepository;
 import com.giut.server.repository.UserProfileRepository;
 import com.giut.server.repository.UserProfileTagRepository;
@@ -67,6 +74,14 @@ public class UserProfileService {
 
     private final PortfolioItemSkillTagRepository portfolioItemSkillTagRepository;
 
+    private final PortfolioItemRoleRepository portfolioItemRoleRepository;
+
+    private final TeamMemberRepository teamMemberRepository;
+
+    private final CompetitionScrapRepository competitionScrapRepository;
+
+    private final TeamScrapRepository teamScrapRepository;
+
     private final ActivityHistoryRepository activityHistoryRepository;
 
     private final ActivityHistoryService activityHistoryService;
@@ -77,7 +92,7 @@ public class UserProfileService {
     public MyProfileResponse getMyProfile(Long userId) {
         return userProfileRepository.findById(userId)
                 .map(this::toMyProfileResponse)
-                .orElseGet(MyProfileResponse::notCompleted);
+                .orElseGet(() -> MyProfileResponse.notCompleted(toMyProfileSummary(userId)));
     }
 
     /**
@@ -163,78 +178,76 @@ public class UserProfileService {
                 .findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(userId);
         Map<Long, List<ProfileTagSummaryResponse>> skillTagsByPortfolioItemId =
                 findPortfolioSkillTagsByItemId(portfolioItems);
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId =
+                findPortfolioRolesByItemId(portfolioItems);
 
         return new PortfolioItemListResponse(portfolioItems.stream()
                 .map(portfolioItem -> PortfolioItemDto.from(
                         portfolioItem,
-                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
+                        skillTagsByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of()),
+                        rolesByPortfolioItemId.getOrDefault(portfolioItem.getId(), List.of())
                 ))
                 .toList());
     }
 
     @Transactional
     public MyProfileResponse createMyProfile(Long userId, PutMyProfileRequest request) {
-        return saveMyProfile(userId, request, true);
+        return saveMyProfile(userId, request);
     }
 
     @Transactional
-    public MyProfileResponse updateMyProfile(Long userId, PutMyProfileRequest request) {
-        return saveMyProfile(userId, request, false);
+    public MyProfileResponse updateMyProfile(Long userId, UpdateMyProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        UserProfile profile = userProfileRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다."));
+        List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
+        List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
+        String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
+
+        profile.update(
+                request.department(),
+                request.activityStatus(),
+                request.grade(),
+                profile.getGender(),
+                request.profileImageUrl(),
+                request.bio(),
+                request.searchable(),
+                primaryRolesJson
+        );
+        replaceRoles(profile, roles);
+        replaceTags(profile, request.skillTagIds(), request.interestTagIds(), request.experienceTagIds());
+        activityHistoryService.replaceForProfile(user, request.activityHistories());
+
+        return toMyProfileResponse(profile);
     }
 
-    private MyProfileResponse saveMyProfile(
-            Long userId,
-            PutMyProfileRequest request,
-            boolean creating
-    ) {
+    private MyProfileResponse saveMyProfile(Long userId, PutMyProfileRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
         String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
 
-        UserProfile profile = userProfileRepository.findById(userId).orElse(null);
-        if (creating && profile != null) {
+        if (userProfileRepository.findById(userId).isPresent()) {
             throw new ConflictException("이미 프로필이 등록되어 있습니다.");
         }
-        if (!creating && profile == null) {
-            throw new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다.");
-        }
-        if (!creating && request.activityHistories() != null) {
-            throw new IllegalArgumentException("활동 이력 수정은 활동 이력 전용 API를 이용해 주세요.");
-        }
 
-        if (creating) {
-            profile = userProfileRepository.save(UserProfile.create(
-                    user,
-                    request.department(),
-                    request.activityStatus(),
-                    request.grade(),
-                    request.gender(),
-                    request.profileImageUrl(),
-                    request.bio(),
-                    request.searchable(),
-                    primaryRolesJson
-            ));
-        } else {
-            profile.update(
-                    request.department(),
-                    request.activityStatus(),
-                    request.grade(),
-                    request.gender(),
-                    request.profileImageUrl(),
-                    request.bio(),
-                    request.searchable(),
-                    primaryRolesJson
-            );
-        }
+        UserProfile profile = userProfileRepository.save(UserProfile.create(
+                user,
+                request.department(),
+                request.activityStatus(),
+                request.grade(),
+                null,
+                request.profileImageUrl(),
+                request.bio(),
+                request.searchable(),
+                primaryRolesJson
+        ));
 
-        user.updateNickname(request.nickname());
         replaceRoles(profile, roles);
-        replaceTags(profile, request);
-        if (creating) {
-            activityHistoryService.createForProfile(user, request.activityHistories());
-        }
+        replaceTags(profile, request.skillTagIds(), request.interestTagIds(), request.experienceTagIds());
+        activityHistoryService.createForProfile(user, request.activityHistories());
 
         return toMyProfileResponse(profile);
     }
@@ -279,10 +292,15 @@ public class UserProfileService {
                 .toList());
     }
 
-    private void replaceTags(UserProfile profile, PutMyProfileRequest request) {
-        List<ProfileTag> allTags = new ArrayList<>(findTags(request.skillTagIds(), ProfileTag.TagType.SKILL));
-        allTags.addAll(findTags(request.interestTagIds(), ProfileTag.TagType.INTEREST));
-        allTags.addAll(findTags(request.experienceTagIds(), ProfileTag.TagType.EXPERIENCE));
+    private void replaceTags(
+            UserProfile profile,
+            List<Long> skillTagIds,
+            List<Long> interestTagIds,
+            List<Long> experienceTagIds
+    ) {
+        List<ProfileTag> allTags = new ArrayList<>(findTags(skillTagIds, ProfileTag.TagType.SKILL));
+        allTags.addAll(findTags(interestTagIds, ProfileTag.TagType.INTEREST));
+        allTags.addAll(findTags(experienceTagIds, ProfileTag.TagType.EXPERIENCE));
 
         userProfileTagRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileTagRepository.flush();
@@ -293,7 +311,7 @@ public class UserProfileService {
     }
 
     private List<ProfileTag> findTags(List<Long> tagIds, ProfileTag.TagType tagType) {
-        if (tagIds.contains(null)) {
+        if (tagIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("프로필 태그 ID에는 null을 넣을 수 없습니다.");
         }
 
@@ -317,7 +335,23 @@ public class UserProfileService {
     }
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
-        return MyProfileResponse.completed(toProfileResponse(profile, true));
+        return MyProfileResponse.completed(
+                toProfileResponse(profile, true),
+                toMyProfileSummary(profile.getUserId())
+        );
+    }
+
+    private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
+        long competitionScrapCount = competitionScrapRepository.countByUser_Id(userId);
+        long teamScrapCount = teamScrapRepository.countByUser_Id(userId);
+        return new MyProfileSummaryResponse(
+                portfolioItemRepository.countByUser_Id(userId),
+                portfolioItemRepository.countByUser_IdAndShowcaseOrderIsNotNull(userId),
+                teamMemberRepository.countByUserIdAndStatus(userId, TeamMember.Status.ACTIVE),
+                competitionScrapCount + teamScrapCount,
+                competitionScrapCount,
+                teamScrapCount
+        );
     }
 
     private UserProfile findPublicProfile(Long userId) {
@@ -367,11 +401,13 @@ public class UserProfileService {
                 ? portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(profile.getUserId())
                 : portfolioItemRepository.findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(profile.getUserId());
         Map<Long, List<ProfileTagSummaryResponse>> portfolioSkillTagsByItemId = findPortfolioSkillTagsByItemId(portfolioItemEntities);
+        Map<Long, List<ProfileCodeNameResponse>> portfolioRolesByItemId = findPortfolioRolesByItemId(portfolioItemEntities);
         List<PortfolioItemDto> portfolioItems = portfolioItemEntities
                 .stream()
                 .map(portfolioItem -> PortfolioItemDto.from(
                         portfolioItem,
-                        portfolioSkillTagsByItemId.getOrDefault(portfolioItem.getId(), List.of())
+                        portfolioSkillTagsByItemId.getOrDefault(portfolioItem.getId(), List.of()),
+                        portfolioRolesByItemId.getOrDefault(portfolioItem.getId(), List.of())
                 ))
                 .toList();
 
@@ -417,6 +453,22 @@ public class UserProfileService {
                         .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new ArrayList<>())
                         .add(ProfileTagSummaryResponse.from(link.getTag())));
         return tagsByPortfolioItemId;
+    }
+
+    private Map<Long, List<ProfileCodeNameResponse>> findPortfolioRolesByItemId(List<PortfolioItem> portfolioItems) {
+        if (portfolioItems.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<ProfileCodeNameResponse>> rolesByPortfolioItemId = new HashMap<>();
+        portfolioItemRoleRepository.findAllByPortfolioItem_IdIn(
+                        portfolioItems.stream().map(PortfolioItem::getId).toList()
+                ).stream()
+                .sorted(java.util.Comparator.comparingInt(PortfolioItemRole::getSelectionOrder))
+                .forEach(link -> rolesByPortfolioItemId
+                        .computeIfAbsent(link.getPortfolioItem().getId(), ignored -> new ArrayList<>())
+                        .add(ProfileCodeNameResponse.from(link.getRole())));
+        return rolesByPortfolioItemId;
     }
 
     private PublicProfileResponse toPublicProfileResponse(

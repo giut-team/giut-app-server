@@ -15,4 +15,6 @@ public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Lo
     Optional<PortfolioItem> findByIdAndUser_Id(Long id, Long userId);
 
     long countByUser_Id(Long userId);
+
+    long countByUser_IdAndShowcaseOrderIsNotNull(Long userId);
 }

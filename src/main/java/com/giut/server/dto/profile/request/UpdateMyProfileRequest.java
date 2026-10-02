@@ -1,7 +1,8 @@
 package com.giut.server.dto.profile.request;
 
-import com.giut.server.entity.UserProfile;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
+import com.giut.server.entity.UserProfile;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -13,18 +14,19 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-@Schema(description = "내 프로필 최초 등록 요청")
-public record PutMyProfileRequest(
-        @Schema(description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
+@Schema(description = "내 프로필 전체 수정 요청. 이름과 성별은 변경하지 않습니다.")
+public record UpdateMyProfileRequest(
+        @Schema(name = "departmentname", description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
+        @JsonProperty("departmentname")
         @NotNull(message = "학과는 필수입니다.")
         UserProfile.DepartmentType department,
 
-        @Schema(description = "대표 역할 코드 목록. DEVELOPMENT, DESIGN, PLANNING, MARKETING 중 복수 선택할 수 있습니다.", example = "[\"DEVELOPMENT\", \"PLANNING\"]")
+        @Schema(description = "대표 역할 코드 목록", example = "[\"DEVELOPMENT\", \"PLANNING\"]")
         @NotEmpty(message = "대표 역할은 1개 이상 선택해야 합니다.")
         @Size(max = 4, message = "대표 역할은 최대 4개까지 선택할 수 있습니다.")
         List<@NotBlank(message = "대표 역할 코드는 비어 있을 수 없습니다.") String> primaryRoles,
 
-        @Schema(description = "세부 역할 목록. 대표 역할과 같은 분야의 역할만 선택할 수 있습니다.", example = "[\"BACKEND_DEVELOPER\", \"DATA_ANALYST\"]")
+        @Schema(description = "세부 역할 코드 목록", example = "[\"BACKEND_DEVELOPER\", \"DATA_ANALYST\"]")
         @NotEmpty(message = "세부 역할은 1개 이상 선택해야 합니다.")
         @Size(max = 3, message = "세부 역할은 최대 3개까지 선택할 수 있습니다.")
         List<@NotBlank(message = "세부 역할 코드는 비어 있을 수 없습니다.") String> roles,
@@ -51,7 +53,7 @@ public record PutMyProfileRequest(
         @NotNull(message = "프로필 공개 여부는 필수입니다.")
         Boolean searchable,
 
-        @Schema(description = "기존 기술 스택 태그 ID 목록", example = "[1, 4]")
+        @Schema(description = "기술 스택 태그 ID 목록", example = "[1, 4]")
         @NotNull(message = "기술 스택 목록은 필수입니다. 선택하지 않았다면 빈 배열을 입력하세요.")
         @Size(max = 10, message = "기술 스택은 최대 10개까지 선택할 수 있습니다.")
         List<Long> skillTagIds,
@@ -67,10 +69,10 @@ public record PutMyProfileRequest(
         List<Long> experienceTagIds,
 
         @Schema(
-                description = "최초 등록 시 함께 추가할 활동 이력. 선택 사항입니다.",
-                example = "[{\"category\":\"AWARD\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]",
-                nullable = true
+                description = "수정 후 남길 활동 이력 전체 목록. 기존 목록을 교체하며, 모두 삭제하려면 빈 배열을 입력합니다.",
+                example = "[{\"category\":\"AWARD\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]"
         )
+        @NotNull(message = "활동 이력 목록은 필수입니다. 없으면 빈 배열을 입력하세요.")
         List<@NotNull(message = "활동 이력 목록에는 null을 넣을 수 없습니다.") @Valid ActivityHistoryDto> activityHistories
 ) {
 }

@@ -55,7 +55,7 @@ public class PortfolioItem extends BaseTimeEntity {
     @Column(name = "markdown_content", nullable = false, columnDefinition = "text")
     private String markdownContent;
 
-    @Column(name = "showcase_order")
+    @Column(name = "showcase_order", nullable = true)
     private Integer showcaseOrder;
 
     @Column(name = "is_representative", nullable = false)

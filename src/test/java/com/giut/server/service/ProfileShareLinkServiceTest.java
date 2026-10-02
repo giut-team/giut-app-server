@@ -1,5 +1,7 @@
 package com.giut.server.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.response.ProfileShareLinkResponse;
 import com.giut.server.dto.profile.response.SharedProfileResponse;
 import com.giut.server.entity.ProfileShareLink;
@@ -38,7 +40,7 @@ class ProfileShareLinkServiceTest {
     @InjectMocks private ProfileShareLinkService profileShareLinkService;
 
     @Test
-    void createLinkStoresOnlyTokenHashEvenWhenProfileIsNotSearchable() {
+    void createLinkStoresOnlyTokenHashEvenWhenProfileIsNotSearchable() throws Exception {
         User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
         UserProfile profile = UserProfile.create(
                 user, UserProfile.DepartmentType.COMPUTER_SCIENCE,
@@ -53,7 +55,7 @@ class ProfileShareLinkServiceTest {
         ProfileShareLinkResponse response = profileShareLinkService.createLink(12L);
         Instant after = Instant.now();
 
-        String token = response.sharePath().substring("/share/profile/".length());
+        String token = response.token();
         ArgumentCaptor<ProfileShareLink> saved = ArgumentCaptor.forClass(ProfileShareLink.class);
         verify(profileShareLinkRepository).save(saved.capture());
         assertThat(token).matches("[A-Za-z0-9_-]{43}");
@@ -61,6 +63,10 @@ class ProfileShareLinkServiceTest {
         assertThat(saved.getValue().getProfile()).isSameAs(profile);
         assertThat(saved.getValue().getTokenHash()).hasSize(64).isNotEqualTo(token);
         assertThat(response.expiresAt()).isBetween(before.plus(Duration.ofHours(3)), after.plus(Duration.ofHours(3)));
+
+        JsonNode body = new ObjectMapper().findAndRegisterModules().valueToTree(response);
+        assertThat(body.path("token").asText()).isEqualTo(token);
+        assertThat(body.has("sharePath")).isFalse();
     }
 
     @Test
