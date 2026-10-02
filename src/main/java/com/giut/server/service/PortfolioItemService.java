@@ -46,11 +46,17 @@ public class PortfolioItemService {
 
     @Transactional
     public PortfolioItemDto createPortfolioItem(Long userId, UpsertPortfolioItemRequest request) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
-        PortfolioItem portfolioItem = portfolioItemRepository.save(PortfolioItem.create(
+        List<PortfolioItem> showcaseItems = portfolioItemRepository
+                .findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(userId);
+        for (int index = showcaseItems.size() - 1; index >= 0; index--) {
+            showcaseItems.get(index).changeShowcaseOrder(index < 5 ? index + 2 : null);
+        }
+
+        PortfolioItem newItem = PortfolioItem.create(
                 user,
                 request.imageUrl(),
                 request.title(),
@@ -59,7 +65,9 @@ public class PortfolioItemService {
                 request.projectEndDate(),
                 request.teamSize(),
                 request.markdownContent()
-        ));
+        );
+        newItem.changeShowcaseOrder(1);
+        PortfolioItem portfolioItem = portfolioItemRepository.save(newItem);
 
         replaceSkillTags(portfolioItem, skillTags);
         return PortfolioItemDto.from(portfolioItem, skillTags.stream().map(ProfileTagSummaryResponse::from).toList());
@@ -163,7 +171,7 @@ public class PortfolioItemService {
     }
 
     private void validateDistinctOwnedPortfolioIds(List<PortfolioItem> portfolioItems, List<Long> requestedIds) {
-        if (requestedIds.contains(null)) {
+        if (requestedIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("공개 포트폴리오 ID에는 null을 넣을 수 없습니다.");
         }
         Set<Long> requestedIdSet = new HashSet<>(requestedIds);
@@ -189,7 +197,7 @@ public class PortfolioItemService {
 
     private List<ProfileTag> findSkillTags(List<Long> skillTagIds) {
         List<Long> requestedIds = skillTagIds == null ? List.of() : skillTagIds;
-        if (requestedIds.contains(null)) {
+        if (requestedIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("기술 스택 태그 ID에는 null을 넣을 수 없습니다.");
         }
 

@@ -1,5 +1,6 @@
 package com.giut.server.dto.profile.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
 import com.giut.server.entity.UserProfile;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,7 +16,8 @@ import java.util.List;
 
 @Schema(description = "내 프로필 전체 수정 요청. 이름과 성별은 변경하지 않습니다.")
 public record UpdateMyProfileRequest(
-        @Schema(description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
+        @Schema(name = "departmentname", description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
+        @JsonProperty("departmentname")
         @NotNull(message = "학과는 필수입니다.")
         UserProfile.DepartmentType department,
 

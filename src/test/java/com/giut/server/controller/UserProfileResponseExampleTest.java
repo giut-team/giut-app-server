@@ -30,6 +30,7 @@ class UserProfileResponseExampleTest {
         JsonNode root = new ObjectMapper().readTree(example);
         JsonNode profile = root.path("profile");
 
+        assertThat(profile.path("departmentName").asText()).isEqualTo("컴퓨터과학부");
         assertThat(profile.path("portfolioItems").size()).isGreaterThan(0);
         assertThat(profile.path("activityHistories").size()).isGreaterThan(0);
         assertThat(profile.has("department")).isFalse();
@@ -48,7 +49,8 @@ class UserProfileResponseExampleTest {
         String example = operation.requestBody().content()[0].examples()[0].value();
         JsonNode body = new ObjectMapper().readTree(example);
 
-        assertThat(body.path("department").asText()).isEqualTo("컴퓨터과학부");
+        assertThat(body.path("departmentname").asText()).isEqualTo("컴퓨터과학부");
+        assertThat(body.has("department")).isFalse();
         assertThat(body.path("experienceTagIds").isArray()).isTrue();
         assertThat(body.path("activityHistories").size()).isEqualTo(1);
         assertThat(body.has("nickname")).isFalse();
@@ -65,6 +67,8 @@ class UserProfileResponseExampleTest {
         JsonNode body = objectMapper.readTree(example);
         PutMyProfileRequest request = objectMapper.readValue(example, PutMyProfileRequest.class);
 
+        assertThat(body.path("department").asText()).isEqualTo("컴퓨터과학부");
+        assertThat(body.has("departmentname")).isFalse();
         assertThat(body.has("nickname")).isFalse();
         assertThat(body.has("gender")).isFalse();
         assertThat(request.activityHistories()).hasSize(1);

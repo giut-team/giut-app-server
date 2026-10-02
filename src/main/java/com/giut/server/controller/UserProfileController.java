@@ -140,6 +140,29 @@ public class UserProfileController {
             }
             """;
 
+    private static final String PROFILE_UPDATE_REQUEST_EXAMPLE = """
+            {
+              "departmentname": "컴퓨터과학부",
+              "primaryRoles": ["DEVELOPMENT", "PLANNING"],
+              "roles": ["BACKEND_DEVELOPER", "DATA_ANALYST"],
+              "activityStatus": "LOOKING_FOR_TEAM",
+              "grade": 3,
+              "profileImageUrl": "https://cdn.giut.com/profiles/12.png",
+              "bio": "백엔드와 AI 프로젝트에 관심이 있습니다.",
+              "searchable": true,
+              "skillTagIds": [1, 4],
+              "interestTagIds": [21, 25],
+              "experienceTagIds": [],
+              "activityHistories": [{
+                "category": "AWARD",
+                "title": "서울시 데이터 활용 공모전 우수상",
+                "organization": "서울특별시",
+                "startMonth": "2025-03",
+                "endMonth": "2025-06"
+              }]
+            }
+            """;
+
     private final UserProfileService userProfileService;
 
     @GetMapping("/me/profile")
@@ -272,7 +295,7 @@ public class UserProfileController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = UpdateMyProfileRequest.class),
-                            examples = @ExampleObject(value = PROFILE_WRITE_REQUEST_EXAMPLE)
+                            examples = @ExampleObject(value = PROFILE_UPDATE_REQUEST_EXAMPLE)
                     )
             )
     )

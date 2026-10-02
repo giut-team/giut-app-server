@@ -15,7 +15,7 @@ class UpdateMyProfileRequestTest {
     void acceptsKoreanDepartmentWithoutNicknameOrGender() throws Exception {
         String json = """
                 {
-                  "department": "컴퓨터과학부",
+                  "departmentname": "컴퓨터과학부",
                   "primaryRoles": ["DEVELOPMENT", "PLANNING"],
                   "roles": ["BACKEND_DEVELOPER", "DATA_ANALYST"],
                   "activityStatus": "LOOKING_FOR_TEAM",
@@ -39,6 +39,8 @@ class UpdateMyProfileRequestTest {
         UpdateMyProfileRequest request = objectMapper.readValue(json, UpdateMyProfileRequest.class);
 
         assertThat(request.department()).isEqualTo(UserProfile.DepartmentType.COMPUTER_SCIENCE);
+        assertThat(objectMapper.valueToTree(request).has("departmentname")).isTrue();
+        assertThat(objectMapper.valueToTree(request).has("department")).isFalse();
         assertThat(request.activityHistories()).hasSize(1);
         try (var factory = Validation.buildDefaultValidatorFactory()) {
             assertThat(factory.getValidator().validate(request)).isEmpty();
@@ -49,7 +51,7 @@ class UpdateMyProfileRequestTest {
     void requiresActivityHistoriesArrayForFullReplacement() throws Exception {
         String json = """
                 {
-                  "department": "컴퓨터과학부",
+                  "departmentname": "컴퓨터과학부",
                   "primaryRoles": ["DEVELOPMENT"],
                   "roles": ["BACKEND_DEVELOPER"],
                   "activityStatus": "LOOKING_FOR_TEAM",
