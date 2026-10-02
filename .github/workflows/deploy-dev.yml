@@ -114,4 +114,4 @@ jobs:
             --command-id "$COMMAND_ID" \
             --instance-id "$EC2_INSTANCE_ID" \
             --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}'
-          test "$STATUS" = Success
+          test "$STATUS" = Success 
