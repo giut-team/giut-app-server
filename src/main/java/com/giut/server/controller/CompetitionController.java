@@ -50,7 +50,7 @@ public class CompetitionController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicCompetitionListResponse.class),
-                            examples = @ExampleObject(value = "{\"competitions\":[{\"id\":1,\"title\":\"서울시 데이터 분석 공모전\",\"category\":\"WEB_MOBILE_IT\",\"categoryName\":\"웹/모바일/IT\",\"hostOrganization\":\"서울특별시\",\"summary\":\"공공 데이터를 활용한 서비스 아이디어 공모전입니다.\",\"applicationStartAt\":\"2026-09-15T00:00:00Z\",\"applicationEndAt\":\"2026-10-15T14:59:59Z\",\"recruitmentStatus\":\"OPEN\",\"recruitmentStatusName\":\"모집 중\",\"primaryUrl\":\"https://example.com/recruitment\"}],\"page\":0,\"size\":10,\"totalElements\":1,\"totalPages\":1,\"hasNext\":false}")
+                            examples = @ExampleObject(value = SwaggerExamples.COMPETITION_PAGE)
                     )
             ),
             @ApiResponse(responseCode = "400", description = "page, size 또는 필터 값 오류", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"size는 20 이하여야 합니다.\",\"code\":400}"))),
@@ -88,7 +88,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/{competitionId}")
-    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보와 URL을 조회합니다. 조회수는 이 요청마다 1 증가합니다.")
+    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL, 팀 목록과 전체·모집 중인 팀 수를 조회합니다. 조회수는 이 요청마다 1 증가합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_DETAIL))),

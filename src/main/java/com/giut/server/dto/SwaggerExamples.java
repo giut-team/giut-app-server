@@ -27,11 +27,64 @@ public final class SwaggerExamples {
             """;
 
     public static final String COMPETITION_LIST = """
-            [{"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","categoryName":"웹/모바일/IT","hostOrganization":"서울특별시","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","recruitmentStatus":"OPEN","recruitmentStatusName":"모집 중","viewCount":42,"scrapCount":8,"primaryUrl":"https://example.com/recruitment"}]
+            [{"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","categoryName":"웹/모바일/IT","hostOrganization":"서울특별시","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","recruitmentStatus":"OPEN","recruitmentStatusName":"모집 중","viewCount":42,"scrapCount":8,"teamCount":3,"primaryUrl":"https://example.com/recruitment"}]
+            """;
+
+    public static final String COMPETITION_PAGE = """
+            {
+              "competitions": [
+                {
+                  "id": 1,
+                  "title": "서울시 데이터 분석 공모전",
+                  "category": "WEB_MOBILE_IT",
+                  "categoryName": "웹/모바일/IT",
+                  "hostOrganization": "서울특별시",
+                  "summary": "공공 데이터 활용 아이디어 공모전",
+                  "applicationStartAt": "2026-09-15T00:00:00Z",
+                  "applicationEndAt": "2026-10-06T14:59:59Z",
+                  "recruitmentStatus": "OPEN",
+                  "recruitmentStatusName": "모집 중",
+                  "viewCount": 42,
+                  "scrapCount": 8,
+                  "teamCount": 3,
+                  "primaryUrl": "https://example.com/recruitment"
+                }
+              ],
+              "page": 0,
+              "size": 10,
+              "totalElements": 1,
+              "totalPages": 1,
+              "hasNext": false
+            }
             """;
 
     public static final String COMPETITION_DETAIL = """
-            {"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","categoryName":"웹/모바일/IT","hostOrganization":"서울특별시","targetParticipants":"전국 대학생","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","recruitmentStatus":"OPEN","recruitmentStatusName":"모집 중","viewCount":43,"scrapCount":8,"scrapped":true,"urls":[{"id":1,"type":"RECRUITMENT","url":"https://example.com/recruitment","primary":true}]}
+            {
+              "id": 1,
+              "title": "서울시 데이터 분석 공모전",
+              "category": "WEB_MOBILE_IT",
+              "categoryName": "웹/모바일/IT",
+              "hostOrganization": "서울특별시",
+              "targetParticipants": "전국 대학생",
+              "summary": "공공 데이터 활용 아이디어 공모전",
+              "applicationStartAt": "2026-09-15T00:00:00Z",
+              "applicationEndAt": "2026-10-06T14:59:59Z",
+              "recruitmentStatus": "OPEN",
+              "recruitmentStatusName": "모집 중",
+              "viewCount": 43,
+              "scrapCount": 8,
+              "scrapped": true,
+              "urls": [
+                {"id": 1, "type": "RECRUITMENT", "url": "https://example.com/recruitment", "primary": true}
+              ],
+              "teamCount": 3,
+              "recruitingTeamCount": 2,
+              "teams": [
+                {"teamId": 3, "name": "데이터로 서울을", "myTeam": true, "description": "서울의 공공데이터로 시민이 체감할 수 있는 서비스를 기획하고 있어요.", "maxMemberCount": 5, "currentMemberCount": 3, "status": "RECRUITING"},
+                {"teamId": 2, "name": "시립대 데이터랩", "myTeam": false, "description": "생활 문제를 해결할 서비스를 만들고 있어요.", "maxMemberCount": 4, "currentMemberCount": 2, "status": "RECRUITING"},
+                {"teamId": 1, "name": "공공데이터 연구팀", "myTeam": false, "description": "팀원 모집을 마쳤습니다.", "maxMemberCount": 5, "currentMemberCount": 5, "status": "CLOSED"}
+              ]
+            }
             """;
 
     public static final String ADMIN_COMPETITION = """
