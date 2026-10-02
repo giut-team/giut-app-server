@@ -2,6 +2,7 @@ package com.giut.server.controller;
 
 import com.giut.server.dto.ResultDto;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.request.UpdateMyProfileRequest;
 import com.giut.server.dto.profile.response.MyProfileResponse;
 import com.giut.server.service.UserProfileService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -116,6 +117,29 @@ public class UserProfileController {
             }
             """;
 
+    private static final String PROFILE_WRITE_REQUEST_EXAMPLE = """
+            {
+              "department": "컴퓨터과학부",
+              "primaryRoles": ["DEVELOPMENT", "PLANNING"],
+              "roles": ["BACKEND_DEVELOPER", "DATA_ANALYST"],
+              "activityStatus": "LOOKING_FOR_TEAM",
+              "grade": 3,
+              "profileImageUrl": "https://cdn.giut.com/profiles/12.png",
+              "bio": "백엔드와 AI 프로젝트에 관심이 있습니다.",
+              "searchable": true,
+              "skillTagIds": [1, 4],
+              "interestTagIds": [21, 25],
+              "experienceTagIds": [],
+              "activityHistories": [{
+                "category": "AWARD",
+                "title": "서울시 데이터 활용 공모전 우수상",
+                "organization": "서울특별시",
+                "startMonth": "2025-03",
+                "endMonth": "2025-06"
+              }]
+            }
+            """;
+
     private final UserProfileService userProfileService;
 
     @GetMapping("/me/profile")
@@ -162,7 +186,15 @@ public class UserProfileController {
     @PostMapping("/me/profile")
     @Operation(
             summary = "내 프로필 최초 생성",
-            description = "프로필 기본 정보와 선택한 activityHistories를 한 번에 등록합니다. 활동 이력은 생략하거나 빈 배열로 보낼 수 있습니다. 포트폴리오는 기존 전용 API로 등록합니다."
+            description = "로그인 사용자의 nickname을 이름으로 사용해 프로필을 생성합니다. 성별은 입력받지 않습니다. 활동 이력은 생략하거나 빈 배열로 보낼 수 있으며, 포트폴리오는 전용 API로 등록합니다.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PutMyProfileRequest.class),
+                            examples = @ExampleObject(value = PROFILE_WRITE_REQUEST_EXAMPLE)
+                    )
+            )
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -234,7 +266,15 @@ public class UserProfileController {
     @PutMapping("/me/profile")
     @Operation(
             summary = "내 프로필 전체 수정",
-            description = "이미 등록된 내 프로필의 기본 정보, 역할, 태그, 현재 상태 및 자기소개를 요청 본문 전체로 교체합니다. activityHistories는 보내지 말고 활동 이력 전용 API로 관리합니다."
+            description = "프로필 기본 정보·역할·태그·활동 이력 목록을 전체 교체합니다. 이름과 성별은 기존 값을 유지합니다. 활동 이력의 기존 ID는 유지되지 않습니다.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = UpdateMyProfileRequest.class),
+                            examples = @ExampleObject(value = PROFILE_WRITE_REQUEST_EXAMPLE)
+                    )
+            )
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -246,7 +286,7 @@ public class UserProfileController {
     })
     public ResponseEntity<MyProfileResponse> updateMyProfile(
             Authentication authentication,
-            @Valid @RequestBody PutMyProfileRequest request
+            @Valid @RequestBody UpdateMyProfileRequest request
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(userProfileService.updateMyProfile(userId, request));

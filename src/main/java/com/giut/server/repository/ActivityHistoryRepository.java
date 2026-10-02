@@ -11,4 +11,6 @@ public interface ActivityHistoryRepository extends JpaRepository<ActivityHistory
     List<ActivityHistory> findAllByUser_IdOrderByStartMonthDescEndMonthDescIdDesc(Long userId);
 
     Optional<ActivityHistory> findByIdAndUser_Id(Long activityHistoryId, Long userId);
+
+    void deleteByUser_Id(Long userId);
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.giut.server.dto.profile.request.PutMyProfileRequest;
+import com.giut.server.dto.profile.request.UpdateMyProfileRequest;
 import com.giut.server.dto.profile.request.PublicProfileSearchRequest;
 import com.giut.server.dto.profile.response.*;
 import com.giut.server.dto.profile.common.ActivityHistoryDto;
@@ -184,67 +185,62 @@ public class UserProfileService {
 
     @Transactional
     public MyProfileResponse createMyProfile(Long userId, PutMyProfileRequest request) {
-        return saveMyProfile(userId, request, true);
+        return saveMyProfile(userId, request);
     }
 
     @Transactional
-    public MyProfileResponse updateMyProfile(Long userId, PutMyProfileRequest request) {
-        return saveMyProfile(userId, request, false);
+    public MyProfileResponse updateMyProfile(Long userId, UpdateMyProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        UserProfile profile = userProfileRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다."));
+        List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
+        List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
+        String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
+
+        profile.update(
+                request.department(),
+                request.activityStatus(),
+                request.grade(),
+                profile.getGender(),
+                request.profileImageUrl(),
+                request.bio(),
+                request.searchable(),
+                primaryRolesJson
+        );
+        replaceRoles(profile, roles);
+        replaceTags(profile, request.skillTagIds(), request.interestTagIds(), request.experienceTagIds());
+        activityHistoryService.replaceForProfile(user, request.activityHistories());
+
+        return toMyProfileResponse(profile);
     }
 
-    private MyProfileResponse saveMyProfile(
-            Long userId,
-            PutMyProfileRequest request,
-            boolean creating
-    ) {
+    private MyProfileResponse saveMyProfile(Long userId, PutMyProfileRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
         String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
 
-        UserProfile profile = userProfileRepository.findById(userId).orElse(null);
-        if (creating && profile != null) {
+        if (userProfileRepository.findById(userId).isPresent()) {
             throw new ConflictException("이미 프로필이 등록되어 있습니다.");
         }
-        if (!creating && profile == null) {
-            throw new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다.");
-        }
-        if (!creating && request.activityHistories() != null) {
-            throw new IllegalArgumentException("활동 이력 수정은 활동 이력 전용 API를 이용해 주세요.");
-        }
 
-        if (creating) {
-            profile = userProfileRepository.save(UserProfile.create(
-                    user,
-                    request.department(),
-                    request.activityStatus(),
-                    request.grade(),
-                    request.gender(),
-                    request.profileImageUrl(),
-                    request.bio(),
-                    request.searchable(),
-                    primaryRolesJson
-            ));
-        } else {
-            profile.update(
-                    request.department(),
-                    request.activityStatus(),
-                    request.grade(),
-                    request.gender(),
-                    request.profileImageUrl(),
-                    request.bio(),
-                    request.searchable(),
-                    primaryRolesJson
-            );
-        }
+        UserProfile profile = userProfileRepository.save(UserProfile.create(
+                user,
+                request.department(),
+                request.activityStatus(),
+                request.grade(),
+                null,
+                request.profileImageUrl(),
+                request.bio(),
+                request.searchable(),
+                primaryRolesJson
+        ));
 
-        user.updateNickname(request.nickname());
         replaceRoles(profile, roles);
-        replaceTags(profile, request);
-        if (creating) {
-            activityHistoryService.createForProfile(user, request.activityHistories());
-        }
+        replaceTags(profile, request.skillTagIds(), request.interestTagIds(), request.experienceTagIds());
+        activityHistoryService.createForProfile(user, request.activityHistories());
 
         return toMyProfileResponse(profile);
     }
@@ -289,10 +285,15 @@ public class UserProfileService {
                 .toList());
     }
 
-    private void replaceTags(UserProfile profile, PutMyProfileRequest request) {
-        List<ProfileTag> allTags = new ArrayList<>(findTags(request.skillTagIds(), ProfileTag.TagType.SKILL));
-        allTags.addAll(findTags(request.interestTagIds(), ProfileTag.TagType.INTEREST));
-        allTags.addAll(findTags(request.experienceTagIds(), ProfileTag.TagType.EXPERIENCE));
+    private void replaceTags(
+            UserProfile profile,
+            List<Long> skillTagIds,
+            List<Long> interestTagIds,
+            List<Long> experienceTagIds
+    ) {
+        List<ProfileTag> allTags = new ArrayList<>(findTags(skillTagIds, ProfileTag.TagType.SKILL));
+        allTags.addAll(findTags(interestTagIds, ProfileTag.TagType.INTEREST));
+        allTags.addAll(findTags(experienceTagIds, ProfileTag.TagType.EXPERIENCE));
 
         userProfileTagRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileTagRepository.flush();
@@ -303,7 +304,7 @@ public class UserProfileService {
     }
 
     private List<ProfileTag> findTags(List<Long> tagIds, ProfileTag.TagType tagType) {
-        if (tagIds.contains(null)) {
+        if (tagIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("프로필 태그 ID에는 null을 넣을 수 없습니다.");
         }
 

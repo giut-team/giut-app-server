@@ -52,6 +52,16 @@ public class ActivityHistoryService {
                 .toList());
     }
 
+    void replaceForProfile(User user, List<ActivityHistoryDto> requests) {
+        if (requests == null) {
+            throw new IllegalArgumentException("활동 이력 목록은 필수입니다.");
+        }
+        requests.forEach(this::validatePeriod);
+        activityHistoryRepository.deleteByUser_Id(user.getId());
+        activityHistoryRepository.flush();
+        createForProfile(user, requests);
+    }
+
     @Transactional
     public ActivityHistoryDto updateActivityHistory(
             Long userId,
