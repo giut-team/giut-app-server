@@ -18,6 +18,7 @@ import com.giut.server.repository.ChatRoomMemberRepository;
 import com.giut.server.repository.ChatRoomRepository;
 import com.giut.server.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class ChatService {
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public ChatRoomResponse createPersonalChatRoom(Long userId, CreatePersonalChatRoomRequest request) {
@@ -71,7 +73,9 @@ public class ChatService {
         chatRoomMemberRepository.findByChatRoomIdAndUserId(chatRoom.getId(), userId)
                 .ifPresent(member -> member.updateLastReadMessage(message.getId()));
 
-        return ChatMessageResponse.from(message);
+        ChatMessageResponse response = ChatMessageResponse.from(message);
+        eventPublisher.publishEvent(new ChatMessageEvent(response));
+        return response;
     }
 
     @Transactional
@@ -186,6 +190,7 @@ public class ChatService {
         }
 
         message.delete();
+        eventPublisher.publishEvent(new ChatMessageEvent(ChatMessageResponse.from(message)));
     }
 
     private Long findOtherParticipantId(Long chatRoomId, Long userId) {
