@@ -7,6 +7,12 @@ TEST_ID="giut-nginx-check-$$"
 PROXY="$TEST_ID-proxy"
 BACKEND="$TEST_ID-backend"
 cleanup() {
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "Nginx smoke test failed; container logs follow." >&2
+    docker logs --tail 80 "$PROXY" >&2 || true
+    docker logs --tail 80 "$BACKEND" >&2 || true
+  fi
   docker rm -f "$PROXY" "$BACKEND" >/dev/null 2>&1 || true
   docker network rm "$TEST_ID" >/dev/null 2>&1 || true
   rm -rf "$TEST_DIR"
@@ -81,16 +87,32 @@ ln -s ../../archive/api.dev.giut.store/fullchain1.pem "$TEST_DIR/certs/live/api.
 docker exec "$PROXY" /docker-entrypoint.d/40-giut-config.sh
 docker exec "$PROXY" nginx -t
 docker exec "$PROXY" nginx -s reload
-# Wait for the new worker to accept HTTPS.
+# Reload is asynchronous. Check both listeners before asserting the new config.
+ready=false
+redirect_response=""
+tls_response=""
 for ((attempt = 1; attempt <= 30; attempt++)); do
-  if curl --noproxy '*' --max-time 2 -fsS \
+  redirect_response=$(curl --noproxy '*' --max-time 2 -sS \
+    -H 'Host: api.dev.giut.store' -o /dev/null \
+    -w '%{http_code}|%{redirect_url}' \
+    "http://127.0.0.1:$HTTP_PORT/v3/api-docs?probe=1" 2>/dev/null || true)
+  tls_response=$(curl --noproxy '*' --max-time 2 -fsS \
     --cacert "$TEST_DIR/certs/live/api.dev.giut.store/fullchain.pem" \
     --resolve "api.dev.giut.store:$HTTPS_PORT:127.0.0.1" \
-    "https://api.dev.giut.store:$HTTPS_PORT/v3/api-docs" >/dev/null 2>&1; then
+    "https://api.dev.giut.store:$HTTPS_PORT/v3/api-docs" 2>/dev/null || true)
+  if [ "$redirect_response" = '308|https://api.dev.giut.store/v3/api-docs?probe=1' ] &&
+     [ "$tls_response" = 'https|api.dev.giut.store|443' ]; then
+    ready=true
     break
   fi
   sleep 1
 done
+if [ "$ready" != true ]; then
+  echo "Timed out waiting for the reloaded HTTP and HTTPS configuration." >&2
+  echo "HTTP status|redirect: $redirect_response" >&2
+  echo "HTTPS forwarded headers: $tls_response" >&2
+  exit 1
+fi
 
 python3 - "$HTTP_PORT" "$HTTPS_PORT" "$TEST_DIR/certs/live/api.dev.giut.store/fullchain.pem" <<'PY'
 import http.client, socket, ssl, sys
@@ -113,11 +135,17 @@ def request(path, tls=False, host="api.dev.giut.store", upgrade=False):
     return result
 
 status, headers, _ = request("/v3/api-docs?probe=1")
-assert status == 308 and headers["Location"] == "https://api.dev.giut.store/v3/api-docs?probe=1"
-assert request("/.well-known/acme-challenge/probe")[2].strip() == b"challenge-ok"
-assert request("/v3/api-docs", tls=True)[2] == b"https|api.dev.giut.store|443"
+assert status == 308 and headers.get("Location") == "https://api.dev.giut.store/v3/api-docs?probe=1", (
+    f"HTTP redirect: expected 308 with the dev HTTPS URL; got status={status}, headers={headers}")
+acme_response = request("/.well-known/acme-challenge/probe")
+assert acme_response[0] == 200 and acme_response[2].strip() == b"challenge-ok", (
+    f"ACME challenge response: {acme_response}")
+tls_response = request("/v3/api-docs", tls=True)
+assert tls_response[0] == 200 and tls_response[2] == b"https|api.dev.giut.store|443", (
+    f"HTTPS forwarded headers response: {tls_response}")
 status, headers, _ = request("/ws/chat", tls=True, upgrade=True)
-assert status == 101 and headers.get("Upgrade", "").lower() == "websocket"
+assert status == 101 and headers.get("Upgrade", "").lower() == "websocket", (
+    f"WebSocket upgrade: expected 101; got status={status}, headers={headers}")
 for tls in (False, True):
     try:
         request("/v3/api-docs", tls=tls, host="api.giut.store")
