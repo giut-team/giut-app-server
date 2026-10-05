@@ -15,13 +15,15 @@ public record TeamSummaryResponse(
         Short maxMemberCount,
         long currentMemberCount,
         Team.Status status,
-        Instant createdAt
+        Instant createdAt,
+        @Schema(description = "현재 사용자의 팀 북마크 여부", example = "true")
+        boolean scrapped
 ) {
-    public static TeamSummaryResponse of(Team team, long currentMemberCount) {
+    public static TeamSummaryResponse of(Team team, long currentMemberCount, boolean scrapped) {
         return new TeamSummaryResponse(
                 team.getId(), team.getCompetition().getId(), team.getLeader().getId(),
                 team.getName(), team.getActivityMode(), team.getMaxMemberCount(),
-                currentMemberCount, team.getStatus(), team.getCreatedAt()
+                currentMemberCount, team.getStatus(), team.getCreatedAt(), scrapped
         );
     }
 }

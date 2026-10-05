@@ -48,6 +48,9 @@ public record TeamDetailResponse(
         Instant createdAt,
 
         @Schema(description = "팀 지원서 질문 목록")
-        List<TeamApplicationQuestionResponse> applicationQuestions
+        List<TeamApplicationQuestionResponse> applicationQuestions,
+
+        @Schema(description = "현재 사용자의 팀 북마크 여부", example = "true")
+        boolean scrapped
 ) {
 }

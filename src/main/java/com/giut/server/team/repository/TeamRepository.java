@@ -33,6 +33,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     List<Team> findAllByLeader_Id(Long leaderUserId);
 
+    boolean existsByCompetition_IdAndLeader_IdAndStatus(
+            Long competitionId, Long leaderUserId, Team.Status status);
+
     Page<Team> findAllByCompetition_IdAndStatus(Long competitionId, Team.Status status, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
