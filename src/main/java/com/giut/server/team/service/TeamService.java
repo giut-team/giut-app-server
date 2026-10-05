@@ -38,6 +38,7 @@ import com.giut.server.team.repository.TeamApplicationRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamRepository;
 import com.giut.server.team.repository.TeamRecruitmentRepository;
+import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,7 @@ public class TeamService {
 
     private final TeamRepository teamRepository;
     private final TeamRecruitmentRepository teamRecruitmentRepository;
+    private final TeamScrapRepository teamScrapRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
     private final TeamApplicationQuestionRepository teamApplicationQuestionRepository;
@@ -71,7 +73,7 @@ public class TeamService {
     private final ProfileRoleRepository profileRoleRepository;
 
     @Transactional(readOnly = true)
-    public TeamPageResponse getRecruitingTeams(Long competitionId, int page, int size) {
+    public TeamPageResponse getRecruitingTeams(Long userId, Long competitionId, int page, int size) {
         int normalizedPage = Math.max(page, 0);
         int normalizedSize = size <= 0 ? 10 : Math.min(size, 20);
         Page<Team> teams = teamRepository.findAllByCompetition_IdAndStatus(
@@ -79,10 +81,15 @@ public class TeamService {
                 Team.Status.RECRUITING,
                 PageRequest.of(normalizedPage, normalizedSize, Sort.by(Sort.Direction.DESC, "id"))
         );
+        List<Long> teamIds = teams.getContent().stream().map(Team::getId).toList();
+        Set<Long> scrappedTeamIds = teamIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(teamScrapRepository.findScrappedTeamIds(userId, teamIds));
         List<TeamSummaryResponse> summaries = teams.getContent().stream()
                 .map(team -> TeamSummaryResponse.of(
                         team,
-                        teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE)
+                        teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE),
+                        scrappedTeamIds.contains(team.getId())
                 ))
                 .toList();
         return new TeamPageResponse(summaries, normalizedPage, normalizedSize,
@@ -91,12 +98,17 @@ public class TeamService {
 
     @Transactional
     public CreateTeamResponse createTeam(Long leaderUserId, CreateTeamRequest request) {
-        User leader = userRepository.findById(leaderUserId)
+        User leader = userRepository.findByIdForUpdate(leaderUserId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("팀장을 찾을 수 없습니다."));
 
         Competition competition = competitionRepository.findById(request.competitionId())
                 .orElseThrow(() -> new ResourceNotFoundException("대회를 찾을 수 없습니다."));
+
+        if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
+                competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
+            throw new ConflictException("이 공모전에 이미 모집 중인 팀이 있습니다.");
+        }
 
         Team team = teamRepository.save(Team.create(
                 competition,
@@ -125,7 +137,7 @@ public class TeamService {
     }
 
     @Transactional(readOnly = true)
-    public TeamDetailResponse getTeamDetail(Long teamId) {
+    public TeamDetailResponse getTeamDetail(Long teamId, Long userId) {
         Team team = findTeam(teamId);
         List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
                 teamId,
@@ -154,7 +166,8 @@ public class TeamService {
                 recruitments,
                 team.getStatus(),
                 team.getCreatedAt(),
-                applicationQuestions
+                applicationQuestions,
+                teamScrapRepository.existsByUser_IdAndTeam_Id(userId, teamId)
         );
     }
 
@@ -360,7 +373,7 @@ public class TeamService {
             throw new IllegalArgumentException("모집 중인 팀만 마감할 수 있습니다.");
         }
         team.closeRecruitment();
-        return getTeamDetail(teamId);
+        return getTeamDetail(teamId, leaderUserId);
     }
 
     private User findActiveUser(Long userId, String notFoundMessage) {

@@ -47,15 +47,17 @@ public class TeamController {
     private final TeamService teamService;
 
     @GetMapping
-    @Operation(summary = "공모전별 모집 중인 팀 목록 조회", description = "공모전 ID로 모집 중인 팀을 최신순으로 조회합니다.")
+    @Operation(summary = "공모전별 모집 중인 팀 목록 조회", description = "공모전 ID로 모집 중인 팀을 최신순으로 조회합니다. 현재 사용자의 북마크 여부를 포함합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponse(responseCode = "200", description = "팀 목록 조회 성공")
     public ResponseEntity<TeamPageResponse> getRecruitingTeams(
+            Authentication authentication,
             @RequestParam Long competitionId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(teamService.getRecruitingTeams(competitionId, page, size));
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.getRecruitingTeams(userId, competitionId, page, size));
     }
 
     @GetMapping("/applications/me")
@@ -70,7 +72,7 @@ public class TeamController {
     @PostMapping
     @Operation(
             summary = "팀 생성",
-            description = "대회에 참여할 팀을 생성합니다. 팀 생성 시 팀장은 팀원으로 자동 등록됩니다."
+            description = "대회에 참여할 팀을 생성합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -99,6 +101,11 @@ public class TeamController {
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 대회를 찾을 수 없습니다.\",\"code\":404}"))
             ),
             @ApiResponse(
+                    responseCode = "409",
+                    description = "같은 공모전에 이미 모집 중인 팀이 있음",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"이 공모전에 이미 모집 중인 팀이 있습니다.\",\"code\":409}"))
+            ),
+            @ApiResponse(
                     responseCode = "500",
                     description = "서버 내부 오류",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Internal server error\",\"code\":500}"))
@@ -115,7 +122,7 @@ public class TeamController {
     @GetMapping("/{teamId}")
     @Operation(
             summary = "팀 상세 조회",
-            description = "팀의 기본 정보, 현재 팀원 수, 모집 상태와 지원서 질문을 조회합니다."
+            description = "팀의 기본 정보, 현재 팀원 수, 모집 상태, 지원서 질문과 현재 사용자의 북마크 여부를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -125,14 +132,18 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}],\"scrapped\":true}")
                     )
             ),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
     })
-    public ResponseEntity<TeamDetailResponse> getTeamDetail(@PathVariable Long teamId) {
-        return ResponseEntity.ok(teamService.getTeamDetail(teamId));
+    public ResponseEntity<TeamDetailResponse> getTeamDetail(
+            Authentication authentication,
+            @PathVariable Long teamId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.getTeamDetail(teamId, userId));
     }
 
     @GetMapping("/{teamId}/members")
