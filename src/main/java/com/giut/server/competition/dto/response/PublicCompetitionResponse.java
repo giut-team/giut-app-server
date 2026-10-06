@@ -18,7 +18,7 @@ public record PublicCompetitionResponse(
         String recruitmentStatusName,
         long viewCount,
         long scrapCount,
-        @Schema(description = "이 공모전에 연결된 전체 팀 수", example = "5")
+        @Schema(description = "RECRUITING 상태의 팀 수. 공모전 마감일과 무관하게 팀 상태만 확인합니다.", example = "2")
         long teamCount,
         String primaryUrl
 ) {

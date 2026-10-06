@@ -22,11 +22,11 @@ public record PublicCompetitionDetailResponse(
         long scrapCount,
         boolean scrapped,
         List<CompetitionUrlResponse> urls,
-        @Schema(description = "이 공모전에 연결된 전체 팀 수", example = "5")
+        @Schema(description = "응답에 포함된 RECRUITING 상태의 팀 수. 공모전 마감일과 무관합니다.", example = "2")
         long teamCount,
-        @Schema(description = "모집 중인 팀 수", example = "4")
+        @Schema(description = "RECRUITING 상태의 팀 수. teamCount와 동일하며 공모전 마감일과 무관합니다.", example = "2")
         long recruitingTeamCount,
-        @Schema(description = "이 공모전에 연결된 팀 목록")
+        @Schema(description = "RECRUITING 상태의 팀 목록. 공모전 마감일과 무관하며, 해당 팀이 없으면 빈 배열입니다.")
         List<CompetitionTeamResponse> teams
 ) {
 
