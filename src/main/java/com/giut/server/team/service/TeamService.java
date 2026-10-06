@@ -288,6 +288,9 @@ public class TeamService {
         TeamMember teamMember = teamMemberRepository.save(
                 TeamMember.createMember(teamId, application.getUserId(), roleCode)
         );
+        if (team.getMaxMemberCount() != null && activeMemberCount + 1 >= team.getMaxMemberCount()) {
+            team.closeRecruitment();
+        }
 
         return new ApproveTeamApplicationResponse(
                 application.getId(),
