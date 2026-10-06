@@ -157,6 +157,25 @@ class TeamServiceTest {
     }
 
     @Test
+    void approvalClosesRecruitmentWhenTeamBecomesFull() {
+        Team team = team(10L);
+        TeamApplication application = TeamApplication.create(1L, 11L, "BACKEND", "지원합니다.");
+        TeamRecruitment recruitment = TeamRecruitment.create(1L, "BACKEND", (short) 4);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+        when(teamApplicationRepository.findByIdAndTeamId(2L, 1L)).thenReturn(Optional.of(application));
+        when(teamRecruitmentRepository.findByTeamIdAndRoleCode(1L, "BACKEND"))
+                .thenReturn(Optional.of(recruitment));
+        when(teamMemberRepository.countByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
+                .thenReturn(3L);
+        when(teamMemberRepository.save(any(TeamMember.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        teamService.approveApplication(10L, 1L, 2L, "BACKEND");
+
+        assertEquals(Team.Status.CLOSED, team.getStatus());
+    }
+
+    @Test
     void approvalRejectsFilledRecruitment() {
         Team team = team(10L);
         TeamApplication application = TeamApplication.create(1L, 11L, "BACKEND", null);
