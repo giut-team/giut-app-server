@@ -25,10 +25,10 @@ import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.repository.CompetitionTeamRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
-import com.giut.server.team.repository.TeamRepository;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +55,7 @@ public class CompetitionService {
     private final CompetitionScrapRepository competitionScrapRepository;
     private final CompetitionUrlRepository competitionUrlRepository;
     private final CompetitionVerificationLogRepository competitionVerificationLogRepository;
-    private final TeamRepository teamRepository;
+    private final CompetitionTeamRepository competitionTeamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
@@ -124,6 +124,7 @@ public class CompetitionService {
 
     @Transactional
     public PublicCompetitionDetailResponse getPublishedCompetition(Long userId, Long competitionId) {
+        Instant now = Instant.now();
         findPublishedCompetition(competitionId);
         competitionRepository.incrementViewCount(competitionId);
 
@@ -133,7 +134,8 @@ public class CompetitionService {
         List<CompetitionUrlResponse> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId).stream()
                 .map(CompetitionUrlResponse::from)
                 .toList();
-        List<Team> competitionTeams = teamRepository.findAllByCompetition_IdOrderByIdDesc(competitionId);
+        List<Team> competitionTeams = competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(
+                competitionId, Team.Status.RECRUITING);
         Map<Long, Long> activeMemberCounts = competitionTeams.isEmpty()
                 ? Map.of()
                 : teamMemberRepository.countByTeamIdsAndStatus(
@@ -150,13 +152,11 @@ public class CompetitionService {
                         activeMemberCounts.getOrDefault(team.getId(), 0L)
                 ))
                 .toList();
-        long recruitingTeamCount = competitionTeams.stream()
-                .filter(team -> team.getStatus() == Team.Status.RECRUITING)
-                .count();
+        long recruitingTeamCount = competitionTeams.size();
 
         return PublicCompetitionDetailResponse.from(
                 competition,
-                recruitmentStatusOf(competition, Instant.now()),
+                recruitmentStatusOf(competition, now),
                 scrapCount,
                 scrapped,
                 urls,
@@ -380,9 +380,11 @@ public class CompetitionService {
         if (competitions.isEmpty()) {
             return Map.of();
         }
+        List<Long> competitionIds = competitions.stream().map(Competition::getId).toList();
 
         Map<Long, Long> teamCountByCompetitionId = new HashMap<>();
-        teamRepository.countByCompetitionIds(competitions.stream().map(Competition::getId).toList())
+        competitionTeamRepository.countByCompetitionIdsAndStatus(
+                        competitionIds, Team.Status.RECRUITING)
                 .forEach(count -> teamCountByCompetitionId.put(
                         count.getCompetitionId(),
                         count.getTeamCount()

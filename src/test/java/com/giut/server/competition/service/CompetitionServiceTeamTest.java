@@ -11,7 +11,7 @@ import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
-import com.giut.server.team.repository.TeamRepository;
+import com.giut.server.competition.repository.CompetitionTeamRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -38,7 +38,7 @@ class CompetitionServiceTeamTest {
     @Mock private CompetitionRepository competitionRepository;
     @Mock private CompetitionScrapRepository competitionScrapRepository;
     @Mock private CompetitionUrlRepository competitionUrlRepository;
-    @Mock private TeamRepository teamRepository;
+    @Mock private CompetitionTeamRepository competitionTeamRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @InjectMocks private CompetitionService competitionService;
 
@@ -46,11 +46,12 @@ class CompetitionServiceTeamTest {
     void publishedCompetitionDetailIncludesTeamsAndActiveMemberCounts() {
         publishedCompetition();
         Team newestTeam = team(3L, "새 팀", 12L, Team.Status.RECRUITING);
-        Team olderTeam = team(2L, "기존 팀", 15L, Team.Status.CLOSED);
+        Team olderTeam = team(2L, "기존 팀", 15L, Team.Status.RECRUITING);
         TeamMemberRepository.TeamMemberCount count = mock(TeamMemberRepository.TeamMemberCount.class);
         when(count.getTeamId()).thenReturn(3L);
         when(count.getMemberCount()).thenReturn(2L);
-        when(teamRepository.findAllByCompetition_IdOrderByIdDesc(1L)).thenReturn(List.of(newestTeam, olderTeam));
+        when(competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING))
+                .thenReturn(List.of(newestTeam, olderTeam));
         when(teamMemberRepository.countByTeamIdsAndStatus(List.of(3L, 2L), TeamMember.Status.ACTIVE))
                 .thenReturn(List.of(count));
 
@@ -63,15 +64,18 @@ class CompetitionServiceTeamTest {
         assertThat(response.teams()).extracting("maxMemberCount").containsExactly((short) 5, (short) 5);
         assertThat(response.teams()).extracting("currentMemberCount").containsExactly(2L, 0L);
         assertThat(response.teams()).extracting("status")
-                .containsExactly(Team.Status.RECRUITING, Team.Status.CLOSED);
+                .containsExactly(Team.Status.RECRUITING, Team.Status.RECRUITING);
         assertThat(response.teamCount()).isEqualTo(2);
-        assertThat(response.recruitingTeamCount()).isEqualTo(1);
+        assertThat(response.recruitingTeamCount()).isEqualTo(2);
+        verify(competitionTeamRepository)
+                .findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING);
     }
 
     @Test
     void detailReturnsEmptyTeamsWithoutCountingMembersWhenNoneExist() {
         publishedCompetition();
-        when(teamRepository.findAllByCompetition_IdOrderByIdDesc(1L)).thenReturn(List.of());
+        when(competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING))
+                .thenReturn(List.of());
 
         PublicCompetitionDetailResponse response = competitionService.getPublishedCompetition(12L, 1L);
 
@@ -88,10 +92,11 @@ class CompetitionServiceTeamTest {
         when(competition.getCategory()).thenReturn(Competition.Category.WEB_MOBILE_IT);
         when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(competition)));
-        TeamRepository.CompetitionTeamCount count = mock(TeamRepository.CompetitionTeamCount.class);
+        CompetitionTeamRepository.CompetitionTeamCount count = mock(CompetitionTeamRepository.CompetitionTeamCount.class);
         when(count.getCompetitionId()).thenReturn(1L);
         when(count.getTeamCount()).thenReturn(5L);
-        when(teamRepository.countByCompetitionIds(List.of(1L))).thenReturn(List.of(count));
+        when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L), Team.Status.RECRUITING))
+                .thenReturn(List.of(count));
 
         var response = competitionService.getPublishedCompetitions(
                 new CompetitionSearchRequest(null, null, null, null, null)
@@ -106,7 +111,7 @@ class CompetitionServiceTeamTest {
         assertThatThrownBy(() -> competitionService.getPublishedCompetition(12L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(teamRepository, never()).findAllByCompetition_IdOrderByIdDesc(any());
+        verify(competitionTeamRepository, never()).findAllByCompetition_IdAndStatusOrderByIdDesc(any(), any());
     }
 
     private Competition publishedCompetition() {

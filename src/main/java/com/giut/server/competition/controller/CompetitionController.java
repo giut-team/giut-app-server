@@ -40,7 +40,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "게시된 공모전을 페이지 단위로 조회합니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다."
+            description = "게시된 공모전을 페이지 단위로 조회합니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -88,7 +88,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/{competitionId}")
-    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL, 팀 목록과 전체·모집 중인 팀 수를 조회합니다. 조회수는 이 요청마다 1 증가합니다.")
+    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL과 모집 중인 팀 정보를 조회합니다. teams에는 RECRUITING 상태의 팀만 포함되며, teamCount와 recruitingTeamCount는 이 목록의 개수로 동일합니다. 팀 조회와 집계는 공모전 마감일과 무관합니다. 조회수는 이 요청마다 1 증가합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_DETAIL))),
