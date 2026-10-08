@@ -1,11 +1,7 @@
 package com.giut.server.team.controller;
 
 import com.giut.server.global.dto.ResultDto;
-import com.giut.server.team.dto.request.ApplyTeamRequest;
-import com.giut.server.team.dto.request.ApproveTeamApplicationRequest;
-import com.giut.server.team.dto.request.CreateTeamRequest;
-import com.giut.server.team.dto.request.RejectTeamApplicationRequest;
-import com.giut.server.team.dto.request.UpdateTeamRequest;
+import com.giut.server.team.dto.request.*;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
 import com.giut.server.team.dto.response.CreateTeamResponse;
 import com.giut.server.team.dto.response.TeamApplicationListResponse;
@@ -429,5 +425,60 @@ public class TeamController {
         return ResponseEntity.ok(teamService.rejectApplication(
                 userId, teamId, applicationId, request == null ? null : request.reason()
         ));
+    }
+
+    @PostMapping("/{teamId}/invitations")
+    @Operation(summary = "팀 합류 제안")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<TeamApplicationResponse> inviteUser(
+            Authentication authentication,
+            @PathVariable Long teamId,
+            @Valid @RequestBody CreateTeamInvitationRequest request
+    ) {
+        Long leaderUserId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                teamService.inviteUser(
+                        leaderUserId,
+                        teamId,
+                        request.inviteeUserId(),
+                        request.roleCode(),
+                        request.message()
+                )
+        );
+    }
+
+    @PostMapping("/{teamId}/invitations/{invitationId}/accept")
+    @Operation(summary = "팀 합류 제안 수락")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<ApproveTeamApplicationResponse> acceptInvitation(
+            Authentication authentication,
+            @PathVariable Long teamId,
+            @PathVariable Long invitationId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                teamService.acceptInvitation(
+                        userId, teamId, invitationId
+                )
+        );
+    }
+
+    @PostMapping("/{teamId}/invitations/{invitationId}/reject")
+    @Operation(summary = "팀 합류 제안 거절")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<TeamApplicationResponse> rejectInvitation(
+            Authentication authentication,
+            @PathVariable Long teamId,
+            @PathVariable Long invitationId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                teamService.rejectInvitation(
+                        userId, teamId, invitationId
+                )
+        );
     }
 }

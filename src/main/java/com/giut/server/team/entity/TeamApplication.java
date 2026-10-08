@@ -55,11 +55,20 @@ public class TeamApplication extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private Status status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Type type;
+
     @Column(name = "applied_at", nullable = false)
     private Instant appliedAt;
 
     @Column(name = "decided_at")
     private Instant decidedAt;
+
+    public enum Type {
+        APPLICATION, // 사용자가 팀에 지원
+        INVITATION // 팀장이 팀원에게 제안
+    }
 
     public enum Status {
         PENDING,
@@ -77,6 +86,15 @@ public class TeamApplication extends BaseTimeEntity {
         application.status = Status.PENDING;
         application.appliedAt = Instant.now();
         return application;
+    }
+
+    public static TeamApplication createInvitation(Long teamId, Long userId, String roleCode, String message) {
+
+        TeamApplication invitation = create(teamId, userId, roleCode, message);
+
+        invitation.type = Type.INVITATION;
+
+        return invitation;
     }
 
     public void approve(String assignedRoleCode) {

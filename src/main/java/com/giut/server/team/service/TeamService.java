@@ -298,47 +298,22 @@ public class TeamService {
 
     @Transactional
     public ApproveTeamApplicationResponse approveApplication(
-            Long leaderUserId, Long teamId, Long applicationId, String roleCode
+            Long leaderUserId,
+            Long teamId,
+            Long applicationId,
+            String roleCode
     ) {
         Team team = findTeamForUpdate(teamId);
         validateTeamLeader(team, leaderUserId);
 
-        if (team.getStatus() != Team.Status.RECRUITING) {
-            throw new IllegalArgumentException("모집 중인 팀의 신청만 승인할 수 있습니다.");
+        TeamApplication application =
+                findPendingApplication(teamId, applicationId);
+
+        if (application.getType() != TeamApplication.Type.APPLICATION) {
+            throw new ConflictException("참가 신청이 아닙니다.");
         }
 
-        TeamApplication application = findPendingApplication(teamId, applicationId);
-        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
-
-        if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(teamId, application.getUserId(), TeamMember.Status.ACTIVE)) {
-            throw new ConflictException("이미 참여 중인 사용자입니다.");
-        }
-
-        long activeMemberCount = teamMemberRepository.countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE);
-        if (team.getMaxMemberCount() != null && activeMemberCount >= team.getMaxMemberCount()) {
-            throw new ConflictException("팀 정원이 이미 마감되었습니다.");
-        }
-
-        if (countFilledRecruitment(recruitment) >= recruitment.getRequiredCount()) {
-            throw new IllegalArgumentException("해당 모집 분야의 정원이 이미 마감되었습니다.");
-        }
-
-        application.approve(roleCode);
-        TeamMember teamMember = teamMemberRepository.save(
-                TeamMember.createMember(teamId, application.getUserId(), roleCode)
-        );
-        if (team.getMaxMemberCount() != null && activeMemberCount + 1 >= team.getMaxMemberCount()) {
-            team.closeRecruitment();
-        }
-
-        return new ApproveTeamApplicationResponse(
-                application.getId(),
-                application.getTeamId(),
-                application.getUserId(),
-                application.getStatus(),
-                roleCode,
-                teamMember.getId()
-        );
+        return registerTeamMember(team, application, roleCode);
     }
 
     @Transactional
@@ -416,6 +391,156 @@ public class TeamService {
         }
         team.closeRecruitment();
         return getTeamDetail(teamId, leaderUserId);
+    }
+
+    @Transactional
+    public TeamApplicationResponse inviteUser(
+            Long leaderUserId,
+            Long teamId,
+            Long inviteeUserId,
+            String roleCode,
+            String message) {
+
+        Team team = findTeamForUpdate(teamId);
+
+        validateTeamLeader(team, leaderUserId);
+
+        if(team.getStatus() != Team.Status.RECRUITING) {
+            throw new ConflictException("모집 중인 팀만 제안할 수 있습니다.");
+        }
+
+        User user = findActiveUser(inviteeUserId, "사용자를 찾을 수 없습니다.");
+
+        if(leaderUserId.equals(user.getId())) {
+            throw new IllegalArgumentException("자기 자신에게 제안할 수 없습니다.");
+        }
+
+        if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(teamId, inviteeUserId, TeamMember.Status.ACTIVE)) {
+            throw new ConflictException("이미 팀원인 사용자입니다.");
+        }
+
+        if (teamApplicationRepository.existsByTeamIdAndUserIdAndStatus(
+                teamId, inviteeUserId, TeamApplication.Status.PENDING)) {
+            throw new ConflictException("이미 대기 중인 요청이 있습니다.");
+        }
+
+        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
+
+        if (countFilledRecruitment(recruitment) >= recruitment.getRequiredCount()) {
+            throw new ConflictException("해당 모집 분야가 마감되었습니다.");
+        }
+
+        TeamApplication invitation = TeamApplication.createInvitation(
+                teamId, inviteeUserId, roleCode, message
+        );
+
+        teamApplicationRepository.save(invitation);
+
+        return TeamApplicationResponse.of(invitation, List.of());
+    }
+
+    private ApproveTeamApplicationResponse registerTeamMember(
+            Team team,
+            TeamApplication application,
+            String roleCode
+    ) {
+        Long teamId = team.getId();
+
+        if (team.getStatus() != Team.Status.RECRUITING) {
+            throw new ConflictException("모집 중인 팀이 아닙니다.");
+        }
+
+        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
+
+        if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(
+                teamId, application.getUserId(), TeamMember.Status.ACTIVE)) {
+            throw new ConflictException("이미 참여 중인 사용자입니다.");
+        }
+
+        long activeMemberCount = teamMemberRepository
+                .countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE);
+
+        if (team.getMaxMemberCount() != null
+                && activeMemberCount >= team.getMaxMemberCount()) {
+            throw new ConflictException("팀 정원이 마감되었습니다.");
+        }
+
+        if (countFilledRecruitment(recruitment)
+                >= recruitment.getRequiredCount()) {
+            throw new ConflictException("모집 분야 정원이 마감되었습니다.");
+        }
+
+        application.approve(roleCode);
+
+        TeamMember member = teamMemberRepository.save(
+                TeamMember.createMember(
+                        teamId, application.getUserId(), roleCode
+                )
+        );
+
+        if (team.getMaxMemberCount() != null
+                && activeMemberCount + 1 >= team.getMaxMemberCount()) {
+            team.closeRecruitment();
+        }
+
+        return new ApproveTeamApplicationResponse(
+                application.getId(),
+                teamId,
+                application.getUserId(),
+                application.getStatus(),
+                roleCode,
+                member.getId()
+        );
+    }
+
+    @Transactional
+    public ApproveTeamApplicationResponse acceptInvitation(
+            Long userId,
+            Long teamId,
+            Long invitationId
+    ) {
+        Team team = findTeamForUpdate(teamId);
+
+        TeamApplication invitation =
+                findPendingApplication(teamId, invitationId);
+
+        if(invitation.getType() != TeamApplication.Type.INVITATION) {
+            throw new ConflictException("팀 합류 제안이 아닙니다.");
+        }
+
+        if (!invitation.getUserId().equals(userId)) {
+            throw new ForbiddenException("본인에게 온 제안만 수락할 수 있습니다.");
+        }
+
+        return registerTeamMember(
+                team,
+                invitation,
+                invitation.getRoleCode()
+        );
+    }
+
+    @Transactional
+    public TeamApplicationResponse rejectInvitation(
+            Long userId,
+            Long teamId,
+            Long invitationId
+    ) {
+        findTeamForUpdate(teamId);
+
+        TeamApplication invitation =
+                findPendingApplication(teamId, invitationId);
+
+        if (invitation.getType() != TeamApplication.Type.INVITATION) {
+            throw new ConflictException("팀 합류 제안이 아닙니다.");
+        }
+
+        if (!invitation.getUserId().equals(userId)) {
+            throw new ForbiddenException("본인에게 온 제안만 거절할 수 있습니다.");
+        }
+
+        invitation.reject(null);
+
+        return TeamApplicationResponse.of(invitation, List.of());
     }
 
     private User findActiveUser(Long userId, String notFoundMessage) {

@@ -15,4 +15,15 @@ public interface TeamApplicationRepository extends JpaRepository<TeamApplication
     List<TeamApplication> findAllByUserIdOrderByAppliedAtDesc(Long userId);
 
     Optional<TeamApplication> findByIdAndTeamId(Long id, Long teamId);
+
+    List<TeamApplication> findAllByTeamIdAndStatusAndType(
+            Long teamId,
+            TeamApplication.Status status,
+            TeamApplication.Type type
+    );
+
+    List<TeamApplication> findAllByUserIdAndTypeOrderByAppliedAtDesc(
+            Long userId,
+            TeamApplication.Type type
+    );
 }
