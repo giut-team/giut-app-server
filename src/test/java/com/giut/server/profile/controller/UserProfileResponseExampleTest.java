@@ -42,6 +42,8 @@ class UserProfileResponseExampleTest {
         assertThat(root.path("summary").path("scrapCount").asLong())
                 .isEqualTo(root.path("summary").path("competitionScrapCount").asLong()
                         + root.path("summary").path("teamScrapCount").asLong());
+        assertThat(root.path("summary").path("receivedRecommendationCount").asLong()).isEqualTo(7);
+        assertThat(root.path("summary").path("collaborationCount").asLong()).isEqualTo(4);
     }
 
     @Test

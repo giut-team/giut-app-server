@@ -2,6 +2,8 @@ package com.giut.server.profile.service;
 
 import com.giut.server.profile.dto.response.MyProfileResponse;
 import com.giut.server.profile.dto.response.MyProfileSummaryResponse;
+import com.giut.server.profile.repository.ProfileRecommendationRepository;
+import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.profile.dto.response.PortfolioItemListResponse;
 import com.giut.server.profile.dto.response.ProfileResponse;
 import com.giut.server.profile.dto.response.ProfileTagResponse;
@@ -90,6 +92,10 @@ public class UserProfileService {
     private final CompetitionScrapRepository competitionScrapRepository;
 
     private final TeamScrapRepository teamScrapRepository;
+
+    private final ProfileRecommendationRepository profileRecommendationRepository;
+
+    private final ProfileCollaborationRepository profileCollaborationRepository;
 
     private final ActivityHistoryRepository activityHistoryRepository;
 
@@ -359,7 +365,9 @@ public class UserProfileService {
                 teamMemberRepository.countByUserIdAndStatus(userId, TeamMember.Status.ACTIVE),
                 competitionScrapCount + teamScrapCount,
                 competitionScrapCount,
-                teamScrapCount
+                teamScrapCount,
+                profileRecommendationRepository.countByRecommendedUser_Id(userId),
+                profileCollaborationRepository.countParticipatedTeams(userId)
         );
     }
 

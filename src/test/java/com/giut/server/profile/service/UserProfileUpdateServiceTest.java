@@ -1,6 +1,8 @@
 package com.giut.server.profile.service;
 
 import com.giut.server.profile.dto.request.UpdateMyProfileRequest;
+import com.giut.server.profile.repository.ProfileRecommendationRepository;
+import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
@@ -50,6 +52,8 @@ class UserProfileUpdateServiceTest {
     @Mock private CompetitionScrapRepository competitionScrapRepository;
     @Mock private TeamScrapRepository teamScrapRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
+    @Mock private ProfileRecommendationRepository profileRecommendationRepository;
+    @Mock private ProfileCollaborationRepository profileCollaborationRepository;
     @InjectMocks private UserProfileService userProfileService;
 
     @Test
