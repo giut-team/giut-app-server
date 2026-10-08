@@ -2,8 +2,10 @@ package com.giut.server.team.service;
 
 import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ConflictException;
+import com.giut.server.global.exception.ResourceNotFoundException;
 
 import com.giut.server.team.dto.request.CreateTeamRequest;
+import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
 import com.giut.server.team.dto.response.TeamDetailResponse;
 import com.giut.server.team.dto.response.TeamPageResponse;
@@ -132,6 +134,108 @@ class TeamServiceTest {
         TeamDetailResponse response = teamService.getTeamDetail(1L, 15L);
 
         assertTrue(response.scrapped());
+    }
+
+    @Test
+    void leaderUpdatesTeamInformation() {
+        Team team = team(10L);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.countByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
+                .thenReturn(2L);
+        when(teamMemberRepository.findAllByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
+                .thenReturn(List.of());
+        when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
+                1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllByTeamIdOrderByIdAsc(1L)).thenReturn(List.of());
+
+        TeamDetailResponse response = teamService.updateTeam(
+                10L,
+                1L,
+                new UpdateTeamRequest(
+                        "수정된 팀",
+                        "수정된 소개",
+                        Team.ActivityMode.HYBRID,
+                        (short) 5,
+                        (short) 2,
+                        Team.MeetingPlace.SEOUL
+                )
+        );
+
+        assertEquals("수정된 팀", response.name());
+        assertEquals("수정된 소개", response.description());
+        assertEquals(Team.ActivityMode.HYBRID, response.activityMode());
+        assertEquals((short) 5, response.maxMemberCount());
+        assertEquals((short) 2, response.weeklyMeetingCount());
+        assertEquals(Team.MeetingPlace.SEOUL, response.meetingPlace());
+    }
+
+    @Test
+    void updateRejectsMemberLimitBelowCurrentMemberCount() {
+        Team team = team(10L);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.countByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
+                .thenReturn(4L);
+
+        assertThrows(ConflictException.class, () -> teamService.updateTeam(
+                10L,
+                1L,
+                new UpdateTeamRequest(
+                        "수정된 팀",
+                        null,
+                        Team.ActivityMode.ONLINE,
+                        (short) 3,
+                        (short) 1,
+                        Team.MeetingPlace.CAMPUS
+                )
+        ));
+    }
+
+    @Test
+    void nonLeaderCannotUpdateTeam() {
+        Team team = team(10L);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+
+        assertThrows(ForbiddenException.class, () -> teamService.updateTeam(
+                11L,
+                1L,
+                new UpdateTeamRequest(
+                        "수정된 팀",
+                        null,
+                        Team.ActivityMode.ONLINE,
+                        (short) 4,
+                        (short) 1,
+                        Team.MeetingPlace.CAMPUS
+                )
+        ));
+    }
+
+    @Test
+    void leaderArchivesTeamAndCancelsPendingApplications() {
+        Team team = team(10L);
+        TeamApplication first = TeamApplication.create(1L, 11L, "BACKEND", null);
+        TeamApplication second = TeamApplication.create(1L, 12L, "FRONTEND", null);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+        when(teamApplicationRepository.findAllByTeamIdAndStatus(1L, TeamApplication.Status.PENDING))
+                .thenReturn(List.of(first, second));
+
+        teamService.deleteTeam(10L, 1L);
+
+        assertEquals(Team.Status.ARCHIVED, team.getStatus());
+        assertEquals(TeamApplication.Status.CANCELED, first.getStatus());
+        assertEquals(TeamApplication.Status.CANCELED, second.getStatus());
+
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        assertThrows(ResourceNotFoundException.class, () -> teamService.getTeamDetail(1L, 10L));
+    }
+
+    @Test
+    void nonLeaderCannotDeleteTeam() {
+        Team team = team(10L);
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
+
+        assertThrows(ForbiddenException.class, () -> teamService.deleteTeam(11L, 1L));
+        assertEquals(Team.Status.RECRUITING, team.getStatus());
     }
 
     @Test
