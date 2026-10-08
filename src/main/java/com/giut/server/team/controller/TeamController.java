@@ -481,4 +481,27 @@ public class TeamController {
                 )
         );
     }
+
+    @GetMapping("/{teamId}/invitations")
+    @Operation(
+            summary = "팀장이 보낸 합류 제안 조회",
+            description = "해당 팀의 팀장이 보낸 모든 합류 제안을 최신순으로 조회합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "제안 목록 조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "팀장이 아닌 사용자"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    })
+    public ResponseEntity<TeamApplicationListResponse> getSentInvitations(
+            Authentication authentication,
+            @PathVariable Long teamId
+    ) {
+        Long leaderUserId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                teamService.getSentInvitations(leaderUserId, teamId)
+        );
+    }
 }

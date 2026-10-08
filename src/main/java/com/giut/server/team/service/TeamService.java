@@ -543,6 +543,31 @@ public class TeamService {
         return TeamApplicationResponse.of(invitation, List.of());
     }
 
+    @Transactional(readOnly = true)
+    public TeamApplicationListResponse getSentInvitations(
+            Long leaderUserId,
+            Long teamId
+    ) {
+        Team team = findTeam(teamId);
+
+        validateTeamLeader(team, leaderUserId);
+
+        List<TeamApplicationResponse> invitations =
+                teamApplicationRepository
+                        .findAllByTeamIdAndTypeOrderByAppliedAtDesc(
+                                teamId,
+                                TeamApplication.Type.INVITATION
+                        )
+                        .stream()
+                        .map(invitation -> TeamApplicationResponse.of(
+                                invitation,
+                                findAnswerResponses(invitation)
+                        ))
+                        .toList();
+
+        return new TeamApplicationListResponse(teamId, invitations);
+    }
+
     private User findActiveUser(Long userId, String notFoundMessage) {
         return userRepository.findById(userId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
