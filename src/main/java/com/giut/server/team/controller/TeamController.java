@@ -5,6 +5,7 @@ import com.giut.server.team.dto.request.ApplyTeamRequest;
 import com.giut.server.team.dto.request.ApproveTeamApplicationRequest;
 import com.giut.server.team.dto.request.CreateTeamRequest;
 import com.giut.server.team.dto.request.RejectTeamApplicationRequest;
+import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
 import com.giut.server.team.dto.response.CreateTeamResponse;
 import com.giut.server.team.dto.response.TeamApplicationListResponse;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -117,6 +119,50 @@ public class TeamController {
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(teamService.createTeam(userId, request));
+    }
+
+    @PutMapping("/{teamId}")
+    @Operation(
+            summary = "팀 정보 수정",
+            description = "팀장이 팀 이름, 소개, 활동 방식, 최대 팀원 수, 주간 회의 횟수와 만남 장소를 수정합니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "팀 정보 수정 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 요청값"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "403", description = "팀장이 아닌 사용자의 수정 요청"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "최대 팀원 수가 현재 팀원 수보다 작음")
+    })
+    public ResponseEntity<TeamDetailResponse> updateTeam(
+            Authentication authentication,
+            @PathVariable Long teamId,
+            @Valid @RequestBody UpdateTeamRequest request
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.updateTeam(userId, teamId, request));
+    }
+
+    @DeleteMapping("/{teamId}")
+    @Operation(
+            summary = "팀 삭제",
+            description = "팀장이 팀을 삭제합니다. 팀은 ARCHIVED 상태로 보관되며 대기 중인 참가 신청은 취소됩니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "팀 삭제 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
+            @ApiResponse(responseCode = "403", description = "팀장이 아닌 사용자의 삭제 요청"),
+            @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    })
+    public ResponseEntity<Void> deleteTeam(
+            Authentication authentication,
+            @PathVariable Long teamId
+    ) {
+        Long userId = Long.valueOf(authentication.getName());
+        teamService.deleteTeam(userId, teamId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{teamId}")

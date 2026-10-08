@@ -6,6 +6,7 @@ import com.giut.server.team.dto.request.ApplyTeamRequest;
 import com.giut.server.team.dto.request.CreateTeamQuestionRequest;
 import com.giut.server.team.dto.request.TeamApplicationAnswerRequest;
 import com.giut.server.team.dto.request.CreateTeamRecruitmentRequest;
+import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
 import com.giut.server.team.dto.response.CreateTeamResponse;
 import com.giut.server.team.dto.response.TeamApplicationAnswerResponse;
@@ -134,6 +135,44 @@ public class TeamService {
         );
 
         return CreateTeamResponse.of(team, recruitments, applicationQuestions);
+    }
+
+    @Transactional
+    public TeamDetailResponse updateTeam(Long leaderUserId, Long teamId, UpdateTeamRequest request) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, leaderUserId);
+
+        long activeMemberCount = teamMemberRepository.countByTeamIdAndStatus(
+                teamId, TeamMember.Status.ACTIVE
+        );
+        if (activeMemberCount > request.maxMemberCount()) {
+            throw new ConflictException("최대 팀원 수를 현재 팀원 수보다 작게 설정할 수 없습니다.");
+        }
+
+        team.updateInfo(
+                request.name(),
+                request.description(),
+                request.activityMode(),
+                request.maxMemberCount(),
+                request.weeklyMeetingCount(),
+                request.meetingPlace()
+        );
+        if (team.getStatus() == Team.Status.RECRUITING
+                && activeMemberCount >= request.maxMemberCount()) {
+            team.closeRecruitment();
+        }
+
+        return getTeamDetail(teamId, leaderUserId);
+    }
+
+    @Transactional
+    public void deleteTeam(Long leaderUserId, Long teamId) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, leaderUserId);
+
+        team.archive();
+        teamApplicationRepository.findAllByTeamIdAndStatus(teamId, TeamApplication.Status.PENDING)
+                .forEach(TeamApplication::cancel);
     }
 
     @Transactional(readOnly = true)
@@ -386,13 +425,22 @@ public class TeamService {
     }
 
     private Team findTeam(Long teamId) {
-        return teamRepository.findById(teamId)
+        Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
+        return requireAvailableTeam(team);
     }
 
     private Team findTeamForUpdate(Long teamId) {
-        return teamRepository.findByIdForUpdate(teamId)
+        Team team = teamRepository.findByIdForUpdate(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
+        return requireAvailableTeam(team);
+    }
+
+    private Team requireAvailableTeam(Team team) {
+        if (team.getStatus() == Team.Status.ARCHIVED) {
+            throw new ResourceNotFoundException("팀을 찾을 수 없습니다.");
+        }
+        return team;
     }
 
     private TeamRecruitment findRecruitment(Long teamId, String roleCode) {
@@ -418,7 +466,7 @@ public class TeamService {
 
     private void validateTeamLeader(Team team, Long userId) {
         if (!team.getLeader().getId().equals(userId)) {
-            throw new ForbiddenException("팀장만 참가 신청을 처리할 수 있습니다.");
+            throw new ForbiddenException("팀장만 팀을 관리할 수 있습니다.");
         }
     }
 

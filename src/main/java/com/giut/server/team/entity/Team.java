@@ -47,6 +47,26 @@ public class Team extends BaseTimeEntity {
         this.status = Status.CLOSED;
     }
 
+    public void updateInfo(
+            String name,
+            String description,
+            ActivityMode activityMode,
+            Short maxMemberCount,
+            Short weeklyMeetingCount,
+            MeetingPlace meetingPlace
+    ) {
+        this.name = name;
+        this.description = description;
+        this.activityMode = activityMode;
+        this.maxMemberCount = maxMemberCount;
+        this.weeklyMeetingCount = weeklyMeetingCount;
+        this.meetingPlace = meetingPlace;
+    }
+
+    public void archive() {
+        this.status = Status.ARCHIVED;
+    }
+
     public static Team create(
             Competition competition,
             User leader,
