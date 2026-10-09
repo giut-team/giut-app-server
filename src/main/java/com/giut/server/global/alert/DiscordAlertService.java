@@ -23,13 +23,22 @@ public class DiscordAlertService {
 
     private static final Logger logger = LoggerFactory.getLogger(DiscordAlertService.class);
     private static final long ALERT_COOLDOWN_MILLIS = Duration.ofMinutes(5).toMillis();
+    private static final long TEST_ALERT_COOLDOWN_MILLIS = Duration.ofSeconds(30).toMillis();
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(3);
 
     private final WebClient webClient;
     private final String webhookUrl;
     private final String environment;
     private final AtomicLong lastAlertAtMillis = new AtomicLong();
+    private final AtomicLong lastTestAlertAtMillis = new AtomicLong();
     private final AtomicInteger suppressedAlertCount = new AtomicInteger();
+
+    public enum TestAlertResult {
+        SENT,
+        NOT_CONFIGURED,
+        RATE_LIMITED,
+        FAILED
+    }
 
     public DiscordAlertService(
             WebClient webClient,
@@ -79,6 +88,52 @@ public class DiscordAlertService {
         } catch (RuntimeException error) {
             logger.warn("Discord 서버 오류 알림 요청을 시작하지 못했습니다 ({})",
                     error.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 개발 환경의 보호된 테스트 경로에서만 호출한다. 반환값 SENT는 Discord가 2xx 응답을 돌려준 경우에만 나온다.
+     */
+    public TestAlertResult sendTestAlert() {
+        if (webhookUrl == null || webhookUrl.isBlank()) {
+            return TestAlertResult.NOT_CONFIGURED;
+        }
+
+        long now = System.currentTimeMillis();
+        if (!claimTestAlertSlot(now)) {
+            return TestAlertResult.RATE_LIMITED;
+        }
+
+        Map<String, Object> payload = Map.of(
+                "content", "🧪 **기웃 Discord 연결 테스트**\n환경: " + environment
+                        + "\n이 메시지가 보이면 개발 서버에서 Discord webhook까지 연결된 것입니다.",
+                "allowed_mentions", Map.of("parse", List.of()));
+
+        try {
+            webClient.post()
+                    .uri(webhookUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(payload)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .timeout(REQUEST_TIMEOUT)
+                    .block(REQUEST_TIMEOUT.plusSeconds(1));
+            return TestAlertResult.SENT;
+        } catch (RuntimeException error) {
+            logger.warn("Discord 연결 테스트 전송 실패 ({})", error.getClass().getSimpleName());
+            return TestAlertResult.FAILED;
+        }
+    }
+
+    private boolean claimTestAlertSlot(long now) {
+        while (true) {
+            long previous = lastTestAlertAtMillis.get();
+            if (now - previous < TEST_ALERT_COOLDOWN_MILLIS) {
+                return false;
+            }
+            if (lastTestAlertAtMillis.compareAndSet(previous, now)) {
+                return true;
+            }
         }
     }
 

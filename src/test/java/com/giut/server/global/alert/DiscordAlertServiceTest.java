@@ -17,6 +17,61 @@ import org.springframework.web.servlet.HandlerMapping;
 class DiscordAlertServiceTest {
 
     @Test
+    void sendsAConfirmedTestMessageAndLimitsRepeatedTestRequests() throws Exception {
+        AtomicReference<String> receivedPayload = new AtomicReference<>();
+        AtomicInteger receivedCount = new AtomicInteger();
+
+        HttpServer mockDiscord = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mockDiscord.createContext("/webhook/test", exchange -> {
+            receivedPayload.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            receivedCount.incrementAndGet();
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        mockDiscord.start();
+
+        try {
+            String webhookUrl = "http://127.0.0.1:" + mockDiscord.getAddress().getPort() + "/webhook/test";
+            DiscordAlertService service = new DiscordAlertService(WebClient.create(), webhookUrl, "dev");
+
+            assertThat(service.sendTestAlert()).isEqualTo(DiscordAlertService.TestAlertResult.SENT);
+            assertThat(service.sendTestAlert()).isEqualTo(DiscordAlertService.TestAlertResult.RATE_LIMITED);
+            assertThat(receivedCount).hasValue(1);
+            assertThat(receivedPayload.get()).contains("기웃 Discord 연결 테스트", "환경: dev", "allowed_mentions");
+        } finally {
+            mockDiscord.stop(0);
+        }
+    }
+
+    @Test
+    void reportsMissingWebhookWithoutMakingANetworkRequest() {
+        DiscordAlertService service = new DiscordAlertService(WebClient.create(), " ", "dev");
+
+        assertThat(service.sendTestAlert()).isEqualTo(DiscordAlertService.TestAlertResult.NOT_CONFIGURED);
+    }
+
+    @Test
+    void reportsWebhookFailureWithoutExposingRemoteErrorBody() throws Exception {
+        HttpServer mockDiscord = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mockDiscord.createContext("/webhook/test", exchange -> {
+            byte[] body = "private remote response".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(500, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        mockDiscord.start();
+
+        try {
+            String webhookUrl = "http://127.0.0.1:" + mockDiscord.getAddress().getPort() + "/webhook/test";
+            DiscordAlertService service = new DiscordAlertService(WebClient.create(), webhookUrl, "dev");
+
+            assertThat(service.sendTestAlert()).isEqualTo(DiscordAlertService.TestAlertResult.FAILED);
+        } finally {
+            mockDiscord.stop(0);
+        }
+    }
+
+    @Test
     void postsSanitizedAlertAndSuppressesRepeatedErrors() throws Exception {
         AtomicReference<String> receivedPayload = new AtomicReference<>();
         AtomicInteger receivedCount = new AtomicInteger();
