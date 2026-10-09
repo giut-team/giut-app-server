@@ -34,6 +34,7 @@ public class UserProfileController {
     private static final String MY_PROFILE_GET_EXAMPLE = """
             {
               "profileCompleted": true,
+              "universityVerified": true,
               "profile": {
                 "userId": 12,
                 "nickname": "김민재",
@@ -89,6 +90,7 @@ public class UserProfileController {
     private static final String MY_PROFILE_CREATE_EXAMPLE = """
             {
               "profileCompleted": true,
+              "universityVerified": false,
               "profile": {
                 "userId": 12,
                 "nickname": "김민재",
@@ -204,7 +206,7 @@ public class UserProfileController {
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
-                                            value = "{\"profileCompleted\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0,\"receivedRecommendationCount\":0,\"collaborationCount\":0}}"
+                                            value = "{\"profileCompleted\":false,\"universityVerified\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0,\"receivedRecommendationCount\":0,\"collaborationCount\":0}}"
                                     )
                             }
                     )
