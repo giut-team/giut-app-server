@@ -84,6 +84,7 @@ public class TeamApplication extends BaseTimeEntity {
         application.roleCode = roleCode;
         application.message = message;
         application.status = Status.PENDING;
+        application.type = Type.APPLICATION;
         application.appliedAt = Instant.now();
         return application;
     }

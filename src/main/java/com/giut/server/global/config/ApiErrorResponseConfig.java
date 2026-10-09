@@ -54,8 +54,7 @@ public class ApiErrorResponseConfig {
                 if (!isPublic(path)) {
                     addError(responses, "401");
                 }
-                if (!isPublic(path) && (path.startsWith("/api/admin/")
-                        || path.startsWith("/api/chat-rooms/") || path.startsWith("/api/teams/"))) {
+                if (!isPublic(path) || path.startsWith("/api/profile/shares/")) {
                     addError(responses, "403");
                 }
                 if (hasResourceId(path)) {
