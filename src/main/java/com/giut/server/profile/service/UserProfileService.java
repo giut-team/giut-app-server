@@ -107,7 +107,10 @@ public class UserProfileService {
     public MyProfileResponse getMyProfile(Long userId) {
         return userProfileRepository.findById(userId)
                 .map(this::toMyProfileResponse)
-                .orElseGet(() -> MyProfileResponse.notCompleted(toMyProfileSummary(userId)));
+                .orElseGet(() -> MyProfileResponse.notCompleted(
+                        isUniversityVerified(userId),
+                        toMyProfileSummary(userId)
+                ));
     }
 
     /**
@@ -352,9 +355,16 @@ public class UserProfileService {
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
         return MyProfileResponse.completed(
+                profile.getUser().getUniversityVerifiedAt() != null,
                 toProfileResponse(profile, true),
                 toMyProfileSummary(profile.getUserId())
         );
+    }
+
+    private boolean isUniversityVerified(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> user.getUniversityVerifiedAt() != null)
+                .orElse(false);
     }
 
     private MyProfileSummaryResponse toMyProfileSummary(Long userId) {

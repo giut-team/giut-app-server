@@ -9,6 +9,8 @@ import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
+import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -25,6 +28,7 @@ import static org.mockito.Mockito.verify;
 class UserProfileServiceSummaryTest {
 
     @Mock private UserProfileRepository userProfileRepository;
+    @Mock private UserRepository userRepository;
     @Mock private PortfolioItemRepository portfolioItemRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private CompetitionScrapRepository competitionScrapRepository;
@@ -47,6 +51,7 @@ class UserProfileServiceSummaryTest {
         MyProfileResponse response = userProfileService.getMyProfile(12L);
 
         assertThat(response.profileCompleted()).isFalse();
+        assertThat(response.universityVerified()).isFalse();
         assertThat(response.profile()).isNull();
         assertThat(response.summary().portfolioCount()).isEqualTo(4);
         assertThat(response.summary().showcaseCount()).isEqualTo(3);
@@ -66,5 +71,19 @@ class UserProfileServiceSummaryTest {
         var response = userProfileService.getMyProfile(12L);
         assertThat(response.summary().receivedRecommendationCount()).isZero();
         assertThat(response.summary().collaborationCount()).isZero();
+    }
+
+    @Test
+    void reportsUniversityVerificationWhenProfileIsNotCompleted() {
+        User user = org.mockito.Mockito.mock(User.class);
+        when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
+        when(userRepository.findById(12L)).thenReturn(Optional.of(user));
+        when(user.getUniversityVerifiedAt()).thenReturn(LocalDateTime.parse("2026-10-09T12:00:00"));
+
+        MyProfileResponse response = userProfileService.getMyProfile(12L);
+
+        assertThat(response.profileCompleted()).isFalse();
+        assertThat(response.universityVerified()).isTrue();
+        assertThat(response.profile()).isNull();
     }
 }
