@@ -7,6 +7,7 @@ import com.giut.server.global.config.SecurityConfig;
 import com.giut.server.profile.dto.response.SeedDefaultProfileRolesResponse;
 import com.giut.server.profile.service.DefaultProfileRoleService;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,7 @@ class AdminProfileRoleControllerTest {
 
     @Test
     void adminAccessTokenCanSeedWithoutARequestBody() throws Exception {
+        when(context.getBean(UserRepository.class).existsByIdAndUniversityVerifiedAtIsNotNull(10L)).thenReturn(true);
         String token = jwtProvider.generateAccessToken(user(User.Role.ADMIN));
         when(service.seedDefaults(10L)).thenReturn(new SeedDefaultProfileRolesResponse(15L));
 
@@ -130,6 +132,11 @@ class AdminProfileRoleControllerTest {
         @Bean
         JwtProvider jwtProvider() {
             return new JwtProvider();
+        }
+
+        @Bean
+        UserRepository userRepository() {
+            return mock(UserRepository.class);
         }
 
         @Bean
