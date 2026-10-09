@@ -37,7 +37,7 @@ public class PublicProfileController {
     @GetMapping
     @Operation(
             summary = "전체 공개 프로필 조회",
-            description = "프로필 공개가 켜져 있고 현재 활동 상태가 휴식 중이 아닌 사용자 프로필을 페이지 단위로 조회합니다. 대표 역할, 세부 역할, 활동 상태, 학과, 기술 스택으로 필터링할 수 있으며 여러 필터는 AND 조건으로 적용됩니다. page는 0부터 시작하며 페이지당 5개로 고정됩니다."
+            description = "프로필 공개가 켜져 있고 현재 활동 상태가 휴식 중이 아닌 사용자 프로필을 페이지 단위로 조회합니다. 대표 역할, 세부 역할, 활동 상태, 학과, 학년, 기술 스택으로 필터링할 수 있으며 여러 필터는 AND 조건으로 적용됩니다. page는 0부터 시작하며 페이지당 5개로 고정됩니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -56,7 +56,7 @@ public class PublicProfileController {
             // 실패 응답
             @ApiResponse(
                     responseCode = "400",
-                    description = "page, skillTagId 또는 필터 값 오류",
+                    description = "page, grade, skillTagId 또는 필터 값 오류",
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ResultDto.class),

@@ -3,6 +3,7 @@ package com.giut.server.profile.dto.request;
 import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.profile.entity.UserProfile;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 
@@ -22,6 +23,11 @@ public record PublicProfileSearchRequest(
 
         @Schema(description = "학과명 또는 학과 코드", example = "컴퓨터과학부")
         String department,
+
+        @Schema(description = "학년", example = "3")
+        @Min(value = 1, message = "grade는 1 이상이어야 합니다.")
+        @Max(value = 5, message = "grade는 5 이하여야 합니다.")
+        Short grade,
 
         @Schema(description = "기술 스택 태그 ID", example = "1")
         @Positive(message = "skillTagId는 양수여야 합니다.")
