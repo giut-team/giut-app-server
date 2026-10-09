@@ -4,6 +4,8 @@ import com.giut.server.auth.security.JwtAuthenticationFilter;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.auth.security.UniversityVerificationAuthorizationFilter;
+import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +27,8 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+
+    private final UserRepository userRepository;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -56,6 +60,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new UniversityVerificationAuthorizationFilter(userRepository), JwtAuthenticationFilter.class)
                 .build();
     }
 

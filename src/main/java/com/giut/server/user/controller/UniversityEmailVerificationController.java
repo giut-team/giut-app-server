@@ -5,6 +5,7 @@ import com.giut.server.user.dto.request.UniversityEmailSendRequest;
 import com.giut.server.user.dto.request.UniversityEmailVerifyRequest;
 import com.giut.server.user.dto.response.UniversityEmailSendResponse;
 import com.giut.server.user.dto.response.UniversityEmailVerifyResponse;
+import com.giut.server.user.dto.response.UniversityEmailVerificationStatusResponse;
 import com.giut.server.auth.exception.AuthenticationFailedException;
 import com.giut.server.user.service.UniversityEmailVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,6 +33,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class UniversityEmailVerificationController {
 
     private final UniversityEmailVerificationService universityEmailVerificationService;
+
+    @GetMapping("/status")
+    @Operation(summary = "학교 이메일 인증 상태 조회", description = "인증 전 사용자도 이용할 수 있는 본인의 최소 인증 상태입니다.")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<UniversityEmailVerificationStatusResponse> getVerificationStatus(
+            Authentication authentication
+    ) {
+        Long memberId = getCurrentMemberId(authentication);
+        return ResponseEntity.ok(new UniversityEmailVerificationStatusResponse(
+                universityEmailVerificationService.isUniversityVerified(memberId)
+        ));
+    }
 
     @PostMapping("/send")
     @Operation(summary = "학교 이메일 인증코드 발송", description = "서울시립대 이메일(@uos.ac.kr)로 인증코드를 발송합니다.")
