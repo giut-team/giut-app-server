@@ -36,6 +36,13 @@ public class ProfileShareController {
         return ResponseEntity.status(201).body(profileShareLinkService.createLink(userId));
     }
 
+    @PostMapping("/api/users/{userId}/profile-share-links")
+    @Operation(summary = "다른 사용자 프로필 공유 링크 발급", description = "공개 프로필에 대해 3시간 동안 유효한 공유 토큰을 발급합니다. 비공개·휴식 중·비활성 사용자의 프로필은 공유할 수 없습니다. 반환된 token으로 공유 URL을 구성합니다.")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<ProfileShareLinkResponse> createLinkForProfile(@PathVariable Long userId) {
+        return ResponseEntity.status(201).body(profileShareLinkService.createLinkForPublicProfile(userId));
+    }
+
     @DeleteMapping("/api/users/me/profile-share-links/{linkId}")
     @Operation(summary = "내 프로필 공유 링크 해제")
     @SecurityRequirement(name = "JWT")

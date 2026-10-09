@@ -37,6 +37,22 @@ public class ProfileShareLinkService {
                 .filter(found -> found.getUser().getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("공유할 프로필을 찾을 수 없습니다."));
 
+        return createLink(profile);
+    }
+
+    @Transactional
+    public ProfileShareLinkResponse createLinkForPublicProfile(Long profileUserId) {
+        UserProfile profile = userProfileRepository.findById(profileUserId)
+                .filter(found -> found.getUser().getStatus() == User.Status.ACTIVE)
+                .filter(UserProfile::isSearchable)
+                .filter(found -> found.getActivityStatus() != UserProfile.ActivityStatus.RESTING)
+                .orElseThrow(() -> new ResourceNotFoundException("공유할 프로필을 찾을 수 없습니다."));
+
+        return createLink(profile);
+    }
+
+    private ProfileShareLinkResponse createLink(UserProfile profile) {
+
         byte[] tokenBytes = new byte[32];
         SECURE_RANDOM.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
