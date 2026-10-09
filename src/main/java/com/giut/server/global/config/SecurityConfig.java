@@ -7,7 +7,6 @@ import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.auth.security.UniversityVerificationAuthorizationFilter;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -49,7 +48,6 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/profile/shares/*").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

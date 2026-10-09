@@ -42,10 +42,24 @@ class UniversityVerificationAuthorizationFilterTest {
     void unverifiedUserCanReadCompetitionsWithoutDatabaseCheck() throws Exception {
         authenticateAsStudent("42");
 
-        var result = invoke("GET", "/api/competitions/12");
+        var listResult = invoke("GET", "/api/competitions");
+        var top5Result = invoke("GET", "/api/competitions/top5");
+        var closingSoonResult = invoke("GET", "/api/competitions/closing-soon");
+        var detailResult = invoke("GET", "/api/competitions/12");
 
-        assertThat(result.continued()).isTrue();
+        assertThat(listResult.continued()).isTrue();
+        assertThat(top5Result.continued()).isTrue();
+        assertThat(closingSoonResult.continued()).isTrue();
+        assertThat(detailResult.continued()).isTrue();
         verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void unverifiedUserCannotReadNonexistentCompetitionSubroutes() throws Exception {
+        authenticateAsStudent("42");
+        when(userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(42L)).thenReturn(false);
+
+        assertDenied(invoke("GET", "/api/competitions/internal-metrics"));
     }
 
     @Test
@@ -55,10 +69,12 @@ class UniversityVerificationAuthorizationFilterTest {
 
         var profileResult = invoke("GET", "/api/profile");
         var scrapResult = invoke("POST", "/api/competitions/12/scrap");
+        var sharedProfileResult = invoke("GET", "/api/profile/shares/share-token");
 
         assertDenied(profileResult);
         assertDenied(scrapResult);
-        verify(userRepository, times(2)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+        assertDenied(sharedProfileResult);
+        verify(userRepository, times(3)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
     }
 
     @Test
@@ -82,20 +98,22 @@ class UniversityVerificationAuthorizationFilterTest {
     }
 
     @Test
-    void adminAndAnonymousRequestsAreNotRestrictedByUniversityVerificationFilter() throws Exception {
+    void adminRoleDoesNotBypassUniversityVerificationButAnonymousIsHandledBySecurityConfig() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(
                         "1", "", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
                 )
         );
-        assertThat(invoke("GET", "/api/profile").continued()).isTrue();
+        when(userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(1L)).thenReturn(false);
+        assertDenied(invoke("GET", "/api/profile"));
 
         SecurityContextHolder.clearContext();
         assertThat(invoke("GET", "/api/profile").continued()).isTrue();
 
         authenticateAsStudent("42");
         assertThat(invoke("GET", "/swagger-ui/index.html").continued()).isTrue();
-        verifyNoInteractions(userRepository);
+        verify(userRepository).existsByIdAndUniversityVerifiedAtIsNotNull(1L);
+        verifyNoMoreInteractions(userRepository);
     }
 
     private void authenticateAsStudent(String userId) {

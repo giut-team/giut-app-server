@@ -56,18 +56,13 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
                 || authentication instanceof AnonymousAuthenticationToken) {
             return false;
         }
-        if (authentication.getAuthorities().stream().anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
-            return false;
-        }
-
         String path = request.getServletPath();
         String method = request.getMethod();
 
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
             return false;
         }
-        if (HttpMethod.GET.matches(method)
-                && ("/api/competitions".equals(path) || path.startsWith("/api/competitions/"))) {
+        if (HttpMethod.GET.matches(method) && isPublicCompetitionRead(path)) {
             return false;
         }
         if (HttpMethod.POST.matches(method)
@@ -76,6 +71,13 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
         return !(HttpMethod.GET.matches(method) && (UNIVERSITY_EMAIL_PATH + "/status").equals(path));
+    }
+
+    private boolean isPublicCompetitionRead(String path) {
+        return "/api/competitions".equals(path)
+                || "/api/competitions/top5".equals(path)
+                || "/api/competitions/closing-soon".equals(path)
+                || path.matches("/api/competitions/\\d+");
     }
 
     private Long parseUserId(String userId) {
