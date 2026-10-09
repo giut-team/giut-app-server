@@ -124,6 +124,7 @@ public class UserProfileService {
                 request.normalizedRole(),
                 request.activityStatus() == null ? null : request.activityStatus().name(),
                 request.departmentType() == null ? null : request.departmentType().name(),
+                request.grade(),
                 request.skillTagId(),
                 PageRequest.of(request.pageOrDefault(), PUBLIC_PROFILE_PAGE_SIZE)
         );
