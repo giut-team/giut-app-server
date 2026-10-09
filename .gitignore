@@ -91,6 +91,13 @@ temp/
 *.swp
 *.swo
 /spring-harness/
+/.harness/
+/AGENTS.md
+/CLAUDE.md
+/README_HARNESS.md
+/docs/harness/
+/tools/harness/
+/examples/harness-check.yml.template
 /gradle/
 /src/main/resources/db/
 !/src/main/resources/db/
@@ -105,10 +112,3 @@ temp/
 !/src/main/resources/db/seed/
 /src/main/resources/db/seed/*
 !/src/main/resources/db/seed/profile_roles.sql
-# Keep project harness docs visible despite a local .git/info/exclude rule
-# that ignores Markdown files globally.
-!/AGENTS.md
-!/CLAUDE.md
-!/README_HARNESS.md
-!/docs/harness/
-!/docs/harness/**/*.md
