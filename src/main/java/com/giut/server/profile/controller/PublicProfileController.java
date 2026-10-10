@@ -91,7 +91,7 @@ public class PublicProfileController {
     }
 
     @GetMapping("/{userId}")
-    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 활동 이력, 공개 포트폴리오를 포함한 상세 프로필을 조회합니다. 공개 포트폴리오는 노출 순서(showcaseOrder) 오름차순으로 반환됩니다.")
+    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 활동 이력, 공개 포트폴리오와 현재 응답 대기 중인 팀 합류 제안 수(receivedProposalCount)를 조회합니다. 공개 포트폴리오는 노출 순서(showcaseOrder) 오름차순으로 반환됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답

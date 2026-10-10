@@ -14,6 +14,7 @@ import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.profile.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.profile.repository.ProfileTagRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
+import com.giut.server.team.repository.TeamApplicationRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.profile.repository.UserProfileRoleRepository;
@@ -52,6 +53,7 @@ class UserProfileUpdateServiceTest {
     @Mock private CompetitionScrapRepository competitionScrapRepository;
     @Mock private TeamScrapRepository teamScrapRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
+    @Mock private TeamApplicationRepository teamApplicationRepository;
     @Mock private ProfileRecommendationRepository profileRecommendationRepository;
     @Mock private ProfileCollaborationRepository profileCollaborationRepository;
     @InjectMocks private UserProfileService userProfileService;
