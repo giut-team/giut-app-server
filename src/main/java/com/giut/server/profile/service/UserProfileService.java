@@ -27,6 +27,7 @@ import com.giut.server.profile.entity.ProfileTag;
 import com.giut.server.profile.entity.PortfolioItem;
 import com.giut.server.profile.entity.PortfolioItemRole;
 import com.giut.server.team.entity.TeamMember;
+import com.giut.server.team.entity.TeamApplication;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.profile.entity.UserProfileRole;
@@ -42,6 +43,7 @@ import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.profile.repository.PortfolioItemRoleRepository;
 import com.giut.server.profile.repository.PortfolioItemSkillTagRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
+import com.giut.server.team.repository.TeamApplicationRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.UserProfileRoleRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
@@ -88,6 +90,8 @@ public class UserProfileService {
     private final PortfolioItemRoleRepository portfolioItemRoleRepository;
 
     private final TeamMemberRepository teamMemberRepository;
+
+    private final TeamApplicationRepository teamApplicationRepository;
 
     private final CompetitionScrapRepository competitionScrapRepository;
 
@@ -171,6 +175,7 @@ public class UserProfileService {
         return new PublicProfileDetailResponse(
                 user.getNickname(),
                 user.getUniversityVerifiedAt() != null,
+                countReceivedPendingProposals(userId),
                 toProfileResponse(profile, false)
         );
     }
@@ -377,8 +382,17 @@ public class UserProfileService {
                 competitionScrapCount + teamScrapCount,
                 competitionScrapCount,
                 teamScrapCount,
+                countReceivedPendingProposals(userId),
                 profileRecommendationRepository.countByRecommendedUser_Id(userId),
                 profileCollaborationRepository.countParticipatedTeams(userId)
+        );
+    }
+
+    private long countReceivedPendingProposals(Long userId) {
+        return teamApplicationRepository.countByUserIdAndTypeAndStatus(
+                userId,
+                TeamApplication.Type.INVITATION,
+                TeamApplication.Status.PENDING
         );
     }
 

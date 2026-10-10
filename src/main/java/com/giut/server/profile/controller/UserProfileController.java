@@ -81,6 +81,7 @@ public class UserProfileController {
                 "scrapCount": 8,
                 "competitionScrapCount": 5,
                 "teamScrapCount": 3,
+                "receivedProposalCount": 2,
                 "receivedRecommendationCount": 7,
                 "collaborationCount": 4
               }
@@ -134,6 +135,7 @@ public class UserProfileController {
                 "scrapCount": 0,
                 "competitionScrapCount": 0,
                 "teamScrapCount": 0,
+                "receivedProposalCount": 0,
                 "receivedRecommendationCount": 0,
                 "collaborationCount": 0
               }
@@ -189,7 +191,7 @@ public class UserProfileController {
     private final UserProfileService userProfileService;
 
     @GetMapping("/me/profile")
-    @Operation(summary = "내 프로필 조회", description = "프로필·포트폴리오와 마이페이지 요약 개수를 함께 조회합니다. receivedRecommendationCount는 다른 사용자에게 받은 현재 추천 수이며 기존 scrapCount와 별개입니다. collaborationCount는 팀장으로 생성한 팀과 탈퇴·강퇴 기록도 포함한 서로 다른 참여 팀의 누적 개수입니다.")
+    @Operation(summary = "내 프로필 조회", description = "프로필·포트폴리오와 마이페이지 요약 개수를 함께 조회합니다. receivedProposalCount는 현재 응답을 기다리는 팀 합류 제안 수입니다. receivedRecommendationCount는 다른 사용자에게 받은 현재 추천 수이며 기존 scrapCount와 별개입니다. collaborationCount는 팀장으로 생성한 팀과 탈퇴·강퇴 기록도 포함한 서로 다른 참여 팀의 누적 개수입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -206,7 +208,7 @@ public class UserProfileController {
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
-                                            value = "{\"profileCompleted\":false,\"universityVerified\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0,\"receivedRecommendationCount\":0,\"collaborationCount\":0}}"
+                                            value = "{\"profileCompleted\":false,\"universityVerified\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0,\"receivedProposalCount\":0,\"receivedRecommendationCount\":0,\"collaborationCount\":0}}"
                                     )
                             }
                     )
