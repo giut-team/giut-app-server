@@ -15,12 +15,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/** Limits authenticated, unverified users to contest browsing and university verification. */
+/** Limits authenticated, unverified non-admin users to contest browsing and university verification. */
 @RequiredArgsConstructor
 public class UniversityVerificationAuthorizationFilter extends OncePerRequestFilter {
 
     private static final String UNIVERSITY_EMAIL_PATH = "/api/members/university-email";
-    private static final String DISCORD_ALERT_TEST_PATH = "/api/admin/alerts/discord/test";
     private static final String UNIVERSITY_VERIFICATION_REQUIRED =
             "학교 이메일 인증 후 이용할 수 있습니다.";
 
@@ -57,15 +56,13 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
                 || authentication instanceof AnonymousAuthenticationToken) {
             return false;
         }
+        if (isAdmin(authentication)) {
+            return false;
+        }
         String path = request.getServletPath();
         String method = request.getMethod();
 
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
-            return false;
-        }
-        // This dev-only endpoint sends a synthetic alert. Keep the ADMIN role check in SecurityConfig,
-        // but do not require university email verification just to verify the Discord integration.
-        if (HttpMethod.POST.matches(method) && DISCORD_ALERT_TEST_PATH.equals(path)) {
             return false;
         }
         if (HttpMethod.GET.matches(method) && isPublicCompetitionRead(path)) {
@@ -77,6 +74,11 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
         return !(HttpMethod.GET.matches(method) && (UNIVERSITY_EMAIL_PATH + "/status").equals(path));
+    }
+
+    private boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 
     private boolean isPublicCompetitionRead(String path) {

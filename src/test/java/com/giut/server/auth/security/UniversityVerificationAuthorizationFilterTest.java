@@ -100,46 +100,40 @@ class UniversityVerificationAuthorizationFilterTest {
     }
 
     @Test
-    void adminRoleDoesNotBypassUniversityVerificationButAnonymousIsHandledBySecurityConfig() throws Exception {
-        SecurityContextHolder.getContext().setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(
-                        "1", "", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
-                )
-        );
-        when(userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(1L)).thenReturn(false);
-        assertDenied(invoke("GET", "/api/profile"));
+    void adminRoleBypassesUniversityVerificationForAnyApi() throws Exception {
+        authenticateAsAdmin("1");
+
+        assertThat(invoke("GET", "/api/profile").continued()).isTrue();
+        assertThat(invoke("POST", "/api/admin/alerts/discord/test").continued()).isTrue();
+        verifyNoInteractions(userRepository);
 
         SecurityContextHolder.clearContext();
         assertThat(invoke("GET", "/api/profile").continued()).isTrue();
 
         authenticateAsStudent("42");
         assertThat(invoke("GET", "/swagger-ui/index.html").continued()).isTrue();
-        verify(userRepository).existsByIdAndUniversityVerifiedAtIsNotNull(1L);
         verifyNoMoreInteractions(userRepository);
     }
 
     @Test
-    void unverifiedAdminCanPassUniversityFilterForDiscordTestAlert() throws Exception {
+    void unverifiedStudentStillRequiresSchoolVerificationOnOtherMethodsAndPaths() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(
-                        "1", "", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
-                )
+                UsernamePasswordAuthenticationToken.authenticated("42", "",
+                        List.of(new SimpleGrantedAuthority("ROLE_STUDENT")))
         );
-
-        var result = invoke("POST", "/api/admin/alerts/discord/test");
-
-        assertThat(result.continued()).isTrue();
-        verifyNoInteractions(userRepository);
-    }
-
-    @Test
-    void unverifiedUserCannotUseDiscordTestEndpointWithDifferentMethodOrPath() throws Exception {
-        authenticateAsStudent("42");
         when(userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(42L)).thenReturn(false);
 
         assertDenied(invoke("GET", "/api/admin/alerts/discord/test"));
         assertDenied(invoke("POST", "/api/admin/alerts/discord/test/extra"));
         verify(userRepository, times(2)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+    }
+
+    private void authenticateAsAdmin(String userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(
+                        userId, "", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                )
+        );
     }
 
     private void authenticateAsStudent(String userId) {
