@@ -20,6 +20,7 @@ import java.io.IOException;
 public class UniversityVerificationAuthorizationFilter extends OncePerRequestFilter {
 
     private static final String UNIVERSITY_EMAIL_PATH = "/api/members/university-email";
+    private static final String DISCORD_ALERT_TEST_PATH = "/api/admin/alerts/discord/test";
     private static final String UNIVERSITY_VERIFICATION_REQUIRED =
             "학교 이메일 인증 후 이용할 수 있습니다.";
 
@@ -60,6 +61,11 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String method = request.getMethod();
 
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
+            return false;
+        }
+        // This dev-only endpoint sends a synthetic alert. Keep the ADMIN role check in SecurityConfig,
+        // but do not require university email verification just to verify the Discord integration.
+        if (HttpMethod.POST.matches(method) && DISCORD_ALERT_TEST_PATH.equals(path)) {
             return false;
         }
         if (HttpMethod.GET.matches(method) && isPublicCompetitionRead(path)) {

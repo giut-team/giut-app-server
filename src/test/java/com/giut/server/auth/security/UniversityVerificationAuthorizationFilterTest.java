@@ -118,6 +118,30 @@ class UniversityVerificationAuthorizationFilterTest {
         verifyNoMoreInteractions(userRepository);
     }
 
+    @Test
+    void unverifiedAdminCanPassUniversityFilterForDiscordTestAlert() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(
+                        "1", "", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                )
+        );
+
+        var result = invoke("POST", "/api/admin/alerts/discord/test");
+
+        assertThat(result.continued()).isTrue();
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void unverifiedUserCannotUseDiscordTestEndpointWithDifferentMethodOrPath() throws Exception {
+        authenticateAsStudent("42");
+        when(userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(42L)).thenReturn(false);
+
+        assertDenied(invoke("GET", "/api/admin/alerts/discord/test"));
+        assertDenied(invoke("POST", "/api/admin/alerts/discord/test/extra"));
+        verify(userRepository, times(2)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+    }
+
     private void authenticateAsStudent(String userId) {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(
