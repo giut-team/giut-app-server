@@ -4,6 +4,8 @@ import com.giut.server.auth.security.JwtAuthenticationFilter;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.auth.security.UniversityVerificationAuthorizationFilter;
+import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +28,8 @@ public class SecurityConfig {
 
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
+    private final UserRepository userRepository;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -35,6 +39,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/",
+                                "/actuator/health",
+                                "/actuator/health/**",
                                 "/api/admin/auth/signup",
                                 "/api/admin/auth/sign-up",
                                 "/api/admin/auth/login",
@@ -45,7 +51,7 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/profile/shares/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/profile/shares/{token}").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
@@ -56,6 +62,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new UniversityVerificationAuthorizationFilter(userRepository), JwtAuthenticationFilter.class)
                 .build();
     }
 

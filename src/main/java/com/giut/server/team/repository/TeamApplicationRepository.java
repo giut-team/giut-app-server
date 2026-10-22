@@ -27,6 +27,12 @@ public interface TeamApplicationRepository extends JpaRepository<TeamApplication
             TeamApplication.Type type
     );
 
+    long countByUserIdAndTypeAndStatus(
+            Long userId,
+            TeamApplication.Type type,
+            TeamApplication.Status status
+    );
+
     List<TeamApplication> findAllByTeamIdAndTypeOrderByAppliedAtDesc(
             Long teamId,
             TeamApplication.Type type

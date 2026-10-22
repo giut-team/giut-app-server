@@ -376,8 +376,10 @@ class TeamServiceTest {
         User leader = mock(User.class);
         when(leader.getId()).thenReturn(leaderId);
         Competition competition = mock(Competition.class);
-        return Team.create(competition, leader, "테스트 팀", null,
+        Team team = Team.create(competition, leader, "테스트 팀", null,
                 Team.ActivityMode.ONLINE, (short) 4, (short) 1, Team.MeetingPlace.CAMPUS);
+        ReflectionTestUtils.setField(team, "id", 1L);
+        return team;
     }
 
     private TeamMemberRepository.TeamMemberCount memberCount(Long teamId, long count) {

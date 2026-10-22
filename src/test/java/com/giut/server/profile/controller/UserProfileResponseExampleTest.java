@@ -42,6 +42,8 @@ class UserProfileResponseExampleTest {
         assertThat(root.path("summary").path("scrapCount").asLong())
                 .isEqualTo(root.path("summary").path("competitionScrapCount").asLong()
                         + root.path("summary").path("teamScrapCount").asLong());
+        assertThat(root.path("summary").path("receivedRecommendationCount").asLong()).isEqualTo(7);
+        assertThat(root.path("summary").path("collaborationCount").asLong()).isEqualTo(4);
     }
 
     @Test
@@ -52,7 +54,8 @@ class UserProfileResponseExampleTest {
         String example = operation.requestBody().content()[0].examples()[0].value();
         JsonNode body = new ObjectMapper().readTree(example);
 
-        assertThat(body.path("departmentname").asText()).isEqualTo("컴퓨터과학부");
+        assertThat(body.has("departmentname")).isFalse();
+        assertThat(body.has("departmentName")).isFalse();
         assertThat(body.has("department")).isFalse();
         assertThat(body.path("experienceTagIds").isArray()).isTrue();
         assertThat(body.path("activityHistories").size()).isEqualTo(1);

@@ -1,13 +1,21 @@
 package com.giut.server.profile.repository;
 
 import com.giut.server.profile.entity.UserProfile;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface UserProfileRepository extends JpaRepository<UserProfile, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from UserProfile p where p.userId = :userId")
+    Optional<UserProfile> findByIdForUpdate(@Param("userId") Long userId);
 
     @Query(
             value = """
@@ -31,6 +39,7 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
                       )
                       AND (:activityStatus IS NULL OR profile.activity_status = :activityStatus)
                       AND (:departmentType IS NULL OR profile.department_type = :departmentType)
+                      AND (:grade IS NULL OR profile.grade = :grade)
                       AND (
                           :skillTagId IS NULL
                           OR EXISTS (
@@ -65,6 +74,7 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
                       )
                       AND (:activityStatus IS NULL OR profile.activity_status = :activityStatus)
                       AND (:departmentType IS NULL OR profile.department_type = :departmentType)
+                      AND (:grade IS NULL OR profile.grade = :grade)
                       AND (
                           :skillTagId IS NULL
                           OR EXISTS (
@@ -87,6 +97,7 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
             @Param("roleCode") String roleCode,
             @Param("activityStatus") String activityStatus,
             @Param("departmentType") String departmentType,
+            @Param("grade") Short grade,
             @Param("skillTagId") Long skillTagId,
             Pageable pageable
     );

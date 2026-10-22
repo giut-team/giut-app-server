@@ -34,6 +34,7 @@ public class UserProfileController {
     private static final String MY_PROFILE_GET_EXAMPLE = """
             {
               "profileCompleted": true,
+              "universityVerified": true,
               "profile": {
                 "userId": 12,
                 "nickname": "김민재",
@@ -79,7 +80,10 @@ public class UserProfileController {
                 "myTeamCount": 2,
                 "scrapCount": 8,
                 "competitionScrapCount": 5,
-                "teamScrapCount": 3
+                "teamScrapCount": 3,
+                "receivedProposalCount": 2,
+                "receivedRecommendationCount": 7,
+                "collaborationCount": 4
               }
             }
             """;
@@ -87,6 +91,7 @@ public class UserProfileController {
     private static final String MY_PROFILE_CREATE_EXAMPLE = """
             {
               "profileCompleted": true,
+              "universityVerified": false,
               "profile": {
                 "userId": 12,
                 "nickname": "김민재",
@@ -129,7 +134,10 @@ public class UserProfileController {
                 "myTeamCount": 0,
                 "scrapCount": 0,
                 "competitionScrapCount": 0,
-                "teamScrapCount": 0
+                "teamScrapCount": 0,
+                "receivedProposalCount": 0,
+                "receivedRecommendationCount": 0,
+                "collaborationCount": 0
               }
             }
             """;
@@ -159,7 +167,6 @@ public class UserProfileController {
 
     private static final String PROFILE_UPDATE_REQUEST_EXAMPLE = """
             {
-              "departmentname": "컴퓨터과학부",
               "primaryRoles": ["DEVELOPMENT", "PLANNING"],
               "roles": ["BACKEND_DEVELOPER", "DATA_ANALYST"],
               "activityStatus": "LOOKING_FOR_TEAM",
@@ -183,7 +190,7 @@ public class UserProfileController {
     private final UserProfileService userProfileService;
 
     @GetMapping("/me/profile")
-    @Operation(summary = "내 프로필 조회", description = "프로필·포트폴리오와 마이페이지 요약 개수를 함께 조회합니다.")
+    @Operation(summary = "내 프로필 조회", description = "프로필·포트폴리오와 마이페이지 요약 개수를 함께 조회합니다. receivedProposalCount는 현재 응답을 기다리는 팀 합류 제안 수입니다. receivedRecommendationCount는 다른 사용자에게 받은 현재 추천 수이며 기존 scrapCount와 별개입니다. collaborationCount는 팀장으로 생성한 팀과 탈퇴·강퇴 기록도 포함한 서로 다른 참여 팀의 누적 개수입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -200,7 +207,7 @@ public class UserProfileController {
                                     ),
                                     @ExampleObject(
                                             name = "프로필 미등록",
-                                            value = "{\"profileCompleted\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0}}"
+                                            value = "{\"profileCompleted\":false,\"universityVerified\":false,\"profile\":null,\"summary\":{\"portfolioCount\":0,\"showcaseCount\":0,\"myTeamCount\":0,\"scrapCount\":0,\"competitionScrapCount\":0,\"teamScrapCount\":0,\"receivedProposalCount\":0,\"receivedRecommendationCount\":0,\"collaborationCount\":0}}"
                                     )
                             }
                     )
@@ -306,7 +313,7 @@ public class UserProfileController {
     @PutMapping("/me/profile")
     @Operation(
             summary = "내 프로필 전체 수정",
-            description = "프로필 기본 정보·역할·태그·활동 이력 목록을 전체 교체합니다. 이름과 성별은 기존 값을 유지합니다. 활동 이력의 기존 ID는 유지되지 않습니다.",
+            description = "프로필 기본 정보·역할·태그·활동 이력 목록을 전체 교체합니다. 이름, 성별, 학과는 기존 값을 유지합니다. 학과 변경은 관리자 전용 API로 처리합니다. 이전 클라이언트가 학과 필드를 보내더라도 무시합니다. 활동 이력의 기존 ID는 유지되지 않습니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(

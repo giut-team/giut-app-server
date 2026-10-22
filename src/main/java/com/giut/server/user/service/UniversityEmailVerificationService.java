@@ -50,6 +50,10 @@ public class UniversityEmailVerificationService {
         return new UniversityEmailSendResponse(universityEmail, expiresAt);
     }
 
+    public boolean isUniversityVerified(Long memberId) {
+        return userRepository.existsByIdAndUniversityVerifiedAtIsNotNull(memberId);
+    }
+
     @Transactional
     public UniversityEmailVerifyResponse verifyCode(Long memberId, UniversityEmailVerifyRequest request) {
         String universityEmail = request.getUniversityEmail();

@@ -2,6 +2,8 @@ package com.giut.server.profile.service;
 
 import com.giut.server.profile.dto.response.MyProfileResponse;
 import com.giut.server.profile.dto.response.MyProfileSummaryResponse;
+import com.giut.server.profile.repository.ProfileRecommendationRepository;
+import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.profile.dto.response.PortfolioItemListResponse;
 import com.giut.server.profile.dto.response.ProfileResponse;
 import com.giut.server.profile.dto.response.ProfileTagResponse;
@@ -25,6 +27,7 @@ import com.giut.server.profile.entity.ProfileTag;
 import com.giut.server.profile.entity.PortfolioItem;
 import com.giut.server.profile.entity.PortfolioItemRole;
 import com.giut.server.team.entity.TeamMember;
+import com.giut.server.team.entity.TeamApplication;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.profile.entity.UserProfileRole;
@@ -40,6 +43,7 @@ import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.profile.repository.PortfolioItemRoleRepository;
 import com.giut.server.profile.repository.PortfolioItemSkillTagRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
+import com.giut.server.team.repository.TeamApplicationRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.UserProfileRoleRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
@@ -87,9 +91,15 @@ public class UserProfileService {
 
     private final TeamMemberRepository teamMemberRepository;
 
+    private final TeamApplicationRepository teamApplicationRepository;
+
     private final CompetitionScrapRepository competitionScrapRepository;
 
     private final TeamScrapRepository teamScrapRepository;
+
+    private final ProfileRecommendationRepository profileRecommendationRepository;
+
+    private final ProfileCollaborationRepository profileCollaborationRepository;
 
     private final ActivityHistoryRepository activityHistoryRepository;
 
@@ -101,7 +111,10 @@ public class UserProfileService {
     public MyProfileResponse getMyProfile(Long userId) {
         return userProfileRepository.findById(userId)
                 .map(this::toMyProfileResponse)
-                .orElseGet(() -> MyProfileResponse.notCompleted(toMyProfileSummary(userId)));
+                .orElseGet(() -> MyProfileResponse.notCompleted(
+                        isUniversityVerified(userId),
+                        toMyProfileSummary(userId)
+                ));
     }
 
     /**
@@ -118,6 +131,7 @@ public class UserProfileService {
                 request.normalizedRole(),
                 request.activityStatus() == null ? null : request.activityStatus().name(),
                 request.departmentType() == null ? null : request.departmentType().name(),
+                request.grade(),
                 request.skillTagId(),
                 PageRequest.of(request.pageOrDefault(), PUBLIC_PROFILE_PAGE_SIZE)
         );
@@ -154,15 +168,25 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
-    public PublicProfileDetailResponse getPublicProfile(Long userId) {
+    public PublicProfileDetailResponse getPublicProfile(Long currentUserId, Long userId) {
         UserProfile profile = findPublicProfile(userId);
         User user = findActiveUser(userId);
 
         return new PublicProfileDetailResponse(
                 user.getNickname(),
                 user.getUniversityVerifiedAt() != null,
+                countReceivedPendingProposals(userId),
+                profileRecommendationRepository.existsByRecommender_IdAndRecommendedUser_Id(currentUserId, userId),
+                profileRecommendationRepository.countByRecommendedUser_Id(userId),
                 toProfileResponse(profile, false)
         );
+    }
+
+    /** 회원용 공유 링크 연결에서 응답 조립 없이 동일한 공개·활성 정책을 확인한다. */
+    @Transactional(readOnly = true)
+    public void validatePublicProfile(Long userId) {
+        findPublicProfile(userId);
+        findActiveUser(userId);
     }
 
     @Transactional(readOnly = true)
@@ -206,16 +230,15 @@ public class UserProfileService {
 
     @Transactional
     public MyProfileResponse updateMyProfile(Long userId, UpdateMyProfileRequest request) {
+        UserProfile profile = userProfileRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다."));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
-        UserProfile profile = userProfileRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다."));
         List<ProfileRole.PrimaryRole> primaryRoles = findPrimaryRoles(request.primaryRoles());
         List<ProfileRole> roles = findRoles(primaryRoles, request.roles());
         String primaryRolesJson = writeJson(primaryRoles.stream().map(Enum::name).toList());
 
         profile.update(
-                request.department(),
                 request.activityStatus(),
                 request.grade(),
                 profile.getGender(),
@@ -345,9 +368,16 @@ public class UserProfileService {
 
     private MyProfileResponse toMyProfileResponse(UserProfile profile) {
         return MyProfileResponse.completed(
+                profile.getUser().getUniversityVerifiedAt() != null,
                 toProfileResponse(profile, true),
                 toMyProfileSummary(profile.getUserId())
         );
+    }
+
+    private boolean isUniversityVerified(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> user.getUniversityVerifiedAt() != null)
+                .orElse(false);
     }
 
     private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
@@ -359,7 +389,18 @@ public class UserProfileService {
                 teamMemberRepository.countByUserIdAndStatus(userId, TeamMember.Status.ACTIVE),
                 competitionScrapCount + teamScrapCount,
                 competitionScrapCount,
-                teamScrapCount
+                teamScrapCount,
+                countReceivedPendingProposals(userId),
+                profileRecommendationRepository.countByRecommendedUser_Id(userId),
+                profileCollaborationRepository.countParticipatedTeams(userId)
+        );
+    }
+
+    private long countReceivedPendingProposals(Long userId) {
+        return teamApplicationRepository.countByUserIdAndTypeAndStatus(
+                userId,
+                TeamApplication.Type.INVITATION,
+                TeamApplication.Status.PENDING
         );
     }
 

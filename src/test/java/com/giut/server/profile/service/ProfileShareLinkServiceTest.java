@@ -70,6 +70,63 @@ class ProfileShareLinkServiceTest {
     }
 
     @Test
+    void createLinkForPublicProfileIssuesThreeHourToken() {
+        User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-13");
+        UserProfile profile = UserProfile.create(
+                user, UserProfile.DepartmentType.COMPUTER_SCIENCE,
+                UserProfile.ActivityStatus.LOOKING_FOR_TEAM, (short) 3, null,
+                null, null, true, "[\"DEVELOPMENT\"]"
+        );
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profileShareLinkRepository.save(any(ProfileShareLink.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Instant before = Instant.now();
+        ProfileShareLinkResponse response = profileShareLinkService.createLinkForPublicProfile(13L);
+        Instant after = Instant.now();
+
+        ArgumentCaptor<ProfileShareLink> saved = ArgumentCaptor.forClass(ProfileShareLink.class);
+        verify(profileShareLinkRepository).save(saved.capture());
+        assertThat(response.token()).matches("[A-Za-z0-9_-]{43}");
+        assertThat(saved.getValue().getProfile()).isSameAs(profile);
+        assertThat(saved.getValue().getTokenHash()).hasSize(64).isNotEqualTo(response.token());
+        assertThat(response.expiresAt()).isBetween(before.plus(Duration.ofHours(3)), after.plus(Duration.ofHours(3)));
+    }
+
+    @Test
+    void createLinkForPublicProfileRejectsHiddenRestingAndInactiveProfiles() {
+        User activeUser = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-14");
+        UserProfile hiddenProfile = UserProfile.create(
+                activeUser, UserProfile.DepartmentType.COMPUTER_SCIENCE,
+                UserProfile.ActivityStatus.LOOKING_FOR_TEAM, (short) 3, null,
+                null, null, false, "[]"
+        );
+        UserProfile restingProfile = UserProfile.create(
+                activeUser, UserProfile.DepartmentType.COMPUTER_SCIENCE,
+                UserProfile.ActivityStatus.RESTING, (short) 3, null,
+                null, null, true, "[]"
+        );
+        User inactiveUser = mock(User.class);
+        when(inactiveUser.getStatus()).thenReturn(User.Status.SUSPENDED);
+        UserProfile inactiveProfile = UserProfile.create(
+                inactiveUser, UserProfile.DepartmentType.COMPUTER_SCIENCE,
+                UserProfile.ActivityStatus.LOOKING_FOR_TEAM, (short) 3, null,
+                null, null, true, "[]"
+        );
+        when(userProfileRepository.findById(14L)).thenReturn(Optional.of(hiddenProfile));
+        when(userProfileRepository.findById(15L)).thenReturn(Optional.of(restingProfile));
+        when(userProfileRepository.findById(16L)).thenReturn(Optional.of(inactiveProfile));
+
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(14L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(15L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(16L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(profileShareLinkRepository, never()).save(any(ProfileShareLink.class));
+    }
+
+    @Test
     void revokedLinkCannotReadSharedProfile() {
         ProfileShareLink link = ProfileShareLink.create(mock(UserProfile.class), "hash", Instant.now().plusSeconds(3600));
         ReflectionTestUtils.setField(link, "createdAt", Instant.now());

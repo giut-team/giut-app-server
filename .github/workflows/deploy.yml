@@ -25,13 +25,13 @@ jobs:
         run: |
           : "${PRODUCTION_HOST:?Set the production secret EC2_HOST}"
           [[ "$PRODUCTION_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
-          if [ "$PRODUCTION_HOST" = api.dev.giut.store ] || [ "$PRODUCTION_HOST" = 52.79.220.77 ]; then
+          if [ "$PRODUCTION_HOST" = api.dev.giut.store ] || [ "$PRODUCTION_HOST" = 54.116.56.48 ]; then
             echo "Refusing to deploy production to the development server." >&2
             exit 1
           fi
           RESOLVED_IPS=$(getent ahostsv4 "$PRODUCTION_HOST" | awk '{print $1}' | sort -u)
           test -n "$RESOLVED_IPS"
-          if [[ $'\n'"$RESOLVED_IPS"$'\n' == *$'\n52.79.220.77\n'* ]]; then
+          if [[ $'\n'"$RESOLVED_IPS"$'\n' == *$'\n54.116.56.48\n'* ]]; then
             echo "The production destination resolves to the development server." >&2
             exit 1
           fi
