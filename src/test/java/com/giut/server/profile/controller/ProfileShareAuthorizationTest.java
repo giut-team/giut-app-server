@@ -14,6 +14,7 @@ import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.profile.service.ProfileShareLinkService;
 import com.giut.server.profile.service.UserProfileService;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.service.UserBlockService;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
@@ -88,7 +89,7 @@ class ProfileShareAuthorizationTest {
     void validShareTokenAllowsAllViewersAndReturnsOnlyTheCard(String viewer) throws Exception {
         ProfileShareLink link = link(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
         when(links.findByTokenHash(anyString())).thenReturn(Optional.of(link));
-        when(profiles.getSharedProfile(12L)).thenReturn(new SharedProfileResponse(
+        when(profiles.getSharedProfile(org.mockito.ArgumentMatchers.nullable(Long.class), eq(12L))).thenReturn(new SharedProfileResponse(
                 "공유 회원", false, null, UserProfile.ActivityStatus.LOOKING_FOR_TEAM,
                 "팀 찾는 중", List.of(), "컴퓨터과학부", (short) 3, "소개", List.of()
         ));
@@ -106,7 +107,7 @@ class ProfileShareAuthorizationTest {
         String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(TOKEN.getBytes(StandardCharsets.US_ASCII)));
         verify(links).findByTokenHash(hash);
-        verify(profiles).getSharedProfile(12L);
+        verify(profiles).getSharedProfile("anonymous".equals(viewer) ? null : 42L, 12L);
         verifyNoInteractions(users);
     }
 
@@ -176,7 +177,7 @@ class ProfileShareAuthorizationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.userId").value(12));
-        verify(profiles).validatePublicProfile(12L);
+        verify(profiles).validatePublicProfile(42L, 12L);
         ProfileShareLink expiredLink = link(Instant.now().minusSeconds(3600), Instant.now().minusSeconds(1));
         when(links.findByTokenHash(anyString())).thenReturn(Optional.of(expiredLink));
         mockMvc.perform(asViewer(get(SHARE_URL + "/target"), "verified"))
@@ -219,6 +220,7 @@ class ProfileShareAuthorizationTest {
     static class TestConfig {
         @Bean JwtProvider jwtProvider() { return new JwtProvider(); }
         @Bean UserRepository userRepository() { return mock(UserRepository.class); }
+        @Bean UserBlockService userBlockService() { return mock(UserBlockService.class); }
         @Bean ProfileShareLinkRepository profileShareLinkRepository() { return mock(ProfileShareLinkRepository.class); }
         @Bean UserProfileRepository userProfileRepository() { return mock(UserProfileRepository.class); }
         @Bean UserProfileService userProfileService() { return mock(UserProfileService.class); }

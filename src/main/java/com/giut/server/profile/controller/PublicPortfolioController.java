@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -64,8 +65,8 @@ public class PublicPortfolioController {
             )
     })
     public ResponseEntity<PortfolioItemListResponse> getPublicPortfolioItems(
-            @PathVariable Long userId
+            @PathVariable Long userId, Authentication authentication
     ) {
-        return ResponseEntity.ok(userProfileService.getPublicPortfolioItems(userId));
+        return ResponseEntity.ok(userProfileService.getPublicPortfolioItems(Long.valueOf(authentication.getName()), userId));
     }
 }

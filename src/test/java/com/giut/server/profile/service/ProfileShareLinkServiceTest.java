@@ -6,6 +6,7 @@ import com.giut.server.profile.dto.response.ProfileShareLinkResponse;
 import com.giut.server.profile.dto.response.SharedProfileResponse;
 import com.giut.server.profile.entity.ProfileShareLink;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.service.UserBlockService;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.profile.repository.ProfileShareLinkRepository;
@@ -37,6 +38,7 @@ class ProfileShareLinkServiceTest {
     @Mock private ProfileShareLinkRepository profileShareLinkRepository;
     @Mock private UserProfileRepository userProfileRepository;
     @Mock private UserProfileService userProfileService;
+    @Mock private UserBlockService userBlockService;
     @InjectMocks private ProfileShareLinkService profileShareLinkService;
 
     @Test
@@ -82,7 +84,7 @@ class ProfileShareLinkServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         Instant before = Instant.now();
-        ProfileShareLinkResponse response = profileShareLinkService.createLinkForPublicProfile(13L);
+        ProfileShareLinkResponse response = profileShareLinkService.createLinkForPublicProfile(99L, 13L);
         Instant after = Instant.now();
 
         ArgumentCaptor<ProfileShareLink> saved = ArgumentCaptor.forClass(ProfileShareLink.class);
@@ -117,11 +119,11 @@ class ProfileShareLinkServiceTest {
         when(userProfileRepository.findById(15L)).thenReturn(Optional.of(restingProfile));
         when(userProfileRepository.findById(16L)).thenReturn(Optional.of(inactiveProfile));
 
-        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(14L))
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(99L, 14L))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(15L))
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(99L, 15L))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(16L))
+        assertThatThrownBy(() -> profileShareLinkService.createLinkForPublicProfile(99L, 16L))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(profileShareLinkRepository, never()).save(any(ProfileShareLink.class));
     }
@@ -133,9 +135,9 @@ class ProfileShareLinkServiceTest {
         link.revoke(Instant.now());
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
 
-        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43)))
+        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43), null))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(userProfileService, never()).getSharedProfile(any());
+        verify(userProfileService, never()).getSharedProfile(any(), any());
     }
 
     @Test
@@ -149,9 +151,9 @@ class ProfileShareLinkServiceTest {
                 "팀 찾는 중", java.util.List.of(), "컴퓨터과학부", (short) 3, "소개", java.util.List.of()
         );
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
-        when(userProfileService.getSharedProfile(12L)).thenReturn(expected);
+        when(userProfileService.getSharedProfile(null, 12L)).thenReturn(expected);
 
-        assertThat(profileShareLinkService.getSharedProfile("A".repeat(43))).isSameAs(expected);
+        assertThat(profileShareLinkService.getSharedProfile("A".repeat(43), null)).isSameAs(expected);
     }
 
     @Test
@@ -160,9 +162,9 @@ class ProfileShareLinkServiceTest {
         ReflectionTestUtils.setField(link, "createdAt", Instant.now().minusSeconds(3600));
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
 
-        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43)))
+        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43), null))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(userProfileService, never()).getSharedProfile(any());
+        verify(userProfileService, never()).getSharedProfile(any(), any());
     }
 
     @Test
@@ -171,9 +173,9 @@ class ProfileShareLinkServiceTest {
         ReflectionTestUtils.setField(link, "createdAt", Instant.now().minus(Duration.ofHours(4)));
         when(profileShareLinkRepository.findByTokenHash(anyString())).thenReturn(Optional.of(link));
 
-        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43)))
+        assertThatThrownBy(() -> profileShareLinkService.getSharedProfile("A".repeat(43), null))
                 .isInstanceOf(ResourceNotFoundException.class);
-        verify(userProfileService, never()).getSharedProfile(any());
+        verify(userProfileService, never()).getSharedProfile(any(), any());
     }
 
     @Test

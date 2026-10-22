@@ -5,6 +5,7 @@ import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.service.UserBlockService;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.profile.repository.ActivityHistoryRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.when;
 class UserProfileUpdateServiceTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private UserBlockService userBlockService;
     @Mock private UserProfileRepository userProfileRepository;
     @Mock private ProfileRoleRepository profileRoleRepository;
     @Mock private UserProfileRoleRepository userProfileRoleRepository;

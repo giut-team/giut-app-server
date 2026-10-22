@@ -49,6 +49,7 @@ import com.giut.server.profile.repository.UserProfileRoleRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.profile.repository.UserProfileTagRepository;
 import com.giut.server.user.repository.UserRepository;
+import com.giut.server.user.service.UserBlockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -72,6 +73,7 @@ public class UserProfileService {
     private final UserProfileRepository userProfileRepository;
 
     private final UserRepository userRepository;
+    private final UserBlockService userBlockService;
 
     private final UserProfileRoleRepository userProfileRoleRepository;
 
@@ -169,6 +171,7 @@ public class UserProfileService {
 
     @Transactional(readOnly = true)
     public PublicProfileDetailResponse getPublicProfile(Long currentUserId, Long userId) {
+        userBlockService.requireProfilesVisible(currentUserId, userId);
         UserProfile profile = findPublicProfile(userId);
         User user = findActiveUser(userId);
 
@@ -184,13 +187,15 @@ public class UserProfileService {
 
     /** 회원용 공유 링크 연결에서 응답 조립 없이 동일한 공개·활성 정책을 확인한다. */
     @Transactional(readOnly = true)
-    public void validatePublicProfile(Long userId) {
+    public void validatePublicProfile(Long currentUserId, Long userId) {
+        userBlockService.requireProfilesVisible(currentUserId, userId);
         findPublicProfile(userId);
         findActiveUser(userId);
     }
 
     @Transactional(readOnly = true)
-    public SharedProfileResponse getSharedProfile(Long userId) {
+    public SharedProfileResponse getSharedProfile(Long currentUserId, Long userId) {
+        userBlockService.requireProfilesVisible(currentUserId, userId);
         UserProfile profile = userProfileRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
         User user = userRepository.findById(userId)
@@ -203,7 +208,8 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
-    public PortfolioItemListResponse getPublicPortfolioItems(Long userId) {
+    public PortfolioItemListResponse getPublicPortfolioItems(Long currentUserId, Long userId) {
+        userBlockService.requireProfilesVisible(currentUserId, userId);
         findPublicProfile(userId);
         findActiveUser(userId);
 

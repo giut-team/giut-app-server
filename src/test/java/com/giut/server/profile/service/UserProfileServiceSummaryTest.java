@@ -18,6 +18,7 @@ import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.service.UserBlockService;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -40,6 +41,7 @@ class UserProfileServiceSummaryTest {
 
     @Mock private UserProfileRepository userProfileRepository;
     @Mock private UserRepository userRepository;
+    @Mock private UserBlockService userBlockService;
     @Mock private UserProfileRoleRepository userProfileRoleRepository;
     @Mock private UserProfileTagRepository userProfileTagRepository;
     @Mock private ProfileTagRepository profileTagRepository;
@@ -149,7 +151,7 @@ class UserProfileServiceSummaryTest {
         when(userRepository.findById(13L)).thenReturn(Optional.of(user));
         when(user.getStatus()).thenReturn(User.Status.ACTIVE);
 
-        userProfileService.validatePublicProfile(13L);
+        userProfileService.validatePublicProfile(12L, 13L);
 
         verify(userProfileRepository).findById(13L);
         verify(userRepository).findById(13L);
