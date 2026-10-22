@@ -152,8 +152,8 @@ class ProfileShareAuthorizationTest {
         List<MockHttpServletRequestBuilder> requests = List.of(
                 get("/api/profile"), get("/api/profile/12"), get("/api/profile/tags?type=SKILL"),
                 get("/api/profile/shares"), get(SHARE_URL + "/extra"),
-                get(SHARE_URL + "/target"), get("/api/profile/12/scrap"),
-                post("/api/profile/12/scrap"), delete("/api/profile/12/scrap"),
+                get(SHARE_URL + "/target"), get("/api/profile/12/recommendations"),
+                post("/api/profile/12/recommendations"), delete("/api/profile/12/recommendations"),
                 get("/api/profile/share/" + TOKEN), post(SHARE_URL), delete(SHARE_URL), head(SHARE_URL),
                 post("/api/users/me/profile-share-links"),
                 post("/api/users/12/profile-share-links"),
