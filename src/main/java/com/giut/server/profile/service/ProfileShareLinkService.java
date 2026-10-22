@@ -92,7 +92,7 @@ public class ProfileShareLinkService {
     public SharedProfileTargetResponse getSharedProfileTarget(String token) {
         Long userId = findActiveLink(token).getProfile().getUserId();
         // 공유 토큰이 회원용 상세 프로필의 공개 정책을 우회하지 않도록 한다.
-        userProfileService.getPublicProfile(userId);
+        userProfileService.validatePublicProfile(userId);
         return new SharedProfileTargetResponse(userId);
     }
 

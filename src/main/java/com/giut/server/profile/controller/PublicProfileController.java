@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -91,7 +92,7 @@ public class PublicProfileController {
     }
 
     @GetMapping("/{userId}")
-    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 활동 이력, 공개 포트폴리오와 현재 응답 대기 중인 팀 합류 제안 수(receivedProposalCount)를 조회합니다. 공개 포트폴리오는 노출 순서(showcaseOrder) 오름차순으로 반환됩니다.")
+    @Operation(summary = "공개 프로필 상세 조회", description = "기웃허브 목록에서 선택한 사용자의 역할, 전체 태그, 활동 이력, 공개 포트폴리오와 현재 응답 대기 중인 팀 합류 제안 수(receivedProposalCount)를 조회합니다. 현재 로그인 사용자의 추천 여부(recommended)와 대상이 받은 총 추천 수(recommendationCount)를 함께 반환하므로 추천 상태 API를 별도로 호출할 필요가 없습니다. 공개 포트폴리오는 노출 순서(showcaseOrder) 오름차순으로 반환됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -101,7 +102,7 @@ public class PublicProfileController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PublicProfileDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"profile\":{\"userId\":1,\"nickname\":\"김민재\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"portfolioItems\":[{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":4,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}],\"markdownContent\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"showcaseOrder\":1,\"representative\":true}],\"activityHistories\":[{\"id\":1,\"category\":\"AWARD\",\"categoryName\":\"수상\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]}}")
+                            examples = @ExampleObject(value = "{\"nickname\":\"김민재\",\"universityVerified\":true,\"receivedProposalCount\":2,\"recommended\":true,\"recommendationCount\":5,\"profile\":{\"userId\":1,\"nickname\":\"김민재\",\"departmentName\":\"컴퓨터과학부\",\"grade\":3,\"primaryRoles\":[{\"code\":\"DEVELOPMENT\",\"name\":\"개발\"}],\"activityStatusName\":\"팀 찾는 중\",\"profileImageUrl\":\"https://cdn.giut.com/profiles/1.png\",\"bio\":\"AI로 더 편리한 캠퍼스 서비스를 만들고 싶어요.\",\"searchable\":true,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"}],\"tags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\",\"relatedRoles\":[{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}]}],\"portfolioItems\":[{\"id\":1,\"imageUrl\":\"https://cdn.giut.com/portfolio/data-contest.png\",\"title\":\"서울시 데이터 공모전 발표\",\"caption\":\"데이터 정책부터 발표까지 맡았어요.\",\"projectStartDate\":\"2025-09-01\",\"projectEndDate\":\"2025-12-31\",\"teamSize\":4,\"roles\":[{\"code\":\"BACKEND_DEVELOPER\",\"name\":\"백엔드 개발자\"},{\"code\":\"DATA_ANALYST\",\"name\":\"데이터 분석\"}],\"markdownContent\":\"문제 정의와 데이터 분석, 발표 자료 제작을 담당했습니다.\",\"skillTags\":[{\"id\":1,\"type\":\"SKILL\",\"name\":\"Python\"}],\"showcaseOrder\":1,\"representative\":true}],\"activityHistories\":[{\"id\":1,\"category\":\"AWARD\",\"categoryName\":\"수상\",\"title\":\"서울시 데이터 활용 공모전 우수상\",\"organization\":\"서울특별시\",\"startMonth\":\"2025-03\",\"endMonth\":\"2025-06\"}]}}")
                     )
             ),
             // 실패 응답
@@ -127,8 +128,11 @@ public class PublicProfileController {
             )
     })
     public ResponseEntity<PublicProfileDetailResponse> getPublicProfile(
-            @PathVariable Long userId
+            @PathVariable Long userId,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(userProfileService.getPublicProfile(userId));
+        Long currentUserId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(userProfileService.getPublicProfile(currentUserId, userId));
     }
 }

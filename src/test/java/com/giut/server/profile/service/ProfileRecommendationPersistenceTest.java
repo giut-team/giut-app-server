@@ -25,12 +25,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:h2:mem:giut_context;MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.url=jdbc:h2:mem:giut_recommendations;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        "jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "DISCORD_ALERT_WEBHOOK_URL="
 })
 @Transactional
 class ProfileRecommendationPersistenceTest {
@@ -50,6 +51,9 @@ class ProfileRecommendationPersistenceTest {
         target = user("recommend-target", true);
         profiles.saveAndFlush(UserProfile.create(target, UserProfile.DepartmentType.COMPUTER_SCIENCE,
                 UserProfile.ActivityStatus.LOOKING_FOR_TEAM, (short) 3, null, null, "소개", true, "[]"));
+        // H2 JSON columns quote a JDBC String; insert a JSON array literal like MySQL would store it.
+        entityManager.createNativeQuery("UPDATE user_profiles SET primary_roles = JSON '[]' WHERE user_id = :userId")
+                .setParameter("userId", target.getId()).executeUpdate();
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     }
 
@@ -83,6 +87,67 @@ class ProfileRecommendationPersistenceTest {
         entityManager.flush();
         entityManager.clear();
         assertThat(recommendations.countByRecommendedUser_Id(target.getId())).isZero();
+    }
+
+    @Test
+    void publicDetailIncludesCurrentViewersRecommendationAndTotalWithoutSeparateStatusRequest() throws Exception {
+        String detailPath = "/api/profile/" + target.getId();
+        String recommendationPath = detailPath + "/recommendations";
+        mvc.perform(asUser(get(detailPath), viewer))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.recommended").value(false))
+                .andExpect(jsonPath("$.recommendationCount").value(0))
+                .andExpect(jsonPath("$.receivedProposalCount").value(0))
+                .andExpect(jsonPath("$.profile.userId").value(target.getId()));
+
+        mvc.perform(asUser(post(recommendationPath), viewer)).andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+        mvc.perform(asUser(get(detailPath), viewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommended").value(true))
+                .andExpect(jsonPath("$.recommendationCount").value(1));
+
+        User observer = user("detail-observer", true);
+        // A query parameter cannot replace the authenticated JWT subject.
+        mvc.perform(asUser(get(detailPath).param("currentUserId", viewer.getId().toString()), observer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommended").value(false))
+                .andExpect(jsonPath("$.recommendationCount").value(1));
+        mvc.perform(asUser(post(recommendationPath), observer)).andExpect(status().isOk());
+        mvc.perform(asUser(get(detailPath), viewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommended").value(true))
+                .andExpect(jsonPath("$.recommendationCount").value(2));
+
+        mvc.perform(asUser(delete(recommendationPath), viewer)).andExpect(status().isOk());
+        mvc.perform(asUser(get(detailPath), viewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommended").value(false))
+                .andExpect(jsonPath("$.recommendationCount").value(1));
+        mvc.perform(asUser(get(detailPath), observer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommended").value(true))
+                .andExpect(jsonPath("$.recommendationCount").value(1));
+    }
+
+    @Test
+    void publicDetailStillRequiresAuthenticationAndAnAvailablePublicProfile() throws Exception {
+        String path = "/api/profile/" + target.getId();
+        mvc.perform(get(path).servletPath(path)).andExpect(status().isUnauthorized());
+        mvc.perform(asUser(get(path), user("detail-unverified", false))).andExpect(status().isForbidden());
+        mvc.perform(asUser(get("/api/profile/99999999"), viewer)).andExpect(status().isNotFound());
+
+        var profile = profiles.findById(target.getId()).orElseThrow();
+        org.springframework.test.util.ReflectionTestUtils.setField(profile, "searchable", false);
+        mvc.perform(asUser(get(path), viewer)).andExpect(status().isNotFound());
+        org.springframework.test.util.ReflectionTestUtils.setField(profile, "searchable", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(profile, "activityStatus", UserProfile.ActivityStatus.RESTING);
+        mvc.perform(asUser(get(path), viewer)).andExpect(status().isNotFound());
+        org.springframework.test.util.ReflectionTestUtils.setField(profile, "activityStatus", UserProfile.ActivityStatus.LOOKING_FOR_TEAM);
+        org.springframework.test.util.ReflectionTestUtils.setField(users.findById(target.getId()).orElseThrow(), "status", User.Status.SUSPENDED);
+        mvc.perform(asUser(get(path), viewer)).andExpect(status().isNotFound());
     }
 
     @Test

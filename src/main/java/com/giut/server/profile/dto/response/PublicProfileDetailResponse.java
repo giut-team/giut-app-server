@@ -8,6 +8,10 @@ public record PublicProfileDetailResponse(
         boolean universityVerified,
         @Schema(description = "현재 수락 또는 거절을 기다리는 팀 합류 제안 수", example = "2")
         long receivedProposalCount,
+        @Schema(description = "현재 로그인 사용자가 이 프로필을 추천했는지 여부", example = "true")
+        boolean recommended,
+        @Schema(description = "이 사용자가 현재 받은 총 추천 수. 추천 취소 시 감소합니다.", example = "5")
+        long recommendationCount,
         ProfileResponse profile
 ) {
 }

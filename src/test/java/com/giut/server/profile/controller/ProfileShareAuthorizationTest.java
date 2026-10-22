@@ -176,7 +176,7 @@ class ProfileShareAuthorizationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.userId").value(12));
-        verify(profiles).getPublicProfile(12L);
+        verify(profiles).validatePublicProfile(12L);
         ProfileShareLink expiredLink = link(Instant.now().minusSeconds(3600), Instant.now().minusSeconds(1));
         when(links.findByTokenHash(anyString())).thenReturn(Optional.of(expiredLink));
         mockMvc.perform(asViewer(get(SHARE_URL + "/target"), "verified"))
