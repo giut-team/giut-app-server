@@ -4,13 +4,15 @@ import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.global.config.SecurityConfig;
-import com.giut.server.profile.dto.response.SeedDefaultSkillTagsResponse;
-import com.giut.server.profile.service.DefaultSkillTagService;
+import com.giut.server.profile.dto.response.SeedDefaultProfileTagsResponse;
+import com.giut.server.profile.dto.response.SeedDefaultProfileTagsResponse.TagTypeResult;
+import com.giut.server.profile.service.DefaultProfileTagService;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -41,7 +43,7 @@ class AdminSkillTagControllerTest {
     private AnnotationConfigWebApplicationContext context;
     private MockMvc mockMvc;
     private JwtProvider jwtProvider;
-    private DefaultSkillTagService service;
+    private DefaultProfileTagService service;
 
     @BeforeEach
     void setUp() {
@@ -55,7 +57,7 @@ class AdminSkillTagControllerTest {
         context.register(TestConfig.class);
         context.refresh();
         jwtProvider = context.getBean(JwtProvider.class);
-        service = context.getBean(DefaultSkillTagService.class);
+        service = context.getBean(DefaultProfileTagService.class);
         mockMvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     }
 
@@ -65,20 +67,23 @@ class AdminSkillTagControllerTest {
         context.close();
     }
 
-    @Test
-    void anonymousRequestIsUnauthorizedAndDoesNotSeed() throws Exception {
-        mockMvc.perform(post("/api/admin/profile/tags/skills/defaults"))
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/admin/profile/tags/defaults", "/api/admin/profile/tags/skills/defaults"})
+    void anonymousRequestIsUnauthorizedAndDoesNotSeed(String path) throws Exception {
+        mockMvc.perform(post(path))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
 
         verifyNoInteractions(service);
     }
 
-    @Test
-    void studentAccessTokenIsForbiddenAndDoesNotSeed() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/admin/profile/tags/defaults", "/api/admin/profile/tags/skills/defaults"})
+    void studentAccessTokenIsForbiddenAndDoesNotSeed(String path) throws Exception {
         String token = jwtProvider.generateAccessToken(user(User.Role.STUDENT));
+        when(context.getBean(UserRepository.class).existsByIdAndUniversityVerifiedAtIsNotNull(10L)).thenReturn(true);
 
-        mockMvc.perform(post("/api/admin/profile/tags/skills/defaults")
+        mockMvc.perform(post(path)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
@@ -86,27 +91,35 @@ class AdminSkillTagControllerTest {
         verifyNoInteractions(service);
     }
 
-    @Test
-    void adminAccessTokenCanSeedWithoutARequestBody() throws Exception {
-        when(context.getBean(UserRepository.class).existsByIdAndUniversityVerifiedAtIsNotNull(10L)).thenReturn(true);
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/admin/profile/tags/defaults", "/api/admin/profile/tags/skills/defaults"})
+    void adminAccessTokenCanSeedAllTypesWithoutARequestBody(String path) throws Exception {
         String token = jwtProvider.generateAccessToken(user(User.Role.ADMIN));
-        when(service.seedDefaults(10L)).thenReturn(new SeedDefaultSkillTagsResponse(40, 0, java.util.stream.LongStream.rangeClosed(1, 40).boxed().toList()));
+        when(service.seedDefaults(10L)).thenReturn(new SeedDefaultProfileTagsResponse(40, 0,
+                java.util.stream.LongStream.rangeClosed(1, 40).boxed().toList(),
+                new TagTypeResult(5, 0, java.util.stream.LongStream.rangeClosed(41, 45).boxed().toList()),
+                new TagTypeResult(8, 0, java.util.stream.LongStream.rangeClosed(46, 53).boxed().toList())));
 
-        mockMvc.perform(post("/api/admin/profile/tags/skills/defaults")
+        mockMvc.perform(post(path)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.createdCount").value(40))
                 .andExpect(jsonPath("$.existingCount").value(0))
-                .andExpect(jsonPath("$.skillTagIds.length()").value(40));
+                .andExpect(jsonPath("$.skillTagIds.length()").value(40))
+                .andExpect(jsonPath("$.interestTags.createdCount").value(5))
+                .andExpect(jsonPath("$.interestTags.tagIds.length()").value(5))
+                .andExpect(jsonPath("$.experienceTags.createdCount").value(8))
+                .andExpect(jsonPath("$.experienceTags.tagIds.length()").value(8));
 
         verify(service).seedDefaults(10L);
     }
 
-    @Test
-    void adminRefreshTokenCannotSeed() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/admin/profile/tags/defaults", "/api/admin/profile/tags/skills/defaults"})
+    void adminRefreshTokenCannotSeed(String path) throws Exception {
         String token = jwtProvider.generateRefreshToken(user(User.Role.ADMIN));
 
-        mockMvc.perform(post("/api/admin/profile/tags/skills/defaults")
+        mockMvc.perform(post(path)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
 
@@ -142,8 +155,8 @@ class AdminSkillTagControllerTest {
         }
 
         @Bean
-        DefaultSkillTagService defaultProfileRoleService() {
-            return mock(DefaultSkillTagService.class);
+        DefaultProfileTagService defaultProfileTagService() {
+            return mock(DefaultProfileTagService.class);
         }
     }
 }
