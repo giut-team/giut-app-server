@@ -54,7 +54,8 @@ class UserProfileResponseExampleTest {
         String example = operation.requestBody().content()[0].examples()[0].value();
         JsonNode body = new ObjectMapper().readTree(example);
 
-        assertThat(body.path("departmentname").asText()).isEqualTo("컴퓨터과학부");
+        assertThat(body.has("departmentname")).isFalse();
+        assertThat(body.has("departmentName")).isFalse();
         assertThat(body.has("department")).isFalse();
         assertThat(body.path("experienceTagIds").isArray()).isTrue();
         assertThat(body.path("activityHistories").size()).isEqualTo(1);
