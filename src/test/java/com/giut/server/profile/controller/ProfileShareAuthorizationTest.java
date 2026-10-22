@@ -152,6 +152,8 @@ class ProfileShareAuthorizationTest {
         List<MockHttpServletRequestBuilder> requests = List.of(
                 get("/api/profile"), get("/api/profile/12"), get("/api/profile/tags?type=SKILL"),
                 get("/api/profile/shares"), get(SHARE_URL + "/extra"),
+                get(SHARE_URL + "/target"), get("/api/profile/12/scrap"),
+                post("/api/profile/12/scrap"), delete("/api/profile/12/scrap"),
                 get("/api/profile/share/" + TOKEN), post(SHARE_URL), delete(SHARE_URL), head(SHARE_URL),
                 post("/api/users/me/profile-share-links"),
                 post("/api/users/12/profile-share-links"),
@@ -163,6 +165,22 @@ class ProfileShareAuthorizationTest {
                     .andExpect(jsonPath("$.code").value(expected));
         }
         verifyNoInteractions(links, profiles);
+    }
+
+    @org.junit.jupiter.api.Test
+    void verifiedViewerCanResolveTargetButExpiredTokenStillFails() throws Exception {
+        when(users.existsByIdAndUniversityVerifiedAtIsNotNull(42L)).thenReturn(true);
+        ProfileShareLink validLink = link(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
+        when(links.findByTokenHash(anyString())).thenReturn(Optional.of(validLink));
+        mockMvc.perform(asViewer(get(SHARE_URL + "/target"), "verified"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.userId").value(12));
+        verify(profiles).getPublicProfile(12L);
+        ProfileShareLink expiredLink = link(Instant.now().minusSeconds(3600), Instant.now().minusSeconds(1));
+        when(links.findByTokenHash(anyString())).thenReturn(Optional.of(expiredLink));
+        mockMvc.perform(asViewer(get(SHARE_URL + "/target"), "verified"))
+                .andExpect(status().isNotFound());
     }
 
     private ProfileShareLink link(Instant createdAt, Instant expiresAt) {

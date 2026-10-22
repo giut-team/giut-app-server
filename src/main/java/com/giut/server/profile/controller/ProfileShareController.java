@@ -3,6 +3,7 @@ package com.giut.server.profile.controller;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.profile.dto.response.ProfileShareLinkResponse;
 import com.giut.server.profile.dto.response.SharedProfileResponse;
+import com.giut.server.profile.dto.response.SharedProfileTargetResponse;
 import com.giut.server.profile.service.ProfileShareLinkService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -51,6 +52,15 @@ public class ProfileShareController {
         Long userId = Long.valueOf(authentication.getName());
         profileShareLinkService.revokeLink(userId, linkId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/profile/shares/{token}/target")
+    @Operation(summary = "공유 링크의 회원용 프로필 식별자 조회", description = "로그인 및 학교 인증 후 유효한 공유 토큰의 공개 상세 프로필 ID를 조회합니다. 비회원 공유 카드 응답은 변경하지 않습니다.")
+    @SecurityRequirement(name = "JWT")
+    public ResponseEntity<SharedProfileTargetResponse> getSharedProfileTarget(@PathVariable String token) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .header("Referrer-Policy", "no-referrer")
+                .body(profileShareLinkService.getSharedProfileTarget(token));
     }
 
     @GetMapping("/api/profile/shares/{token}")

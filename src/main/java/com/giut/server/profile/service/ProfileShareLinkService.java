@@ -2,6 +2,7 @@ package com.giut.server.profile.service;
 
 import com.giut.server.profile.dto.response.ProfileShareLinkResponse;
 import com.giut.server.profile.dto.response.SharedProfileResponse;
+import com.giut.server.profile.dto.response.SharedProfileTargetResponse;
 import com.giut.server.profile.entity.ProfileShareLink;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
@@ -83,6 +84,19 @@ public class ProfileShareLinkService {
 
     @Transactional(readOnly = true)
     public SharedProfileResponse getSharedProfile(String token) {
+        ProfileShareLink link = findActiveLink(token);
+        return userProfileService.getSharedProfile(link.getProfile().getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public SharedProfileTargetResponse getSharedProfileTarget(String token) {
+        Long userId = findActiveLink(token).getProfile().getUserId();
+        // 공유 토큰이 회원용 상세 프로필의 공개 정책을 우회하지 않도록 한다.
+        userProfileService.getPublicProfile(userId);
+        return new SharedProfileTargetResponse(userId);
+    }
+
+    private ProfileShareLink findActiveLink(String token) {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다.");
         }
@@ -91,7 +105,7 @@ public class ProfileShareLinkService {
                 .filter(found -> found.isActive(now))
                 .filter(found -> found.getCreatedAt().plus(LINK_VALIDITY).isAfter(now))
                 .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
-        return userProfileService.getSharedProfile(link.getProfile().getUserId());
+        return link;
     }
 
     @Transactional
