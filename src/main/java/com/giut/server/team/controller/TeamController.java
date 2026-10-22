@@ -10,6 +10,7 @@ import com.giut.server.team.dto.response.TeamDetailResponse;
 import com.giut.server.team.dto.response.TeamMemberListResponse;
 import com.giut.server.team.dto.response.TeamRecruitmentListResponse;
 import com.giut.server.team.dto.response.MyTeamApplicationListResponse;
+import com.giut.server.team.dto.response.MyTeamListResponse;
 import com.giut.server.team.dto.response.TeamPageResponse;
 import com.giut.server.team.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,6 +57,21 @@ public class TeamController {
     ) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(teamService.getRecruitingTeams(userId, competitionId, page, size));
+    }
+
+    @GetMapping("/me")
+    @Operation(
+            summary = "내 소속 팀 목록 조회",
+            description = "현재 사용자가 팀장 또는 팀원으로 활동 중인 팀을 최신순으로 조회합니다. myRole로 팀장 여부를 확인할 수 있습니다."
+    )
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "내 소속 팀 목록 조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락")
+    })
+    public ResponseEntity<MyTeamListResponse> getMyTeams(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.getMyTeams(userId));
     }
 
     @GetMapping("/applications/me")

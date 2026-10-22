@@ -8,6 +8,7 @@ import com.giut.server.team.dto.request.CreateTeamRequest;
 import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
 import com.giut.server.team.dto.response.TeamDetailResponse;
+import com.giut.server.team.dto.response.MyTeamListResponse;
 import com.giut.server.team.dto.response.TeamPageResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.team.entity.Team;
@@ -118,6 +119,47 @@ class TeamServiceTest {
 
         assertFalse(response.teams().get(0).scrapped());
         assertTrue(response.teams().get(1).scrapped());
+    }
+
+    @Test
+    void listsTeamsWhereCurrentUserIsLeaderOrMember() {
+        Team leaderTeam = team(15L);
+        Team memberTeam = team(20L);
+        ReflectionTestUtils.setField(leaderTeam, "id", 2L);
+        ReflectionTestUtils.setField(memberTeam, "id", 1L);
+
+        TeamMember leaderMembership = TeamMember.createLeader(2L, 15L);
+        TeamMember memberMembership = TeamMember.createMember(1L, 15L, "BACKEND_DEVELOPER");
+        when(teamMemberRepository.findAllByUserIdAndStatus(15L, TeamMember.Status.ACTIVE))
+                .thenReturn(List.of(leaderMembership, memberMembership));
+        TeamMemberRepository.TeamMemberCount leaderCount = memberCount(2L, 3L);
+        TeamMemberRepository.TeamMemberCount memberCount = memberCount(1L, 4L);
+        when(teamMemberRepository.countByTeamIdsAndStatus(
+                List.of(2L, 1L), TeamMember.Status.ACTIVE))
+                .thenReturn(List.of(leaderCount, memberCount));
+        when(teamRepository.findAllByIdsExcludingStatusOrderByIdDesc(
+                List.of(2L, 1L), Team.Status.ARCHIVED))
+                .thenReturn(List.of(leaderTeam, memberTeam));
+
+        MyTeamListResponse response = teamService.getMyTeams(15L);
+
+        assertEquals(2, response.teams().size());
+        assertEquals(TeamMember.Role.LEADER, response.teams().get(0).myRole());
+        assertEquals(TeamMember.Role.MEMBER, response.teams().get(1).myRole());
+        assertEquals("BACKEND_DEVELOPER", response.teams().get(1).myRoleCode());
+        assertEquals(3L, response.teams().get(0).currentMemberCount());
+        assertEquals(4L, response.teams().get(1).currentMemberCount());
+    }
+
+    @Test
+    void returnsEmptyMyTeamListWhenUserHasNoActiveMembership() {
+        when(teamMemberRepository.findAllByUserIdAndStatus(15L, TeamMember.Status.ACTIVE))
+                .thenReturn(List.of());
+
+        MyTeamListResponse response = teamService.getMyTeams(15L);
+
+        assertTrue(response.teams().isEmpty());
+        verify(teamRepository, never()).findAllByIdsExcludingStatusOrderByIdDesc(any(), any());
     }
 
     @Test
@@ -241,6 +283,7 @@ class TeamServiceTest {
     @Test
     void approvalAssignsRoleAndAddsMember() {
         Team team = team(10L);
+        ReflectionTestUtils.setField(team, "id", 1L);
         TeamApplication application = TeamApplication.create(1L, 11L, "BACKEND", "지원합니다.");
         TeamRecruitment recruitment = TeamRecruitment.create(1L, "FRONTEND", (short) 1);
         when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
@@ -263,6 +306,7 @@ class TeamServiceTest {
     @Test
     void approvalClosesRecruitmentWhenTeamBecomesFull() {
         Team team = team(10L);
+        ReflectionTestUtils.setField(team, "id", 1L);
         TeamApplication application = TeamApplication.create(1L, 11L, "BACKEND", "지원합니다.");
         TeamRecruitment recruitment = TeamRecruitment.create(1L, "BACKEND", (short) 4);
         when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
@@ -282,6 +326,7 @@ class TeamServiceTest {
     @Test
     void approvalRejectsFilledRecruitment() {
         Team team = team(10L);
+        ReflectionTestUtils.setField(team, "id", 1L);
         TeamApplication application = TeamApplication.create(1L, 11L, "BACKEND", null);
         when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
         when(teamApplicationRepository.findByIdAndTeamId(2L, 1L)).thenReturn(Optional.of(application));
@@ -335,6 +380,13 @@ class TeamServiceTest {
                 Team.ActivityMode.ONLINE, (short) 4, (short) 1, Team.MeetingPlace.CAMPUS);
         ReflectionTestUtils.setField(team, "id", 1L);
         return team;
+    }
+
+    private TeamMemberRepository.TeamMemberCount memberCount(Long teamId, long count) {
+        TeamMemberRepository.TeamMemberCount projection = mock(TeamMemberRepository.TeamMemberCount.class);
+        when(projection.getTeamId()).thenReturn(teamId);
+        when(projection.getMemberCount()).thenReturn(count);
+        return projection;
     }
 
     private CreateTeamRequest createRequest(Long competitionId) {

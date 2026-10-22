@@ -19,6 +19,8 @@ import com.giut.server.team.dto.response.TeamMemberResponse;
 import com.giut.server.team.dto.response.TeamRecruitmentResponse;
 import com.giut.server.team.dto.response.TeamRecruitmentListResponse;
 import com.giut.server.team.dto.response.MyTeamApplicationListResponse;
+import com.giut.server.team.dto.response.MyTeamListResponse;
+import com.giut.server.team.dto.response.MyTeamResponse;
 import com.giut.server.team.dto.response.TeamPageResponse;
 import com.giut.server.team.dto.response.TeamSummaryResponse;
 import com.giut.server.competition.entity.Competition;
@@ -95,6 +97,42 @@ public class TeamService {
                 .toList();
         return new TeamPageResponse(summaries, normalizedPage, normalizedSize,
                 teams.getTotalElements(), teams.getTotalPages(), teams.hasNext());
+    }
+
+    @Transactional(readOnly = true)
+    public MyTeamListResponse getMyTeams(Long userId) {
+        List<TeamMember> memberships = teamMemberRepository.findAllByUserIdAndStatus(
+                userId,
+                TeamMember.Status.ACTIVE
+        );
+        if (memberships.isEmpty()) {
+            return new MyTeamListResponse(List.of());
+        }
+
+        Map<Long, TeamMember> membershipByTeamId = memberships.stream()
+                .collect(Collectors.toMap(TeamMember::getTeamId, Function.identity()));
+        List<Long> teamIds = memberships.stream()
+                .map(TeamMember::getTeamId)
+                .toList();
+        Map<Long, Long> memberCountByTeamId = teamMemberRepository
+                .countByTeamIdsAndStatus(teamIds, TeamMember.Status.ACTIVE)
+                .stream()
+                .collect(Collectors.toMap(
+                        TeamMemberRepository.TeamMemberCount::getTeamId,
+                        TeamMemberRepository.TeamMemberCount::getMemberCount
+                ));
+
+        List<MyTeamResponse> teams = teamRepository
+                .findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED)
+                .stream()
+                .map(team -> MyTeamResponse.of(
+                        team,
+                        membershipByTeamId.get(team.getId()),
+                        memberCountByTeamId.getOrDefault(team.getId(), 0L)
+                ))
+                .toList();
+
+        return new MyTeamListResponse(teams);
     }
 
     @Transactional
