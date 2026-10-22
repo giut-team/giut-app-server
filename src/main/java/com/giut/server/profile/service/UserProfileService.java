@@ -168,7 +168,7 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
-    public PublicProfileDetailResponse getPublicProfile(Long userId) {
+    public PublicProfileDetailResponse getPublicProfile(Long currentUserId, Long userId) {
         UserProfile profile = findPublicProfile(userId);
         User user = findActiveUser(userId);
 
@@ -176,8 +176,17 @@ public class UserProfileService {
                 user.getNickname(),
                 user.getUniversityVerifiedAt() != null,
                 countReceivedPendingProposals(userId),
+                profileRecommendationRepository.existsByRecommender_IdAndRecommendedUser_Id(currentUserId, userId),
+                profileRecommendationRepository.countByRecommendedUser_Id(userId),
                 toProfileResponse(profile, false)
         );
+    }
+
+    /** 회원용 공유 링크 연결에서 응답 조립 없이 동일한 공개·활성 정책을 확인한다. */
+    @Transactional(readOnly = true)
+    public void validatePublicProfile(Long userId) {
+        findPublicProfile(userId);
+        findActiveUser(userId);
     }
 
     @Transactional(readOnly = true)

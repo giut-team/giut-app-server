@@ -20,6 +20,8 @@ import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -31,6 +33,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class UserProfileServiceSummaryTest {
@@ -95,8 +98,9 @@ class UserProfileServiceSummaryTest {
         assertThat(response.summary().collaborationCount()).isZero();
     }
 
-    @Test
-    void publicProfileDetailIncludesPendingReceivedProposalCount() {
+    @ParameterizedTest
+    @CsvSource({"true,5", "false,5", "false,0"})
+    void publicProfileDetailIncludesProposalsAndViewerRecommendation(boolean recommended, long count) {
         UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
         User user = org.mockito.Mockito.mock(User.class);
         when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
@@ -123,9 +127,33 @@ class UserProfileServiceSummaryTest {
                 13L, TeamApplication.Type.INVITATION, TeamApplication.Status.PENDING
         )).thenReturn(3L);
 
-        var response = userProfileService.getPublicProfile(13L);
+        when(profileRecommendationRepository.existsByRecommender_IdAndRecommendedUser_Id(12L, 13L))
+                .thenReturn(recommended);
+        when(profileRecommendationRepository.countByRecommendedUser_Id(13L)).thenReturn(count);
+        var response = userProfileService.getPublicProfile(12L, 13L);
 
         assertThat(response.receivedProposalCount()).isEqualTo(3);
+        assertThat(response.recommended()).isEqualTo(recommended);
+        assertThat(response.recommendationCount()).isEqualTo(count);
+        verify(profileRecommendationRepository).existsByRecommender_IdAndRecommendedUser_Id(12L, 13L);
+        verify(profileRecommendationRepository).countByRecommendedUser_Id(13L);
+    }
+
+    @Test
+    void validatesShareTargetWithoutPersonalizedRecommendationQueries() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        User user = org.mockito.Mockito.mock(User.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(true);
+        when(profile.getActivityStatus()).thenReturn(UserProfile.ActivityStatus.LOOKING_FOR_TEAM);
+        when(userRepository.findById(13L)).thenReturn(Optional.of(user));
+        when(user.getStatus()).thenReturn(User.Status.ACTIVE);
+
+        userProfileService.validatePublicProfile(13L);
+
+        verify(userProfileRepository).findById(13L);
+        verify(userRepository).findById(13L);
+        verifyNoInteractions(profileRecommendationRepository, portfolioItemRepository, activityHistoryRepository);
     }
 
     @Test

@@ -21,6 +21,6 @@ class SharedProfileResponseTest {
         String json = new ObjectMapper().writeValueAsString(response);
 
         assertThat(json).contains("nickname", "skills")
-                .doesNotContain("portfolioItems", "activityHistories", "userId");
+                .doesNotContain("portfolioItems", "activityHistories", "userId", "recommended", "recommendationCount");
     }
 }
