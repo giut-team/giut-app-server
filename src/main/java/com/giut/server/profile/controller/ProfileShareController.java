@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -53,7 +54,8 @@ public class ProfileShareController {
     }
 
     @GetMapping("/api/profile/shares/{token}")
-    @Operation(summary = "비회원 공유 프로필 조회", description = "유효한 공유 링크 토큰으로 프로필 카드 정보만 조회합니다. 포트폴리오와 활동 이력은 반환하지 않습니다.")
+    @SecurityRequirements
+    @Operation(summary = "비회원 공유 프로필 조회", description = "로그인 및 학교 이메일 인증 없이 유효한 공유 링크 토큰으로 프로필 카드 정보만 조회합니다. 토큰은 발급 후 3시간 동안 유효하며, 잘못되거나 만료·해제된 토큰은 404를 반환합니다. 포트폴리오와 활동 이력은 반환하지 않습니다.")
     @ApiResponse(responseCode = "200", description = "공유 프로필 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = SharedProfileResponse.class), examples = @ExampleObject(value = SwaggerExamples.SHARED_PROFILE)))
     public ResponseEntity<SharedProfileResponse> getSharedProfile(@PathVariable String token) {
         return ResponseEntity.ok()

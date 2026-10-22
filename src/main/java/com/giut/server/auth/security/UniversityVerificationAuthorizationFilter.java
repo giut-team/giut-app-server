@@ -15,7 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/** Limits authenticated, unverified non-admin users to contest browsing and university verification. */
+/** Allows unverified non-admin users only contest reads, token-based shared profiles and verification. */
 @RequiredArgsConstructor
 public class UniversityVerificationAuthorizationFilter extends OncePerRequestFilter {
 
@@ -65,7 +65,8 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
             return false;
         }
-        if (HttpMethod.GET.matches(method) && isPublicCompetitionRead(path)) {
+        if (HttpMethod.GET.matches(method)
+                && (isPublicCompetitionRead(path) || path.matches("/api/profile/shares/[^/]+"))) {
             return false;
         }
         if (HttpMethod.POST.matches(method)

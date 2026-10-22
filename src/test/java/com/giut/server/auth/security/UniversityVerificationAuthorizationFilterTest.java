@@ -69,14 +69,28 @@ class UniversityVerificationAuthorizationFilterTest {
 
         var profileResult = invoke("GET", "/api/profile");
         var scrapResult = invoke("POST", "/api/competitions/12/scrap");
-        var sharedProfileResult = invoke("GET", "/api/profile/shares/share-token");
         var shareAnotherProfileResult = invoke("POST", "/api/users/13/profile-share-links");
 
         assertDenied(profileResult);
         assertDenied(scrapResult);
-        assertDenied(sharedProfileResult);
         assertDenied(shareAnotherProfileResult);
-        verify(userRepository, times(4)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+        verify(userRepository, times(3)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+    }
+
+    @Test
+    void unverifiedUserCanReadOnlyTheExactSharedProfileGetRouteWithoutDatabaseCheck() throws Exception {
+        authenticateAsStudent("42");
+
+        assertThat(invoke("GET", "/api/profile/shares/share-token").continued()).isTrue();
+        verifyNoInteractions(userRepository);
+
+        assertDenied(invoke("POST", "/api/profile/shares/share-token"));
+        assertDenied(invoke("GET", "/api/profile/shares/share-token/extra"));
+        assertDenied(invoke("GET", "/api/profile/shares"));
+        assertDenied(invoke("GET", "/api/profile/share/share-token"));
+        assertDenied(invoke("POST", "/api/users/me/profile-share-links"));
+        assertDenied(invoke("DELETE", "/api/users/me/profile-share-links/7"));
+        verify(userRepository, times(6)).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
     }
 
     @Test
