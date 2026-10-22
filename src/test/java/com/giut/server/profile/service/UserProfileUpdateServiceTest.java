@@ -59,7 +59,7 @@ class UserProfileUpdateServiceTest {
     @InjectMocks private UserProfileService userProfileService;
 
     @Test
-    void updateKeepsNicknameAndGenderWhileReplacingActivityHistories() {
+    void updateKeepsDepartmentNicknameAndGenderWhileReplacingActivityHistories() {
         User user = User.createOAuthUser("member@example.com", "기존 이름", User.OAuthProvider.KAKAO, "kakao-12");
         ReflectionTestUtils.setField(user, "id", 12L);
         UserProfile profile = UserProfile.create(
@@ -72,7 +72,7 @@ class UserProfileUpdateServiceTest {
         when(role.getCode()).thenReturn("BACKEND_DEVELOPER");
         when(role.getPrimaryRole()).thenReturn(ProfileRole.PrimaryRole.DEVELOPMENT);
         when(userRepository.findById(12L)).thenReturn(Optional.of(user));
-        when(userProfileRepository.findById(12L)).thenReturn(Optional.of(profile));
+        when(userProfileRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(profile));
         when(profileRoleRepository.findAllByCodeIn(List.of("BACKEND_DEVELOPER"))).thenReturn(List.of(role));
         when(profileTagRepository.findAllById(any())).thenReturn(List.of());
         when(userProfileRoleRepository.findAllByProfile_UserId(12L)).thenReturn(List.of());
@@ -83,7 +83,6 @@ class UserProfileUpdateServiceTest {
                 .thenReturn(List.of());
 
         UpdateMyProfileRequest request = new UpdateMyProfileRequest(
-                UserProfile.DepartmentType.COMPUTER_SCIENCE,
                 List.of("DEVELOPMENT"),
                 List.of("BACKEND_DEVELOPER"),
                 UserProfile.ActivityStatus.LOOKING_FOR_TEAM,
@@ -101,9 +100,11 @@ class UserProfileUpdateServiceTest {
 
         assertThat(user.getNickname()).isEqualTo("기존 이름");
         assertThat(profile.getGender()).isEqualTo(UserProfile.Gender.MALE);
-        assertThat(profile.getDepartment()).isEqualTo(UserProfile.DepartmentType.COMPUTER_SCIENCE);
+        assertThat(profile.getDepartment()).isEqualTo(UserProfile.DepartmentType.DESIGN);
         assertThat(response.profile().nickname()).isEqualTo("기존 이름");
-        assertThat(response.profile().departmentName()).isEqualTo("컴퓨터과학부");
+        assertThat(response.profile().departmentName()).isEqualTo("디자인학과");
+        assertThat(profile.getGrade()).isEqualTo((short) 3);
+        assertThat(profile.getBio()).isEqualTo("새 소개");
         verify(activityHistoryService).replaceForProfile(user, List.of());
     }
 }

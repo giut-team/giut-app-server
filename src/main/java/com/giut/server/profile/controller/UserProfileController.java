@@ -167,7 +167,6 @@ public class UserProfileController {
 
     private static final String PROFILE_UPDATE_REQUEST_EXAMPLE = """
             {
-              "departmentname": "컴퓨터과학부",
               "primaryRoles": ["DEVELOPMENT", "PLANNING"],
               "roles": ["BACKEND_DEVELOPER", "DATA_ANALYST"],
               "activityStatus": "LOOKING_FOR_TEAM",
@@ -314,7 +313,7 @@ public class UserProfileController {
     @PutMapping("/me/profile")
     @Operation(
             summary = "내 프로필 전체 수정",
-            description = "프로필 기본 정보·역할·태그·활동 이력 목록을 전체 교체합니다. 이름과 성별은 기존 값을 유지합니다. 활동 이력의 기존 ID는 유지되지 않습니다.",
+            description = "프로필 기본 정보·역할·태그·활동 이력 목록을 전체 교체합니다. 이름, 성별, 학과는 기존 값을 유지합니다. 학과 변경은 관리자 전용 API로 처리합니다. 이전 클라이언트가 학과 필드를 보내더라도 무시합니다. 활동 이력의 기존 ID는 유지되지 않습니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(

@@ -1,6 +1,6 @@
 package com.giut.server.profile.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.giut.server.profile.dto.common.ActivityHistoryDto;
 import com.giut.server.profile.entity.UserProfile;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,13 +14,9 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-@Schema(description = "내 프로필 전체 수정 요청. 이름과 성별은 변경하지 않습니다.")
+@Schema(description = "내 프로필 전체 수정 요청. 이름, 성별, 학과는 변경하지 않습니다. 학과 변경은 관리자 전용 API로 처리합니다.")
+@JsonIgnoreProperties({"department", "departmentname", "departmentName"})
 public record UpdateMyProfileRequest(
-        @Schema(name = "departmentname", description = "학과명. 한글 학과명 또는 Enum 코드 모두 입력할 수 있습니다.", example = "컴퓨터과학부")
-        @JsonProperty("departmentname")
-        @NotNull(message = "학과는 필수입니다.")
-        UserProfile.DepartmentType department,
-
         @Schema(description = "대표 역할 코드 목록", example = "[\"DEVELOPMENT\", \"PLANNING\"]")
         @NotEmpty(message = "대표 역할은 1개 이상 선택해야 합니다.")
         @Size(max = 4, message = "대표 역할은 최대 4개까지 선택할 수 있습니다.")

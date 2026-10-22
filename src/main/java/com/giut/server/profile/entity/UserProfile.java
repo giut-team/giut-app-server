@@ -59,8 +59,8 @@ public class UserProfile extends BaseTimeEntity {
     ) {
         UserProfile profile = new UserProfile();
         profile.user = user;
+        profile.department = department;
         profile.update(
-                department,
                 activityStatus,
                 grade,
                 gender,
@@ -73,7 +73,6 @@ public class UserProfile extends BaseTimeEntity {
     }
 
     public void update(
-            DepartmentType department,
             ActivityStatus activityStatus,
             Short grade,
             Gender gender,
@@ -82,7 +81,6 @@ public class UserProfile extends BaseTimeEntity {
             boolean searchable,
             String primaryRolesJson
     ) {
-        this.department = department;
         this.activityStatus = activityStatus;
         this.grade = grade;
         this.gender = gender;
@@ -90,6 +88,10 @@ public class UserProfile extends BaseTimeEntity {
         this.bio = bio;
         this.searchable = searchable;
         this.primaryRolesJson = primaryRolesJson;
+    }
+
+    public void changeDepartment(DepartmentType department) {
+        this.department = java.util.Objects.requireNonNull(department, "학과는 필수입니다.");
     }
 
     @Getter
