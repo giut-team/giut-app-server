@@ -90,6 +90,14 @@ temp/
 *.tmp
 *.swp
 *.swo
+/spring-harness/
+/.harness/
+/AGENTS.md
+/CLAUDE.md
+/README_HARNESS.md
+/docs/harness/
+/tools/harness/
+/examples/harness-check.yml.template
 /gradle/
 /src/main/resources/db/
 !/src/main/resources/db/
@@ -104,3 +112,5 @@ temp/
 !/src/main/resources/db/seed/
 /src/main/resources/db/seed/*
 !/src/main/resources/db/seed/profile_roles.sql
+
+!/src/main/resources/db/manual/V19__create_profile_scraps.sql

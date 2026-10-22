@@ -1,0 +1,20 @@
+package com.giut.server.profile.repository;
+
+import com.giut.server.profile.entity.PortfolioItem;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Long> {
+
+    List<PortfolioItem> findAllByUser_IdOrderByCreatedAtDescIdDesc(Long userId);
+
+    List<PortfolioItem> findAllByUser_IdAndShowcaseOrderIsNotNullOrderByShowcaseOrderAsc(Long userId);
+
+    Optional<PortfolioItem> findByIdAndUser_Id(Long id, Long userId);
+
+    long countByUser_Id(Long userId);
+
+    long countByUser_IdAndShowcaseOrderIsNotNull(Long userId);
+}
