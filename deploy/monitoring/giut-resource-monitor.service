@@ -1,0 +1,27 @@
+[Unit]
+Description=Giut host CPU RAM and kernel OOM monitor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=giut-resource-monitor
+StateDirectoryMode=0700
+LoadCredential=discord-webhook:/etc/giut-resource-monitor/discord-webhook
+ExecStart=/usr/bin/python3 -B /opt/giut-resource-monitor/resource_monitor.py --config /etc/giut-resource-monitor/config.json --state /var/lib/giut-resource-monitor/state.json --webhook-file ${CREDENTIALS_DIRECTORY}/discord-webhook --once
+TimeoutStartSec=25s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+LockPersonality=yes
+MemoryMax=64M
+CPUQuota=5%
