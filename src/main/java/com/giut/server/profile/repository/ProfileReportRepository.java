@@ -17,6 +17,10 @@ public interface ProfileReportRepository extends JpaRepository<ProfileReport, Lo
             Long reporterUserId, Long reportedProfileUserId, ProfileReport.Status status
     );
 
+    Optional<ProfileReport> findFirstByReporter_IdAndReportedProfile_UserIdAndStatusOrderByCreatedAtDescIdDesc(
+            Long reporterUserId, Long reportedProfileUserId, ProfileReport.Status status
+    );
+
     Page<ProfileReport> findAllByStatus(ProfileReport.Status status, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

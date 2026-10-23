@@ -21,11 +21,16 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
             value = """
                     SELECT profile.*
                     FROM user_profiles profile
-                    JOIN users user ON user.id = profile.user_id
+                    JOIN users profileUser ON profileUser.id = profile.user_id
                     WHERE profile.is_searchable = true
                       AND profile.activity_status <> :excludedActivityStatus
-                      AND user.status = :userStatus
+                      AND profileUser.status = :userStatus
                       AND profile.user_id <> :excludedUserId
+                      AND NOT EXISTS (
+                          SELECT 1 FROM user_blocks blockedRelation
+                          WHERE (blockedRelation.blocker_user_id = :excludedUserId AND blockedRelation.blocked_user_id = profile.user_id)
+                             OR (blockedRelation.blocker_user_id = profile.user_id AND blockedRelation.blocked_user_id = :excludedUserId)
+                      )
                       AND (:primaryRole IS NULL OR JSON_CONTAINS(profile.primary_roles, JSON_QUOTE(:primaryRole)) = 1)
                       AND (
                           :roleCode IS NULL
@@ -56,11 +61,16 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
             countQuery = """
                     SELECT COUNT(*)
                     FROM user_profiles profile
-                    JOIN users user ON user.id = profile.user_id
+                    JOIN users profileUser ON profileUser.id = profile.user_id
                     WHERE profile.is_searchable = true
                       AND profile.activity_status <> :excludedActivityStatus
-                      AND user.status = :userStatus
+                      AND profileUser.status = :userStatus
                       AND profile.user_id <> :excludedUserId
+                      AND NOT EXISTS (
+                          SELECT 1 FROM user_blocks blockedRelation
+                          WHERE (blockedRelation.blocker_user_id = :excludedUserId AND blockedRelation.blocked_user_id = profile.user_id)
+                             OR (blockedRelation.blocker_user_id = profile.user_id AND blockedRelation.blocked_user_id = :excludedUserId)
+                      )
                       AND (:primaryRole IS NULL OR JSON_CONTAINS(profile.primary_roles, JSON_QUOTE(:primaryRole)) = 1)
                       AND (
                           :roleCode IS NULL

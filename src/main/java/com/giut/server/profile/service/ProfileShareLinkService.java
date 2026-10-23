@@ -9,6 +9,7 @@ import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.profile.repository.ProfileShareLinkRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
+import com.giut.server.user.service.UserBlockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class ProfileShareLinkService {
     private final ProfileShareLinkRepository profileShareLinkRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserProfileService userProfileService;
+    private final UserBlockService userBlockService;
 
     @Transactional
     public ProfileShareLinkResponse createLink(Long userId) {
@@ -42,7 +44,8 @@ public class ProfileShareLinkService {
     }
 
     @Transactional
-    public ProfileShareLinkResponse createLinkForPublicProfile(Long profileUserId) {
+    public ProfileShareLinkResponse createLinkForPublicProfile(Long currentUserId, Long profileUserId) {
+        userBlockService.requireProfilesVisible(currentUserId, profileUserId);
         UserProfile profile = userProfileRepository.findById(profileUserId)
                 .filter(found -> found.getUser().getStatus() == User.Status.ACTIVE)
                 .filter(UserProfile::isSearchable)
@@ -83,16 +86,16 @@ public class ProfileShareLinkService {
     */
 
     @Transactional(readOnly = true)
-    public SharedProfileResponse getSharedProfile(String token) {
+    public SharedProfileResponse getSharedProfile(String token, Long currentUserId) {
         ProfileShareLink link = findActiveLink(token);
-        return userProfileService.getSharedProfile(link.getProfile().getUserId());
+        return userProfileService.getSharedProfile(currentUserId, link.getProfile().getUserId());
     }
 
     @Transactional(readOnly = true)
-    public SharedProfileTargetResponse getSharedProfileTarget(String token) {
+    public SharedProfileTargetResponse getSharedProfileTarget(String token, Long currentUserId) {
         Long userId = findActiveLink(token).getProfile().getUserId();
         // 공유 토큰이 회원용 상세 프로필의 공개 정책을 우회하지 않도록 한다.
-        userProfileService.validatePublicProfile(userId);
+        userProfileService.validatePublicProfile(currentUserId, userId);
         return new SharedProfileTargetResponse(userId);
     }
 

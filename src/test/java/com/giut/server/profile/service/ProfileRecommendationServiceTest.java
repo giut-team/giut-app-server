@@ -7,6 +7,7 @@ import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.service.UserBlockService;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,7 @@ class ProfileRecommendationServiceTest {
     @Mock private ProfileRecommendationRepository recommendationRepository;
     @Mock private UserProfileRepository userProfileRepository;
     @Mock private UserRepository userRepository;
+    @Mock private UserBlockService userBlockService;
     @InjectMocks private ProfileRecommendationService service;
 
     @Test

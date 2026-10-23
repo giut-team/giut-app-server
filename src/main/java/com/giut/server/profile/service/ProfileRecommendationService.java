@@ -9,6 +9,7 @@ import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
+import com.giut.server.user.service.UserBlockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ public class ProfileRecommendationService {
     private final ProfileRecommendationRepository recommendationRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserRepository userRepository;
+    private final UserBlockService userBlockService;
 
     @Transactional
     public ProfileRecommendationResponse recommend(Long currentUserId, Long targetUserId) {
@@ -34,6 +36,7 @@ public class ProfileRecommendationService {
             lockTargetUser(targetUserId);
             recommender = findActiveUserForUpdate(currentUserId);
         }
+        userBlockService.requireProfilesVisible(currentUserId, targetUserId);
         User target = findPublicProfileUser(targetUserId);
         if (!recommendationRepository.existsByRecommender_IdAndRecommendedUser_Id(currentUserId, targetUserId)) {
             recommendationRepository.saveAndFlush(ProfileRecommendation.create(recommender, target));
@@ -44,6 +47,7 @@ public class ProfileRecommendationService {
     @Transactional
     public ProfileRecommendationResponse cancelRecommendation(Long currentUserId, Long targetUserId) {
         findActiveUserForUpdate(currentUserId);
+        userBlockService.requireProfilesVisible(currentUserId, targetUserId);
         // 공개 설정을 해제한 대상에게도 자신의 추천을 취소할 수 있다.
         recommendationRepository.deleteByRecommender_IdAndRecommendedUser_Id(currentUserId, targetUserId);
         recommendationRepository.flush();
@@ -52,6 +56,7 @@ public class ProfileRecommendationService {
 
     @Transactional(readOnly = true)
     public ProfileRecommendationResponse getRecommendation(Long currentUserId, Long targetUserId) {
+        userBlockService.requireProfilesVisible(currentUserId, targetUserId);
         userRepository.findById(currentUserId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ForbiddenException("추천 상태를 조회할 수 없는 사용자입니다."));

@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,8 +42,8 @@ public class ProfileShareController {
     @PostMapping("/api/users/{userId}/profile-share-links")
     @Operation(summary = "다른 사용자 프로필 공유 링크 발급", description = "공개 프로필에 대해 3시간 동안 유효한 공유 토큰을 발급합니다. 비공개·휴식 중·비활성 사용자의 프로필은 공유할 수 없습니다. 반환된 token으로 공유 URL을 구성합니다.")
     @SecurityRequirement(name = "JWT")
-    public ResponseEntity<ProfileShareLinkResponse> createLinkForProfile(@PathVariable Long userId) {
-        return ResponseEntity.status(201).body(profileShareLinkService.createLinkForPublicProfile(userId));
+    public ResponseEntity<ProfileShareLinkResponse> createLinkForProfile(@PathVariable Long userId, Authentication authentication) {
+        return ResponseEntity.status(201).body(profileShareLinkService.createLinkForPublicProfile(viewerId(authentication), userId));
     }
 
     @DeleteMapping("/api/users/me/profile-share-links/{linkId}")
@@ -57,20 +58,25 @@ public class ProfileShareController {
     @GetMapping("/api/profile/shares/{token}/target")
     @Operation(summary = "공유 링크의 회원용 프로필 식별자 조회", description = "로그인 및 학교 인증 후 유효한 공유 토큰의 공개 상세 프로필 ID를 조회합니다. 비회원 공유 카드 응답은 변경하지 않습니다.")
     @SecurityRequirement(name = "JWT")
-    public ResponseEntity<SharedProfileTargetResponse> getSharedProfileTarget(@PathVariable String token) {
+    public ResponseEntity<SharedProfileTargetResponse> getSharedProfileTarget(@PathVariable String token, Authentication authentication) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .header("Referrer-Policy", "no-referrer")
-                .body(profileShareLinkService.getSharedProfileTarget(token));
+                .body(profileShareLinkService.getSharedProfileTarget(token, viewerId(authentication)));
     }
 
     @GetMapping("/api/profile/shares/{token}")
     @SecurityRequirements
     @Operation(summary = "비회원 공유 프로필 조회", description = "로그인 및 학교 이메일 인증 없이 유효한 공유 링크 토큰으로 프로필 카드 정보만 조회합니다. 토큰은 발급 후 3시간 동안 유효하며, 잘못되거나 만료·해제된 토큰은 404를 반환합니다. 포트폴리오와 활동 이력은 반환하지 않습니다.")
     @ApiResponse(responseCode = "200", description = "공유 프로필 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = SharedProfileResponse.class), examples = @ExampleObject(value = SwaggerExamples.SHARED_PROFILE)))
-    public ResponseEntity<SharedProfileResponse> getSharedProfile(@PathVariable String token) {
+    public ResponseEntity<SharedProfileResponse> getSharedProfile(@PathVariable String token, Authentication authentication) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header("Referrer-Policy", "no-referrer")
-                .body(profileShareLinkService.getSharedProfile(token));
+                .body(profileShareLinkService.getSharedProfile(token, viewerId(authentication)));
+    }
+
+    private Long viewerId(Authentication authentication) {
+        return authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken
+                ? null : Long.valueOf(authentication.getName());
     }
 }

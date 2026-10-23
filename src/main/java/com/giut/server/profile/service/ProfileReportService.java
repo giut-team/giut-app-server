@@ -5,6 +5,7 @@ import com.giut.server.profile.dto.request.ReviewProfileReportRequest;
 import com.giut.server.profile.dto.response.AdminProfileReportDetailResponse;
 import com.giut.server.profile.dto.response.ProfileReportPageResponse;
 import com.giut.server.profile.dto.response.ProfileReportResponse;
+import com.giut.server.profile.dto.response.PendingProfileReportResponse;
 import com.giut.server.profile.entity.ProfileReport;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
@@ -38,6 +39,19 @@ public class ProfileReportService {
             throw new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다.");
         }
         return createReport(reporter, profile, request);
+    }
+
+    @Transactional(readOnly = true)
+    public PendingProfileReportResponse getMyPendingReport(Long reporterUserId, Long targetUserId) {
+        userRepository.findById(reporterUserId)
+                .filter(user -> user.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ForbiddenException("신고를 조회할 수 없는 사용자입니다."));
+        // This is the caller's submitted record, not a new read of the target's public profile.
+        return profileReportRepository
+                .findFirstByReporter_IdAndReportedProfile_UserIdAndStatusOrderByCreatedAtDescIdDesc(
+                        reporterUserId, targetUserId, ProfileReport.Status.PENDING)
+                .map(PendingProfileReportResponse::from)
+                .orElseGet(PendingProfileReportResponse::none);
     }
 
     @Transactional(readOnly = true)

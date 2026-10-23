@@ -114,3 +114,4 @@ temp/
 !/src/main/resources/db/seed/profile_roles.sql
 
 !/src/main/resources/db/manual/V19__create_profile_scraps.sql
+!/src/main/resources/db/manual/V20__create_user_blocks.sql
