@@ -1,0 +1,13 @@
+{
+  "environment": "dev",
+  "host_label": "giut-dev-ec2",
+  "cpu_high": 85,
+  "cpu_recover": 75,
+  "memory_high": 90,
+  "memory_recover": 80,
+  "trigger_samples": 3,
+  "recovery_samples": 2,
+  "interval_seconds": 60,
+  "max_sample_gap_seconds": 180,
+  "oom_cooldown_seconds": 900
+}
