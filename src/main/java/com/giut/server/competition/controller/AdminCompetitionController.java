@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -26,13 +27,28 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Admin Competition", description = "관리자 공모전 등록 및 수정")
+@Tag(name = "Admin Competition", description = "관리자 공모전 등록·수정·삭제")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/admin/competitions")
 public class AdminCompetitionController {
 
     private final CompetitionService competitionService;
+
+    @DeleteMapping("/{competitionId}")
+    @Operation(summary = "관리자 공모전 삭제", description = "공모전을 ARCHIVED 상태로 논리 삭제합니다. 공개 목록·상세에서 제외되며 기존 팀·채팅·스크랩·URL·검증 기록은 보존합니다. 이미 삭제한 공모전도 204를 반환하며 일반 수정이나 공개 승인으로 복원할 수 없습니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "삭제 완료 또는 이미 삭제됨"),
+            @ApiResponse(responseCode = "400", description = "공모전 ID는 양수여야 함"),
+            @ApiResponse(responseCode = "401", description = "로그인 필요"),
+            @ApiResponse(responseCode = "403", description = "현재 활성 관리자 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음")
+    })
+    public ResponseEntity<Void> deleteCompetition(@PathVariable Long competitionId, Authentication authentication) {
+        competitionService.deleteByAdmin(Long.valueOf(authentication.getName()), competitionId);
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping
     @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다.")

@@ -221,8 +221,7 @@ public class CompetitionService {
     @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
-        Competition competition = competitionRepository.findById(competitionId)
-                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, competitionId);
@@ -250,13 +249,29 @@ public class CompetitionService {
     @Transactional
     public AdminCompetitionResponse publishByAdmin(Long adminUserId, Long competitionId) {
         findActiveAdmin(adminUserId);
-        Competition competition = competitionRepository.findById(competitionId)
-                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
 
         competition.publish();
 
         List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
         return toResponse(competition, urls);
+    }
+
+    @Transactional
+    public void deleteByAdmin(Long adminUserId, Long competitionId) {
+        findActiveAdmin(adminUserId);
+        if (competitionId == null || competitionId <= 0) {
+            throw new IllegalArgumentException("공모전 ID는 양수여야 합니다.");
+        }
+        Competition competition = competitionRepository.findByIdForUpdate(competitionId)
+                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        competition.archive();
+    }
+
+    private Competition findEditableCompetitionForUpdate(Long competitionId) {
+        return competitionRepository.findByIdForUpdate(competitionId)
+                .filter(competition -> competition.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
+                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
     }
 
     private User findActiveAdmin(Long adminUserId) {
