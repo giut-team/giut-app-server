@@ -4,8 +4,10 @@ import com.giut.server.competition.util.CompetitionUrlNormalizer;
 
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.CompetitionTeamResponse;
@@ -187,6 +189,33 @@ public class CompetitionService {
     }
 
     @Transactional
+    public AdminCompetitionListResponse getAdminCreatedCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
+        findActiveAdmin(adminUserId);
+        Specification<Competition> specification = createdByAdmin().and((root, query, criteriaBuilder) ->
+                request.publicationStatus() == null
+                        ? criteriaBuilder.notEqual(root.get("publicationStatus"), Competition.PublicationStatus.ARCHIVED)
+                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus()));
+        if (request.normalizedKeyword() != null) {
+            specification = specification.and(keywordContains(request.normalizedKeyword()));
+        }
+        if (request.category() != null) {
+            specification = specification.and(hasCategory(request.category()));
+        }
+        Page<Competition> page = competitionRepository.findAll(specification,
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
+        Map<Long, List<CompetitionUrlResponse>> urlsById = page.isEmpty() ? Map.of()
+                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(
+                        page.getContent().stream().map(Competition::getId).toList()).stream()
+                .collect(Collectors.groupingBy(url -> url.getCompetition().getId(),
+                        Collectors.mapping(CompetitionUrlResponse::from, Collectors.toList())));
+        List<AdminCompetitionResponse> responses = page.getContent().stream()
+                .map(competition -> AdminCompetitionResponse.from(competition, urlsById.getOrDefault(competition.getId(), List.of())))
+                .toList();
+        return new AdminCompetitionListResponse(responses, page.getNumber(), page.getSize(),
+                page.getTotalElements(), page.getTotalPages(), page.hasNext());
+    }
+
+    @Transactional
     public AdminCompetitionResponse createByAdmin(Long adminUserId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         validateRequest(request);
@@ -212,7 +241,7 @@ public class CompetitionService {
                 null,
                 Competition.VerificationStatus.MANUALLY_VERIFIED,
                 admin,
-                "관리자 직접 등록"
+                CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
 
         return toResponse(competition, savedUrls);
@@ -298,6 +327,22 @@ public class CompetitionService {
                         Competition.PublicationStatus.PUBLISHED
                 )
                 .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
+    }
+
+    private Specification<Competition> createdByAdmin() {
+        return (root, query, criteriaBuilder) -> {
+            var subquery = query.subquery(Long.class);
+            var log = subquery.from(CompetitionVerificationLog.class);
+            subquery.select(log.get("id")).where(
+                    criteriaBuilder.equal(log.get("competition"), root),
+                    criteriaBuilder.equal(log.get("verificationMethod"), CompetitionVerificationLog.Method.ADMIN_REVIEW),
+                    criteriaBuilder.isNull(log.get("fromStatus")),
+                    criteriaBuilder.equal(log.get("toStatus"), Competition.VerificationStatus.MANUALLY_VERIFIED),
+                    criteriaBuilder.isNotNull(log.get("actorUser")),
+                    criteriaBuilder.equal(log.get("reason"), CompetitionVerificationLog.ADMIN_CREATION_REASON)
+            );
+            return criteriaBuilder.exists(subquery);
+        };
     }
 
     private Specification<Competition> listedCompetition() {

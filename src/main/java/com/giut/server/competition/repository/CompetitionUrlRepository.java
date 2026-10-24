@@ -11,6 +11,8 @@ public interface CompetitionUrlRepository extends JpaRepository<CompetitionUrl, 
 
     List<CompetitionUrl> findAllByCompetition_Id(Long competitionId);
 
+    List<CompetitionUrl> findAllByCompetition_IdInOrderByIdAsc(Collection<Long> competitionIds);
+
     List<CompetitionUrl> findAllByCompetition_IdInAndPrimaryTrue(Collection<Long> competitionIds);
 
     Optional<CompetitionUrl> findByNormalizedUrlHash(String normalizedUrlHash);
