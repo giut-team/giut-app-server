@@ -6,6 +6,7 @@ import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
@@ -216,8 +217,10 @@ public class CompetitionService {
     }
 
     @Transactional
-    public AdminCompetitionResponse createByAdmin(Long adminUserId, UpsertCompetitionRequest request) {
+    public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
+        UpsertCompetitionRequest request = input.toUpsertRequest();
+        Competition.VerificationStatus verificationStatus = input.verificationStatusOrDefault();
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
@@ -231,7 +234,7 @@ public class CompetitionService {
                 request.applicationStartAt(),
                 request.applicationEndAt(),
                 request.publicationStatus(),
-                Competition.VerificationStatus.MANUALLY_VERIFIED,
+                verificationStatus,
                 admin
         ));
 
@@ -239,7 +242,7 @@ public class CompetitionService {
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
                 competition,
                 null,
-                Competition.VerificationStatus.MANUALLY_VERIFIED,
+                verificationStatus,
                 admin,
                 CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
@@ -337,7 +340,6 @@ public class CompetitionService {
                     criteriaBuilder.equal(log.get("competition"), root),
                     criteriaBuilder.equal(log.get("verificationMethod"), CompetitionVerificationLog.Method.ADMIN_REVIEW),
                     criteriaBuilder.isNull(log.get("fromStatus")),
-                    criteriaBuilder.equal(log.get("toStatus"), Competition.VerificationStatus.MANUALLY_VERIFIED),
                     criteriaBuilder.isNotNull(log.get("actorUser")),
                     criteriaBuilder.equal(log.get("reason"), CompetitionVerificationLog.ADMIN_CREATION_REASON)
             );

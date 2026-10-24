@@ -2,6 +2,7 @@ package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.entity.Competition;
@@ -32,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -109,6 +111,141 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @ParameterizedTest
+    @EnumSource(Competition.VerificationStatus.class)
+    void chosenVerificationStatusIsStoredAndLoggedWithoutLosingAdminCreationVisibility(Competition.VerificationStatus state) throws Exception {
+        boolean isVerified = state == Competition.VerificationStatus.AUTO_VERIFIED
+                || state == Competition.VerificationStatus.MANUALLY_VERIFIED;
+        var creation = mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON)
+                        .content(creationBody("DRAFT", "\"" + state.name() + "\"")))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.verificationStatus").value(state.name()));
+        if (isVerified) creation.andExpect(jsonPath("$.verifiedAt").isNotEmpty());
+        else creation.andExpect(jsonPath("$.verifiedAt").value(nullValue()));
+
+        Competition stored = competitions.findAll().getFirst();
+        assertThat(stored.getVerificationStatus()).isEqualTo(state);
+        if (isVerified) {
+            assertThat(stored.getVerifiedAt()).isNotNull();
+            assertThat(stored.getVerifiedByUser().getId()).isEqualTo(admin.getId());
+        } else {
+            assertThat(stored.getVerifiedAt()).isNull();
+            assertThat(stored.getVerifiedByUser()).isNull();
+        }
+        CompetitionVerificationLog log = logs.findAll().getFirst();
+        assertThat(log.getFromStatus()).isNull();
+        assertThat(log.getToStatus()).isEqualTo(state);
+        assertThat(log.getVerificationMethod()).isEqualTo(CompetitionVerificationLog.Method.ADMIN_REVIEW);
+        assertThat(log.getActorUser().getId()).isEqualTo(admin.getId());
+        assertThat(log.getReason()).isEqualTo(CompetitionVerificationLog.ADMIN_CREATION_REASON);
+        mvc.perform(as(otherAdmin, get(PATH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(stored.getId()))
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value(state.name()));
+    }
+
+    @ParameterizedTest
+    @EnumSource(Competition.PublicationStatus.class)
+    void unverifiedCreationIsIndependentOfPublicationStatusAndRespectsExistingVisibility(Competition.PublicationStatus state) throws Exception {
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON)
+                        .content(creationBody(state.name(), "\"UNVERIFIED\"")))
+                .andExpect(status().isCreated());
+        Competition created = competitions.findAll().getFirst();
+        mvc.perform(as(admin, get(PATH).param("publicationStatus", state.name())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"));
+        mvc.perform(as(admin, get(PATH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements")
+                        .value(state == Competition.PublicationStatus.ARCHIVED ? 0 : 1));
+        mvc.perform(as(verified, get("/api/competitions")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements")
+                        .value(state == Competition.PublicationStatus.DRAFT || state == Competition.PublicationStatus.PUBLISHED ? 1 : 0));
+        mvc.perform(as(verified, get("/api/competitions/" + created.getId())))
+                .andExpect(state == Competition.PublicationStatus.PUBLISHED ? status().isOk() : status().isNotFound());
+    }
+
+    @Test
+    void explicitNullKeepsLegacyVerifiedDefault() throws Exception {
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(creationBody("DRAFT", "null")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.verificationStatus").value("MANUALLY_VERIFIED"))
+                .andExpect(jsonPath("$.verifiedAt").isNotEmpty());
+        assertThat(competitions.findAll().getFirst().getVerifiedByUser().getId()).isEqualTo(admin.getId());
+        assertThat(logs.findAll().getFirst().getToStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+    }
+
+    @Test
+    void invalidVerificationStatusAndExistingFieldValidationRejectWithoutPartialWrites() throws Exception {
+        String valid = creationBody("DRAFT", "\"UNVERIFIED\"");
+        for (String body : List.of(
+                creationBody("DRAFT", "\"NOT_A_STATUS\""),
+                valid.replace("상태 선택", " "),
+                valid.replace("\"WEB_MOBILE_IT\"", "null"),
+                valid.replace("\"summary\":\"소개\"", "\"summary\":\"\""),
+                valid.replace("https://example.com/verification-create", "not-a-url"),
+                valid.replace("\"primary\":true", "\"primary\":false"),
+                valid.replace("\"publicationStatus\":\"DRAFT\"", "\"publicationStatus\":null"),
+                valid.replace("\"summary\":\"소개\"", "\"summary\":\"소개\",\"applicationStartAt\":\"2026-10-24T12:00:00Z\",\"applicationEndAt\":\"2026-10-23T12:00:00Z\""))) {
+            mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+            assertThat(competitions.count()).isZero();
+            assertThat(urls.count()).isZero();
+            assertThat(logs.count()).isZero();
+        }
+    }
+
+    @Test
+    void verificationChoiceDoesNotRelaxCreationAuthorization() throws Exception {
+        String body = creationBody("DRAFT", "\"UNVERIFIED\"");
+        mvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        for (User student : List.of(verified, unverified)) {
+            mvc.perform(as(student, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden());
+        }
+        String oldToken = jwt.generateAccessToken(admin);
+        ReflectionTestUtils.setField(admin, "role", User.Role.STUDENT);
+        users.saveAndFlush(admin);
+        mvc.perform(withToken(oldToken, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        assertThat(competitions.count()).isZero();
+        assertThat(logs.count()).isZero();
+    }
+
+    @Test
+    void unverifiedCreationRemainsUnverifiedAndListedAfterEditingAndPublishingThenArchiving() throws Exception {
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON)
+                        .content(creationBody("DRAFT", "\"UNVERIFIED\""))).andExpect(status().isCreated());
+        Competition created = competitions.findAll().getFirst();
+        service.updateByAdmin(otherAdmin.getId(), created.getId(), request("수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
+        service.publishByAdmin(otherAdmin.getId(), created.getId());
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"))
+                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()));
+        assertThat(competitions.findById(created.getId()).orElseThrow().getVerifiedByUser()).isNull();
+        assertThat(logs.count()).isEqualTo(1);
+        assertThat(logs.findAll().getFirst().getActorUser().getId()).isEqualTo(admin.getId());
+        service.deleteByAdmin(otherAdmin.getId(), created.getId());
+        mvc.perform(as(admin, get(PATH).param("publicationStatus", "ARCHIVED")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"));
+    }
+
+    @Test
+    void samplesKeepTheirPreviousVerifiedDefaultAndCreationLogs() {
+        var seeded = seeds.seedSamples(admin.getId());
+        assertThat(seeded.createdCount()).isPositive();
+        assertThat(competitions.findAll()).allSatisfy(competition -> {
+            assertThat(competition.getVerificationStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+            assertThat(competition.getVerifiedAt()).isNotNull();
+            assertThat(competition.getVerifiedByUser().getId()).isEqualTo(admin.getId());
+        });
+        assertThat(logs.findAll()).hasSize(seeded.createdCount()).allSatisfy(log -> {
+            assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+            assertThat(log.getActorUser().getId()).isEqualTo(admin.getId());
+        });
+    }
+
+    @ParameterizedTest
     @EnumSource(Competition.PublicationStatus.class)
     void defaultExcludesArchivedAndExplicitFilterSelectsEachState(Competition.PublicationStatus state) throws Exception {
         AdminCompetitionResponse created = create(admin, "상태별", Competition.Category.WEB_MOBILE_IT, state);
@@ -124,7 +261,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"MISSING", "FROM", "TO", "METHOD", "ACTOR", "REASON"})
+    @ValueSource(strings = {"MISSING", "FROM", "METHOD", "ACTOR", "REASON"})
     void manualVerificationOrIncompleteCreationEvidenceDoesNotCountAsAdminCreation(String missing) throws Exception {
         Competition target = competitions.saveAndFlush(Competition.create("출처 미확인", Competition.Category.ETC,
                 "주최", null, "소개", null, null, Competition.PublicationStatus.PUBLISHED,
@@ -134,7 +271,6 @@ class AdminCreatedCompetitionListPersistenceTest {
                     Competition.VerificationStatus.MANUALLY_VERIFIED, admin, CompetitionVerificationLog.ADMIN_CREATION_REASON);
             switch (missing) {
                 case "FROM" -> ReflectionTestUtils.setField(log, "fromStatus", Competition.VerificationStatus.UNVERIFIED);
-                case "TO" -> ReflectionTestUtils.setField(log, "toStatus", Competition.VerificationStatus.REJECTED);
                 case "METHOD" -> ReflectionTestUtils.setField(log, "verificationMethod", CompetitionVerificationLog.Method.AUTO_EXTRACTION);
                 case "ACTOR" -> ReflectionTestUtils.setField(log, "actorUser", null);
                 case "REASON" -> ReflectionTestUtils.setField(log, "reason", "관리자 검토 완료");
@@ -251,8 +387,14 @@ class AdminCreatedCompetitionListPersistenceTest {
         }
     }
 
+    private String creationBody(String publicationStatus, String verificationJson) {
+        return "{\"title\":\"상태 선택\",\"category\":\"WEB_MOBILE_IT\",\"summary\":\"소개\","
+                + "\"publicationStatus\":\"" + publicationStatus + "\",\"verificationStatus\":" + verificationJson + ","
+                + "\"urls\":[{\"type\":\"RECRUITMENT\",\"url\":\"https://example.com/verification-create\",\"primary\":true}]}";
+    }
+
     private AdminCompetitionResponse create(User creator, String title, Competition.Category category, Competition.PublicationStatus state) {
-        return service.createByAdmin(creator.getId(), request(title, category, state));
+        return service.createByAdmin(creator.getId(), CreateCompetitionRequest.from(request(title, category, state)));
     }
 
     private UpsertCompetitionRequest request(String title, Competition.Category category, Competition.PublicationStatus state) {

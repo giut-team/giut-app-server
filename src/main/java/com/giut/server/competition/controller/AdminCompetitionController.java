@@ -3,6 +3,7 @@ package com.giut.server.competition.controller;
 import com.giut.server.global.dto.ResultDto;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
@@ -72,7 +73,7 @@ public class AdminCompetitionController {
     }
 
     @PostMapping
-    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다.")
+    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. verificationStatus로 검증 상태를 선택하며 생략 또는 null이면 기존처럼 MANUALLY_VERIFIED로 등록합니다. 미인증 등록도 관리자 등록 목록에 포함됩니다. 게시 상태와 검증 상태는 별개이며, 미인증이라도 PUBLISHED면 일반 상세 조회 대상입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
@@ -83,7 +84,7 @@ public class AdminCompetitionController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
     public ResponseEntity<AdminCompetitionResponse> createCompetition(
-            @Valid @RequestBody UpsertCompetitionRequest request,
+            @Valid @RequestBody CreateCompetitionRequest request,
             Authentication authentication
     ) {
         Long adminUserId = Long.valueOf(authentication.getName());
