@@ -4,8 +4,11 @@ import com.giut.server.competition.util.CompetitionUrlNormalizer;
 
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.CompetitionTeamResponse;
@@ -61,9 +64,9 @@ public class CompetitionService {
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public PublicCompetitionListResponse getPublishedCompetitions(CompetitionSearchRequest request) {
+    public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = publishedCompetition();
+        Specification<Competition> specification = listedCompetition();
 
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
@@ -187,8 +190,37 @@ public class CompetitionService {
     }
 
     @Transactional
-    public AdminCompetitionResponse createByAdmin(Long adminUserId, UpsertCompetitionRequest request) {
+    public AdminCompetitionListResponse getAdminCreatedCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
+        findActiveAdmin(adminUserId);
+        Specification<Competition> specification = createdByAdmin().and((root, query, criteriaBuilder) ->
+                request.publicationStatus() == null
+                        ? criteriaBuilder.notEqual(root.get("publicationStatus"), Competition.PublicationStatus.ARCHIVED)
+                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus()));
+        if (request.normalizedKeyword() != null) {
+            specification = specification.and(keywordContains(request.normalizedKeyword()));
+        }
+        if (request.category() != null) {
+            specification = specification.and(hasCategory(request.category()));
+        }
+        Page<Competition> page = competitionRepository.findAll(specification,
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
+        Map<Long, List<CompetitionUrlResponse>> urlsById = page.isEmpty() ? Map.of()
+                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(
+                        page.getContent().stream().map(Competition::getId).toList()).stream()
+                .collect(Collectors.groupingBy(url -> url.getCompetition().getId(),
+                        Collectors.mapping(CompetitionUrlResponse::from, Collectors.toList())));
+        List<AdminCompetitionResponse> responses = page.getContent().stream()
+                .map(competition -> AdminCompetitionResponse.from(competition, urlsById.getOrDefault(competition.getId(), List.of())))
+                .toList();
+        return new AdminCompetitionListResponse(responses, page.getNumber(), page.getSize(),
+                page.getTotalElements(), page.getTotalPages(), page.hasNext());
+    }
+
+    @Transactional
+    public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
+        UpsertCompetitionRequest request = input.toUpsertRequest();
+        Competition.VerificationStatus verificationStatus = input.verificationStatusOrDefault();
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
@@ -202,7 +234,7 @@ public class CompetitionService {
                 request.applicationStartAt(),
                 request.applicationEndAt(),
                 request.publicationStatus(),
-                Competition.VerificationStatus.MANUALLY_VERIFIED,
+                verificationStatus,
                 admin
         ));
 
@@ -210,9 +242,9 @@ public class CompetitionService {
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
                 competition,
                 null,
-                Competition.VerificationStatus.MANUALLY_VERIFIED,
+                verificationStatus,
                 admin,
-                "관리자 직접 등록"
+                CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
 
         return toResponse(competition, savedUrls);
@@ -221,8 +253,7 @@ public class CompetitionService {
     @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
-        Competition competition = competitionRepository.findById(competitionId)
-                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, competitionId);
@@ -250,13 +281,29 @@ public class CompetitionService {
     @Transactional
     public AdminCompetitionResponse publishByAdmin(Long adminUserId, Long competitionId) {
         findActiveAdmin(adminUserId);
-        Competition competition = competitionRepository.findById(competitionId)
-                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
 
         competition.publish();
 
         List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
         return toResponse(competition, urls);
+    }
+
+    @Transactional
+    public void deleteByAdmin(Long adminUserId, Long competitionId) {
+        findActiveAdmin(adminUserId);
+        if (competitionId == null || competitionId <= 0) {
+            throw new IllegalArgumentException("공모전 ID는 양수여야 합니다.");
+        }
+        Competition competition = competitionRepository.findByIdForUpdate(competitionId)
+                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
+        competition.archive();
+    }
+
+    private Competition findEditableCompetitionForUpdate(Long competitionId) {
+        return competitionRepository.findByIdForUpdate(competitionId)
+                .filter(competition -> competition.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
+                .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
     }
 
     private User findActiveAdmin(Long adminUserId) {
@@ -283,6 +330,28 @@ public class CompetitionService {
                         Competition.PublicationStatus.PUBLISHED
                 )
                 .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
+    }
+
+    private Specification<Competition> createdByAdmin() {
+        return (root, query, criteriaBuilder) -> {
+            var subquery = query.subquery(Long.class);
+            var log = subquery.from(CompetitionVerificationLog.class);
+            subquery.select(log.get("id")).where(
+                    criteriaBuilder.equal(log.get("competition"), root),
+                    criteriaBuilder.equal(log.get("verificationMethod"), CompetitionVerificationLog.Method.ADMIN_REVIEW),
+                    criteriaBuilder.isNull(log.get("fromStatus")),
+                    criteriaBuilder.isNotNull(log.get("actorUser")),
+                    criteriaBuilder.equal(log.get("reason"), CompetitionVerificationLog.ADMIN_CREATION_REASON)
+            );
+            return criteriaBuilder.exists(subquery);
+        };
+    }
+
+    private Specification<Competition> listedCompetition() {
+        return (root, query, criteriaBuilder) -> root.get("publicationStatus").in(
+                Competition.PublicationStatus.DRAFT,
+                Competition.PublicationStatus.PUBLISHED
+        );
     }
 
     private Specification<Competition> publishedCompetition() {

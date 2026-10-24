@@ -117,6 +117,11 @@ public class Competition extends BaseTimeEntity {
         this.publicationStatus = PublicationStatus.PUBLISHED;
     }
 
+    /** Preserves dependent teams, scraps and review history while removing public visibility. */
+    public void archive() {
+        this.publicationStatus = PublicationStatus.ARCHIVED;
+    }
+
     private boolean isVerified(VerificationStatus verificationStatus) {
         return verificationStatus == VerificationStatus.AUTO_VERIFIED
                 || verificationStatus == VerificationStatus.MANUALLY_VERIFIED;

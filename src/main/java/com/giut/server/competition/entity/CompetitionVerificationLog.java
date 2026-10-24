@@ -9,6 +9,8 @@ import java.time.Instant;
 
 @Entity @Table(name = "competition_verification_logs") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompetitionVerificationLog {
+    public static final String ADMIN_CREATION_REASON = "관리자 직접 등록";
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

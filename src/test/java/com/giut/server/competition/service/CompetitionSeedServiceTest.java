@@ -1,6 +1,7 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
@@ -119,7 +120,7 @@ class CompetitionSeedServiceTest {
     void registrationFailureIsPropagatedAndRemainingSamplesAreNotAttempted() {
         when(userRepository.findById(10L)).thenReturn(Optional.of(admin()));
         when(competitionService.createByAdmin(eq(10L), any())).thenAnswer(invocation -> {
-            UpsertCompetitionRequest request = invocation.getArgument(1);
+            CreateCompetitionRequest request = invocation.getArgument(1);
             if (request.title().equals(catalog.competitions().get(2).title())) {
                 throw new IllegalStateException("DB 등록 실패");
             }
@@ -144,7 +145,7 @@ class CompetitionSeedServiceTest {
                 .thenAnswer(invocation -> Optional.ofNullable(saved.get(invocation.getArgument(0))));
         AtomicLong nextId = new AtomicLong(100L);
         when(competitionService.createByAdmin(eq(10L), any())).thenAnswer(invocation -> {
-            UpsertCompetitionRequest request = invocation.getArgument(1);
+            CreateCompetitionRequest request = invocation.getArgument(1);
             Competition competition = competition(nextId.incrementAndGet(), request);
             var source = request.urls().getFirst();
             var normalized = normalizer.normalize(source.url());
@@ -170,7 +171,7 @@ class CompetitionSeedServiceTest {
         );
     }
 
-    private Competition competition(Long id, UpsertCompetitionRequest request) {
+    private Competition competition(Long id, CreateCompetitionRequest request) {
         Competition competition = Competition.create(
                 request.title(), request.category(), request.hostOrganization(), request.targetParticipants(),
                 request.summary(), request.applicationStartAt(), request.applicationEndAt(),

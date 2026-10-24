@@ -3,7 +3,10 @@ package com.giut.server.competition.controller;
 import com.giut.server.global.dto.ResultDto;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
+import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.service.CompetitionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,10 +18,14 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -26,7 +33,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Admin Competition", description = "관리자 공모전 등록 및 수정")
+@Tag(name = "Admin Competition", description = "관리자 공모전 조회·등록·수정·삭제")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/admin/competitions")
@@ -34,8 +41,39 @@ public class AdminCompetitionController {
 
     private final CompetitionService competitionService;
 
+    @GetMapping
+    @Operation(summary = "관리자 등록 공모전 목록 조회", description = "모든 관리자의 생성 이력이 확인된 공모전만 ID 내림차순으로 조회합니다. 관리자 직접 등록과 같은 생성 경로를 쓰는 샘플 등록도 포함합니다. 단순 수동 검증 완료 건이나 생성 이력이 없는 건은 제외합니다. 기본은 ARCHIVED 제외이며 publicationStatus를 명시하면 해당 게시 상태만 조회합니다. keyword, category는 AND 조건입니다. 조회수는 증가하지 않습니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "관리자 등록 공모전 목록", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionListResponse.class))),
+            @ApiResponse(responseCode = "400", description = "페이지 크기·번호 또는 필터 값 오류"),
+            @ApiResponse(responseCode = "401", description = "로그인 필요"),
+            @ApiResponse(responseCode = "403", description = "현재 활성 관리자 권한 없음")
+    })
+    public ResponseEntity<AdminCompetitionListResponse> getAdminCreatedCompetitions(
+            @Valid @ParameterObject @ModelAttribute AdminCompetitionSearchRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(competitionService.getAdminCreatedCompetitions(Long.valueOf(authentication.getName()), request));
+    }
+
+    @DeleteMapping("/{competitionId}")
+    @Operation(summary = "관리자 공모전 삭제", description = "공모전을 ARCHIVED 상태로 논리 삭제합니다. 공개 목록·상세에서 제외되며 기존 팀·채팅·스크랩·URL·검증 기록은 보존합니다. 이미 삭제한 공모전도 204를 반환하며 일반 수정이나 공개 승인으로 복원할 수 없습니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "삭제 완료 또는 이미 삭제됨"),
+            @ApiResponse(responseCode = "400", description = "공모전 ID는 양수여야 함"),
+            @ApiResponse(responseCode = "401", description = "로그인 필요"),
+            @ApiResponse(responseCode = "403", description = "현재 활성 관리자 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음")
+    })
+    public ResponseEntity<Void> deleteCompetition(@PathVariable Long competitionId, Authentication authentication) {
+        competitionService.deleteByAdmin(Long.valueOf(authentication.getName()), competitionId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping
-    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다.")
+    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. verificationStatus로 검증 상태를 선택하며 생략 또는 null이면 기존처럼 MANUALLY_VERIFIED로 등록합니다. 미인증 등록도 관리자 등록 목록에 포함됩니다. 게시 상태와 검증 상태는 별개이며, 미인증이라도 PUBLISHED면 일반 상세 조회 대상입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
@@ -46,7 +84,7 @@ public class AdminCompetitionController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
     public ResponseEntity<AdminCompetitionResponse> createCompetition(
-            @Valid @RequestBody UpsertCompetitionRequest request,
+            @Valid @RequestBody CreateCompetitionRequest request,
             Authentication authentication
     ) {
         Long adminUserId = Long.valueOf(authentication.getName());

@@ -1,6 +1,7 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.SeedSampleCompetitionsResponse;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
@@ -48,7 +49,7 @@ public class CompetitionSeedService {
             }
 
             // Reuse URL validation, normalized hashes and the administrator review log.
-            competitionIds.add(competitionService.createByAdmin(adminUserId, sample).id());
+            competitionIds.add(competitionService.createByAdmin(adminUserId, CreateCompetitionRequest.from(sample)).id());
             createdCount++;
         }
 

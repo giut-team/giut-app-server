@@ -73,7 +73,7 @@ class TeamServiceTest {
         when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
-        when(competitionRepository.findById(1L)).thenReturn(Optional.of(competition));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
         when(teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 1L, 12L, Team.Status.RECRUITING)).thenReturn(true);
 
@@ -89,7 +89,7 @@ class TeamServiceTest {
         when(leader.getId()).thenReturn(12L);
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
-        when(competitionRepository.findById(1L)).thenReturn(Optional.of(competition));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
             Team team = invocation.getArgument(0);
             ReflectionTestUtils.setField(team, "id", 10L);
@@ -100,6 +100,20 @@ class TeamServiceTest {
         verify(teamRepository).existsByCompetition_IdAndLeader_IdAndStatus(
                 1L, 12L, Team.Status.RECRUITING);
         verify(teamMemberRepository).save(any(TeamMember.class));
+    }
+
+    @Test
+    void cannotCreateTeamForArchivedCompetition() {
+        User leader = mock(User.class);
+        Competition competition = mock(Competition.class);
+        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.ARCHIVED);
+
+        assertThrows(ResourceNotFoundException.class, () -> teamService.createTeam(12L, createRequest(1L)));
+        verify(teamRepository, never()).save(any(Team.class));
+        verify(teamMemberRepository, never()).save(any(TeamMember.class));
     }
 
     @Test

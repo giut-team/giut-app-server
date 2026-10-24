@@ -141,7 +141,8 @@ public class TeamService {
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("팀장을 찾을 수 없습니다."));
 
-        Competition competition = competitionRepository.findById(request.competitionId())
+        Competition competition = competitionRepository.findByIdForUpdate(request.competitionId())
+                .filter(found -> found.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
                 .orElseThrow(() -> new ResourceNotFoundException("대회를 찾을 수 없습니다."));
 
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(

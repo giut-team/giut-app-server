@@ -40,7 +40,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "게시된 공모전을 페이지 단위로 조회합니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
+            description = "DRAFT와 PUBLISHED 상태의 공모전을 페이지 단위로 조회합니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -60,7 +60,7 @@ public class CompetitionController {
     public ResponseEntity<PublicCompetitionListResponse> getCompetitions(
             @Valid @ParameterObject @ModelAttribute CompetitionSearchRequest request
     ) {
-        return ResponseEntity.ok(competitionService.getPublishedCompetitions(request));
+        return ResponseEntity.ok(competitionService.getCompetitions(request));
     }
 
     @GetMapping("/top5")
