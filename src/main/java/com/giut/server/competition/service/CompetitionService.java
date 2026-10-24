@@ -61,9 +61,9 @@ public class CompetitionService {
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public PublicCompetitionListResponse getPublishedCompetitions(CompetitionSearchRequest request) {
+    public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = publishedCompetition();
+        Specification<Competition> specification = listedCompetition();
 
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
@@ -298,6 +298,13 @@ public class CompetitionService {
                         Competition.PublicationStatus.PUBLISHED
                 )
                 .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
+    }
+
+    private Specification<Competition> listedCompetition() {
+        return (root, query, criteriaBuilder) -> root.get("publicationStatus").in(
+                Competition.PublicationStatus.DRAFT,
+                Competition.PublicationStatus.PUBLISHED
+        );
     }
 
     private Specification<Competition> publishedCompetition() {

@@ -77,7 +77,7 @@ class CompetitionRecruitmentDeadlineTest {
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L, 2L, 3L), Team.Status.RECRUITING))
                 .thenReturn(counts);
 
-        var response = atFixedNow(() -> competitionService.getPublishedCompetitions(searchRequest()));
+        var response = atFixedNow(() -> competitionService.getCompetitions(searchRequest()));
 
         assertThat(response.competitions()).extracting("id").containsExactly(1L, 2L, 3L);
         assertThat(response.competitions()).extracting("teamCount").containsExactly(2L, 3L, 1L);
@@ -90,7 +90,7 @@ class CompetitionRecruitmentDeadlineTest {
         when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<Competition>(List.of()));
 
-        var response = atFixedNow(() -> competitionService.getPublishedCompetitions(searchRequest()));
+        var response = atFixedNow(() -> competitionService.getCompetitions(searchRequest()));
 
         assertThat(response.competitions()).isEmpty();
         verifyNoInteractions(competitionTeamRepository);

@@ -98,7 +98,7 @@ class CompetitionServiceTeamTest {
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L), Team.Status.RECRUITING))
                 .thenReturn(List.of(count));
 
-        var response = competitionService.getPublishedCompetitions(
+        var response = competitionService.getCompetitions(
                 new CompetitionSearchRequest(null, null, null, null, null)
         );
 
