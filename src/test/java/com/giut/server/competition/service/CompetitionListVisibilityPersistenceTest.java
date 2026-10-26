@@ -92,6 +92,10 @@ class CompetitionListVisibilityPersistenceTest {
                 .andExpect(jsonPath("$.competitions.length()").value(2))
                 .andExpect(jsonPath("$.competitions[0].id").value(draft.getId()))
                 .andExpect(jsonPath("$.competitions[1].id").value(published.getId()))
+                .andExpect(jsonPath("$.competitions[0].verified").isBoolean())
+                .andExpect(jsonPath("$.competitions[0].verified").value(false))
+                .andExpect(jsonPath("$.competitions[1].verified").isBoolean())
+                .andExpect(jsonPath("$.competitions[1].verified").value(false))
                 .andExpect(jsonPath("$.competitions[0].summary").value("목록 소개"))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").doesNotExist())
                 .andExpect(jsonPath("$.competitions[0].verificationStatus").doesNotExist());
@@ -99,14 +103,39 @@ class CompetitionListVisibilityPersistenceTest {
 
     @ParameterizedTest
     @EnumSource(Competition.VerificationStatus.class)
-    void verificationStatusDoesNotFilterEitherListedPublicationState(Competition.VerificationStatus verification) throws Exception {
+    void verificationStatusControlsFlagButDoesNotFilterEitherListedPublicationState(Competition.VerificationStatus verification) throws Exception {
+        boolean expected = verification == Competition.VerificationStatus.AUTO_VERIFIED
+                || verification == Competition.VerificationStatus.MANUALLY_VERIFIED;
+        Instant now = Instant.now();
         for (Competition.PublicationStatus state : List.of(
                 Competition.PublicationStatus.DRAFT, Competition.PublicationStatus.PUBLISHED)) {
             competitions.saveAndFlush(Competition.create("검증 상태와 별개", Competition.Category.WEB_MOBILE_IT,
-                    "주최", "대학생", "목록 소개", null, null, state, verification, null));
+                    "주최", "대학생", "목록 소개", now.minusSeconds(3600), now.plusSeconds(7200), state, verification, null));
         }
         mvc.perform(as(unverified, get("/api/competitions")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.competitions[0].verified").isBoolean())
+                .andExpect(jsonPath("$.competitions[0].verified").value(expected))
+                .andExpect(jsonPath("$.competitions[1].verified").isBoolean())
+                .andExpect(jsonPath("$.competitions[1].verified").value(expected));
+        Competition published = competitions.findAll().stream()
+                .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED).findFirst().orElseThrow();
+        Competition draft = competitions.findAll().stream()
+                .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.DRAFT).findFirst().orElseThrow();
+        for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
+            mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(published.getId()))
+                    .andExpect(jsonPath("$[0].verified").isBoolean())
+                    .andExpect(jsonPath("$[0].verified").value(expected));
+        }
+        mvc.perform(as(unverified, get("/api/competitions/" + published.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.verified").isBoolean())
+                .andExpect(jsonPath("$.verified").value(expected));
+        mvc.perform(as(unverified, get("/api/competitions/" + draft.getId())))
+                .andExpect(status().isNotFound());
+        assertThat(competitions.findAll()).hasSize(2).allSatisfy(c ->
+                assertThat(c.getVerificationStatus()).isEqualTo(verification));
     }
 
     @Test
@@ -180,7 +209,8 @@ class CompetitionListVisibilityPersistenceTest {
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].id").value(published.getId()));
+                    .andExpect(jsonPath("$[0].id").value(published.getId()))
+                    .andExpect(jsonPath("$[0].verified").value(false));
         }
         mvc.perform(as(unverified, get("/api/competitions/" + draft.getId())))
                 .andExpect(status().isNotFound());
@@ -190,7 +220,8 @@ class CompetitionListVisibilityPersistenceTest {
                 .andExpect(status().isNotFound());
         assertThat(scraps.count()).isZero();
         assertThat(competitions.findById(draft.getId()).orElseThrow().getViewCount()).isZero();
-        mvc.perform(as(verified, get("/api/competitions/" + published.getId()))).andExpect(status().isOk());
+        mvc.perform(as(verified, get("/api/competitions/" + published.getId()))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified").value(false));
         mvc.perform(as(verified, post("/api/competitions/" + published.getId() + "/scrap")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.scrapped").value(true));
         mvc.perform(as(unverified, post("/api/competitions/" + published.getId() + "/scrap")))

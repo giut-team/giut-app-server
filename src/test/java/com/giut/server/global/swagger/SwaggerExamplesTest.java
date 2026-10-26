@@ -71,6 +71,18 @@ class SwaggerExamplesTest {
         assertThat(teams.get(1).path("myTeam").asBoolean()).isFalse();
     }
 
+    @Test
+    void publicCompetitionExamplesIncludeBooleanVerified() throws Exception {
+        for (JsonNode example : List.of(
+                objectMapper.readTree(SwaggerExamples.COMPETITION_LIST).get(0),
+                objectMapper.readTree(SwaggerExamples.COMPETITION_PAGE).at("/competitions/0"),
+                objectMapper.readTree(SwaggerExamples.COMPETITION_DETAIL))) {
+            assertThat(example.path("verified").isBoolean()).isTrue();
+            assertThat(example.path("verified").asBoolean()).isTrue();
+            assertThat(example.has("isVerified")).isFalse();
+        }
+    }
+
     private void assertNonEmptyArray(String example, String pointer) throws Exception {
         JsonNode items = objectMapper.readTree(example).at(pointer);
         assertThat(items.isArray()).isTrue();

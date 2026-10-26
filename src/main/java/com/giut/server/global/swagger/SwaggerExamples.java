@@ -27,7 +27,7 @@ public final class SwaggerExamples {
             """;
 
     public static final String COMPETITION_LIST = """
-            [{"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","categoryName":"웹/모바일/IT","hostOrganization":"서울특별시","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","recruitmentStatus":"OPEN","recruitmentStatusName":"모집 중","viewCount":42,"scrapCount":8,"teamCount":2,"primaryUrl":"https://example.com/recruitment"}]
+            [{"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","categoryName":"웹/모바일/IT","hostOrganization":"서울특별시","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","recruitmentStatus":"OPEN","recruitmentStatusName":"모집 중","viewCount":42,"scrapCount":8,"teamCount":2,"primaryUrl":"https://example.com/recruitment","verified":true}]
             """;
 
     public static final String COMPETITION_PAGE = """
@@ -47,7 +47,8 @@ public final class SwaggerExamples {
                   "viewCount": 42,
                   "scrapCount": 8,
                   "teamCount": 2,
-                  "primaryUrl": "https://example.com/recruitment"
+                  "primaryUrl": "https://example.com/recruitment",
+                  "verified": true
                 }
               ],
               "page": 0,
@@ -74,6 +75,7 @@ public final class SwaggerExamples {
               "viewCount": 43,
               "scrapCount": 8,
               "scrapped": true,
+              "verified": true,
               "urls": [
                 {"id": 1, "type": "RECRUITMENT", "url": "https://example.com/recruitment", "primary": true}
               ],

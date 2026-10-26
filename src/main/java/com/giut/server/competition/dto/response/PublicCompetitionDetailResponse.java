@@ -27,7 +27,9 @@ public record PublicCompetitionDetailResponse(
         @Schema(description = "RECRUITING 상태의 팀 수. teamCount와 동일하며 공모전 마감일과 무관합니다.", example = "2")
         long recruitingTeamCount,
         @Schema(description = "RECRUITING 상태의 팀 목록. 공모전 마감일과 무관하며, 해당 팀이 없으면 빈 배열입니다.")
-        List<CompetitionTeamResponse> teams
+        List<CompetitionTeamResponse> teams,
+        @Schema(description = "실제 검증 완료 여부. AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true이며 게시·모집 상태와 무관합니다.", example = "true")
+        boolean verified
 ) {
 
     public static PublicCompetitionDetailResponse from(
@@ -58,7 +60,8 @@ public record PublicCompetitionDetailResponse(
                 urls,
                 teamCount,
                 recruitingTeamCount,
-                teams
+                teams,
+                competition.isVerified()
         );
     }
 }
