@@ -1,11 +1,9 @@
 package com.giut.server.competition.service;
 
-import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
-import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.seed.SampleCompetitionCatalog;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.global.exception.ForbiddenException;
@@ -27,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -39,7 +36,6 @@ import static org.mockito.Mockito.when;
 class CompetitionSeedServiceTest {
 
     @Mock private UserRepository userRepository;
-    @Mock private CompetitionUrlRepository competitionUrlRepository;
     @Mock private CompetitionService competitionService;
 
     private final CompetitionUrlNormalizer normalizer = new CompetitionUrlNormalizer();
@@ -49,12 +45,12 @@ class CompetitionSeedServiceTest {
     @BeforeEach
     void setUp() {
         service = new CompetitionSeedService(
-                userRepository, competitionUrlRepository, normalizer, competitionService, catalog
+                userRepository, competitionService, catalog
         );
     }
 
     @Test
-    void firstCallCreatesTenAndSecondCallReturnsExistingIdsWithoutCreatingAgain() {
+    void everyCallCreatesTenNewIdsAndDistinctUrlHashesEvenWithIdenticalContent() {
         Map<String, CompetitionUrl> saved = new HashMap<>();
         stubAdminAndStorage(saved);
 
@@ -64,29 +60,32 @@ class CompetitionSeedServiceTest {
         assertThat(first.createdCount()).isEqualTo(10);
         assertThat(first.skippedCount()).isZero();
         assertThat(first.competitionIds()).hasSize(10).doesNotHaveDuplicates();
-        assertThat(second.createdCount()).isZero();
-        assertThat(second.skippedCount()).isEqualTo(10);
-        assertThat(second.competitionIds()).containsExactlyElementsOf(first.competitionIds());
-        verify(competitionService, times(10)).createByAdmin(eq(10L), any());
+        assertThat(second.createdCount()).isEqualTo(10);
+        assertThat(second.skippedCount()).isZero();
+        assertThat(second.competitionIds()).hasSize(10).doesNotHaveDuplicates()
+                .doesNotContainAnyElementsOf(first.competitionIds());
+        assertThat(saved).hasSize(20);
+        verify(competitionService, times(20)).createByAdmin(eq(10L), any());
     }
 
     @Test
-    void skipsExistingCompetitionsAndPreservesTheirDraftStatusAndEditedTitle() {
+    void eachBatchUsesOneSharedThirtyDayPeriodAndNeverUpdatesOrPublishesExistingData() {
         Map<String, CompetitionUrl> saved = new HashMap<>();
-        CompetitionUrl firstExisting = existingUrl(7L, catalog.competitions().get(0));
-        CompetitionUrl secondExisting = existingUrl(8L, catalog.competitions().get(1));
-        saved.put(firstExisting.getNormalizedUrlHash(), firstExisting);
-        saved.put(secondExisting.getNormalizedUrlHash(), secondExisting);
         stubAdminAndStorage(saved);
 
+        var before = java.time.Instant.now();
         var response = service.seedSamples(10L);
+        var after = java.time.Instant.now();
 
-        assertThat(response.createdCount()).isEqualTo(8);
-        assertThat(response.skippedCount()).isEqualTo(2);
-        assertThat(response.competitionIds()).hasSize(10).startsWith(7L, 8L);
-        assertThat(firstExisting.getCompetition().getTitle()).isEqualTo("관리자가 수정한 제목");
-        assertThat(firstExisting.getCompetition().getPublicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
-        verify(competitionService, times(8)).createByAdmin(eq(10L), any());
+        assertThat(response.createdCount()).isEqualTo(10);
+        assertThat(response.skippedCount()).isZero();
+        var start = saved.values().iterator().next().getCompetition().getApplicationStartAt();
+        assertThat(start).isBetween(before, after);
+        assertThat(saved.values()).allSatisfy(url -> {
+            assertThat(url.getCompetition().getApplicationStartAt()).isEqualTo(start);
+            assertThat(url.getCompetition().getApplicationEndAt()).isEqualTo(start.plus(java.time.Duration.ofDays(30)));
+        });
+        verify(competitionService, times(10)).createByAdmin(eq(10L), any());
         verify(competitionService, never()).updateByAdmin(any(), any(), any());
         verify(competitionService, never()).publishByAdmin(any(), any());
     }
@@ -136,13 +135,11 @@ class CompetitionSeedServiceTest {
     private void assertDeniedWithoutWrites() {
         assertThatThrownBy(() -> service.seedSamples(10L))
                 .isInstanceOf(ForbiddenException.class);
-        verifyNoInteractions(competitionUrlRepository, competitionService);
+        verifyNoInteractions(competitionService);
     }
 
     private void stubAdminAndStorage(Map<String, CompetitionUrl> saved) {
         when(userRepository.findById(10L)).thenReturn(Optional.of(admin()));
-        when(competitionUrlRepository.findByNormalizedUrlHash(anyString()))
-                .thenAnswer(invocation -> Optional.ofNullable(saved.get(invocation.getArgument(0))));
         AtomicLong nextId = new AtomicLong(100L);
         when(competitionService.createByAdmin(eq(10L), any())).thenAnswer(invocation -> {
             CreateCompetitionRequest request = invocation.getArgument(1);
@@ -152,23 +149,9 @@ class CompetitionSeedServiceTest {
             CompetitionUrl url = CompetitionUrl.create(
                     competition, source.type(), source.url(), normalized.value(), normalized.hash(), true
             );
-            saved.put(normalized.hash(), url);
+            assertThat(saved.putIfAbsent(normalized.hash(), url)).as("URL hash must remain unique").isNull();
             return AdminCompetitionResponse.from(competition, List.of());
         });
-    }
-
-    private CompetitionUrl existingUrl(Long id, UpsertCompetitionRequest request) {
-        Competition competition = Competition.create(
-                "관리자가 수정한 제목", request.category(), request.hostOrganization(), request.targetParticipants(),
-                "기존 소개", request.applicationStartAt(), request.applicationEndAt(),
-                Competition.PublicationStatus.DRAFT, Competition.VerificationStatus.UNVERIFIED, null
-        );
-        ReflectionTestUtils.setField(competition, "id", id);
-        var source = request.urls().getFirst();
-        var normalized = normalizer.normalize(source.url());
-        return CompetitionUrl.create(
-                competition, source.type(), source.url(), normalized.value(), normalized.hash(), true
-        );
     }
 
     private Competition competition(Long id, CreateCompetitionRequest request) {

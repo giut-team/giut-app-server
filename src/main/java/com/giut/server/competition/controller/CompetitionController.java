@@ -40,7 +40,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "DRAFT와 PUBLISHED 상태의 공모전을 페이지 단위로 조회합니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
+            description = "DRAFT와 PUBLISHED 상태의 공모전을 페이지 단위로 조회합니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -64,7 +64,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/top5")
-    @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다.")
+    @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
@@ -76,7 +76,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/closing-soon")
-    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 마감 임박 순으로 조회합니다.")
+    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 마감 임박 순으로 조회합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
@@ -88,7 +88,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/{competitionId}")
-    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL과 모집 중인 팀 정보를 조회합니다. teams에는 RECRUITING 상태의 팀만 포함되며, teamCount와 recruitingTeamCount는 이 목록의 개수로 동일합니다. 팀 조회와 집계는 공모전 마감일과 무관합니다. 조회수는 이 요청마다 1 증가합니다.")
+    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL과 모집 중인 팀 정보를 조회합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. teams에는 RECRUITING 상태의 팀만 포함되며, teamCount와 recruitingTeamCount는 이 목록의 개수로 동일합니다. 팀 조회와 집계는 공모전 마감일과 무관합니다. 조회수는 이 요청마다 1 증가합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_DETAIL))),

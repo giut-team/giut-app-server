@@ -1,5 +1,6 @@
 package com.giut.server.competition.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.giut.server.competition.entity.Competition;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -11,7 +12,8 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 
-@Schema(description = "관리자 공모전 등록 요청. 게시 상태와 검증 상태는 별개입니다.")
+@Schema(description = "관리자 공모전 등록 요청. 검증 상태는 서버가 MANUALLY_VERIFIED로 설정하며 입력받지 않습니다.")
+@JsonIgnoreProperties("verificationStatus") // Ignore retired input from older clients; never bind it.
 public record CreateCompetitionRequest(
         @NotBlank(message = "공모전 제목은 필수입니다.")
         @Size(max = 200, message = "공모전 제목은 200자 이하여야 합니다.")
@@ -37,17 +39,9 @@ public record CreateCompetitionRequest(
         @NotNull(message = "게시 상태는 필수입니다.")
         Competition.PublicationStatus publicationStatus,
 
-        @Schema(description = "등록할 검증 상태. 생략 또는 null이면 기존 호환을 위해 MANUALLY_VERIFIED입니다. AUTO_VERIFIED 선택이 자동 검증 작업을 실행하지는 않습니다.",
-                example = "UNVERIFIED", defaultValue = "MANUALLY_VERIFIED")
-        Competition.VerificationStatus verificationStatus,
-
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
         List<@Valid CompetitionUrlRequest> urls
 ) {
-    public Competition.VerificationStatus verificationStatusOrDefault() {
-        return verificationStatus == null ? Competition.VerificationStatus.MANUALLY_VERIFIED : verificationStatus;
-    }
-
     public UpsertCompetitionRequest toUpsertRequest() {
         return new UpsertCompetitionRequest(title, category, hostOrganization, targetParticipants, summary,
                 applicationStartAt, applicationEndAt, publicationStatus, urls);
@@ -57,6 +51,6 @@ public record CreateCompetitionRequest(
     public static CreateCompetitionRequest from(UpsertCompetitionRequest request) {
         return new CreateCompetitionRequest(request.title(), request.category(), request.hostOrganization(),
                 request.targetParticipants(), request.summary(), request.applicationStartAt(), request.applicationEndAt(),
-                request.publicationStatus(), null, request.urls());
+                request.publicationStatus(), request.urls());
     }
 }

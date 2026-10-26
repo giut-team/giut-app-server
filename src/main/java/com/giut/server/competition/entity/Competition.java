@@ -122,6 +122,11 @@ public class Competition extends BaseTimeEntity {
         this.publicationStatus = PublicationStatus.ARCHIVED;
     }
 
+    /** Verification is independent of publication and recruitment status. */
+    public boolean isVerified() {
+        return isVerified(verificationStatus);
+    }
+
     private boolean isVerified(VerificationStatus verificationStatus) {
         return verificationStatus == VerificationStatus.AUTO_VERIFIED
                 || verificationStatus == VerificationStatus.MANUALLY_VERIFIED;

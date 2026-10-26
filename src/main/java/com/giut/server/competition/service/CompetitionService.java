@@ -220,7 +220,7 @@ public class CompetitionService {
     public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
         UpsertCompetitionRequest request = input.toUpsertRequest();
-        Competition.VerificationStatus verificationStatus = input.verificationStatusOrDefault();
+        Competition.VerificationStatus verificationStatus = Competition.VerificationStatus.MANUALLY_VERIFIED;
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
