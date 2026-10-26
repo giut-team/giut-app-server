@@ -166,7 +166,7 @@ class CompetitionSeedPersistenceTest {
     private CreateCompetitionRequest existing(String title, String url) {
         return new CreateCompetitionRequest(title, Competition.Category.WEB_MOBILE_IT, "기존 주최", "기존 대상", "기존 소개",
                 Instant.parse("2020-01-01T00:00:00Z"), Instant.parse("2020-02-01T00:00:00Z"),
-                Competition.PublicationStatus.DRAFT, Competition.VerificationStatus.UNVERIFIED,
+                Competition.PublicationStatus.DRAFT,
                 List.of(new CompetitionUrlRequest(CompetitionUrl.Type.SOURCE_ORIGINAL, url, true)));
     }
 }
