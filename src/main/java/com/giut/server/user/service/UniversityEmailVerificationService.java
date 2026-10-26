@@ -7,6 +7,7 @@ import com.giut.server.user.dto.response.UniversityEmailVerifyResponse;
 import com.giut.server.user.entity.User;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.global.exception.ConflictException;
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,11 @@ public class UniversityEmailVerificationService {
     public UniversityEmailVerifyResponse verifyCode(Long memberId, UniversityEmailVerifyRequest request) {
         String universityEmail = request.getUniversityEmail();
         validateUniversityEmail(universityEmail);
+
+        // Re-read the code only after acquiring the same user lock used by revocation.
+        // A verification already in progress must finish before a later revocation.
+        User user = userRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
         validateNotUsedUniversityEmail(universityEmail);
 
         String key = createKey(memberId, universityEmail);
@@ -76,9 +82,6 @@ public class UniversityEmailVerificationService {
             throw new IllegalArgumentException("인증코드가 일치하지 않습니다.");
         }
 
-        User user = userRepository.findById(memberId)
-                .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
-
         user.verifyUniversityEmail(universityEmail);
         verificationCodes.remove(key);
 
@@ -87,6 +90,25 @@ public class UniversityEmailVerificationService {
                 user.getUniversityEmail(),
                 user.getUniversityVerifiedAt()
         );
+    }
+
+    @Transactional
+    public void revokeUniversityVerification(Long adminUserId, Long userId) {
+        if (!userRepository.existsByIdAndRoleAndStatus(adminUserId, User.Role.ADMIN, User.Status.ACTIVE)) {
+            throw new ForbiddenException("관리자 권한이 필요합니다.");
+        }
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("사용자 ID는 양수여야 합니다.");
+        }
+
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("인증을 해제할 사용자를 찾을 수 없습니다."));
+        user.revokeUniversityVerification();
+
+        // Invalidate every pending email for this user, but not IDs with the same numeric prefix.
+        // The current application stores these short-lived codes in this process only.
+        String userKeyPrefix = userId + ":";
+        verificationCodes.keySet().removeIf(key -> key.startsWith(userKeyPrefix));
     }
 
     private void validateUniversityEmail(String universityEmail) {

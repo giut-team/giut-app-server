@@ -112,6 +112,15 @@ public class User {
         this.updatedAt = this.universityVerifiedAt;
     }
 
+    public void revokeUniversityVerification() {
+        if (universityEmail == null && universityVerifiedAt == null) {
+            return;
+        }
+        this.universityEmail = null;
+        this.universityVerifiedAt = null;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public void updateNickname(String nickname) {
         this.nickname = nickname;
         this.updatedAt = LocalDateTime.now();
