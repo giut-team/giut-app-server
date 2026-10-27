@@ -51,6 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminAuthPersistenceTest {
 
     private static final String LOGIN = "/api/admin/auth/login";
+    private static final String SIGNUP = "/api/admin/auth/signup";
     private static final String PASSWORD = "Test-password-123!";
     private static final String NEW_EMAIL = "new-admin@example.com";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -72,11 +73,10 @@ class AdminAuthPersistenceTest {
         users.deleteAll();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
-    void anonymousSignupIsRejectedEvenWhenNoAdministratorExists(String path) throws Exception {
+    @Test
+    void anonymousSignupIsRejectedEvenWhenNoAdministratorExists() throws Exception {
         assertThat(users.count()).isZero();
-        mvc.perform(signup(path))
+        mvc.perform(signup(SIGNUP))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
         assertThat(users.count()).isZero();
@@ -134,13 +134,12 @@ class AdminAuthPersistenceTest {
         assertThat(users.existsByEmail(NEW_EMAIL)).isFalse();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
-    void jwtForRemovedAdministratorCannotCreateAccounts(String path) throws Exception {
+    @Test
+    void jwtForRemovedAdministratorCannotCreateAccounts() throws Exception {
         User admin = saveAdmin();
         String token = jwt.generateAccessToken(admin);
         users.deleteById(admin.getId());
-        mvc.perform(withToken(signup(path), token, true))
+        mvc.perform(withToken(signup(SIGNUP), token, true))
                 .andExpect(status().isForbidden());
         assertThat(users.count()).isZero();
     }
@@ -216,13 +215,23 @@ class AdminAuthPersistenceTest {
         assertThat(users.count()).isEqualTo(2);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
-    void invalidOrRefreshTokenDoesNotAuthorizeSignup(String path) throws Exception {
+    @Test
+    void invalidOrRefreshTokenDoesNotAuthorizeSignup() throws Exception {
         User admin = saveAdmin();
-        mvc.perform(withToken(signup(path), "invalid-token", false)).andExpect(status().isUnauthorized());
-        mvc.perform(withToken(signup(path), jwt.generateRefreshToken(admin), false))
+        mvc.perform(withToken(signup(SIGNUP), "invalid-token", false)).andExpect(status().isUnauthorized());
+        mvc.perform(withToken(signup(SIGNUP), jwt.generateRefreshToken(admin), false))
                 .andExpect(status().isUnauthorized());
+        assertThat(users.count()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void removedHyphenatedSignupPathReturnsNotFoundWithoutCreatingAnAccount(boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        mvc.perform(withToken(signup("/api/admin/auth/sign-up"), jwt.generateAccessToken(admin), cookie))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404));
+        assertThat(users.existsByEmail(NEW_EMAIL)).isFalse();
         assertThat(users.count()).isEqualTo(1);
     }
 
@@ -258,8 +267,7 @@ class AdminAuthPersistenceTest {
     }
 
     static Stream<Arguments> signupTransports() {
-        return Stream.of("/api/admin/auth/signup", "/api/admin/auth/sign-up")
-                .flatMap(path -> Stream.of(false, true).map(cookie -> Arguments.of(path, cookie)));
+        return Stream.of(false, true).map(cookie -> Arguments.of(SIGNUP, cookie));
     }
 
     static Stream<Arguments> studentRequests() {
@@ -268,9 +276,9 @@ class AdminAuthPersistenceTest {
     }
 
     static Stream<Arguments> revokedAdminRequests() {
-        return Stream.of("/api/admin/auth/signup", "/api/admin/auth/sign-up").flatMap(path -> Stream.of(
-                Arguments.of(path, User.Role.STUDENT, User.Status.ACTIVE),
-                Arguments.of(path, User.Role.ADMIN, User.Status.SUSPENDED),
-                Arguments.of(path, User.Role.ADMIN, User.Status.DELETED)));
+        return Stream.of(
+                Arguments.of(SIGNUP, User.Role.STUDENT, User.Status.ACTIVE),
+                Arguments.of(SIGNUP, User.Role.ADMIN, User.Status.SUSPENDED),
+                Arguments.of(SIGNUP, User.Role.ADMIN, User.Status.DELETED));
     }
 }

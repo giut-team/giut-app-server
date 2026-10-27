@@ -62,7 +62,6 @@ public class ApiErrorResponseConfig {
                 }
                 if ((method == PathItem.HttpMethod.POST && path.contains("/applications"))
                         || path.endsWith("/auth/signup")
-                        || path.endsWith("/auth/sign-up")
                         || (method == PathItem.HttpMethod.DELETE && path.equals("/api/users/me"))
                         || path.endsWith("/university-email/send")
                         || path.endsWith("/university-email/verify")) {

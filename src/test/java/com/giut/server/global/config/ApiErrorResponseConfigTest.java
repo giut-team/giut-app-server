@@ -8,8 +8,6 @@ import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,12 +38,12 @@ class ApiErrorResponseConfigTest {
         assertThat(operation.getResponses().get("204").getContent()).isNull();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
-    void administratorCreationDocumentsAuthenticationAuthorizationAndConflict(String path) {
+    @Test
+    void administratorCreationDocumentsAuthenticationAuthorizationAndConflict() {
         Operation operation = new Operation().responses(new ApiResponses()
                 .addApiResponse("200", new ApiResponse().description("생성 성공")));
-        OpenAPI openApi = new OpenAPI().paths(new Paths().addPathItem(path, new PathItem().post(operation)));
+        OpenAPI openApi = new OpenAPI().paths(new Paths()
+                .addPathItem("/api/admin/auth/signup", new PathItem().post(operation)));
 
         config.apiErrorResponseCustomizer().customise(openApi);
 
