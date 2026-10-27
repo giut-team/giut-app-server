@@ -11,47 +11,24 @@ import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-import java.security.SecureRandom;
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
 public class UniversityEmailVerificationService {
 
-    private static final int CODE_BOUND = 1_000_000;
-    private static final int CODE_EXPIRE_MINUTES = 5;
-
-    private final Map<String, VerificationCode> verificationCodes = new ConcurrentHashMap<>();
-    private final SecureRandom secureRandom = new SecureRandom();
-
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
-    private final UniversityEmailSendRateLimiter sendRateLimiter;
+    private final UniversityEmailVerificationCodeStore codeStore;
 
     public UniversityEmailSendResponse sendCode(Long memberId, UniversityEmailSendRequest request) {
         String universityEmail = request.getUniversityEmail();
         validateUniversityEmail(universityEmail);
         validateNotUsedUniversityEmail(universityEmail);
 
-        sendRateLimiter.acquire(memberId);
-
-        String code = generateCode();
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(CODE_EXPIRE_MINUTES);
-
-        verificationCodes.put(
-                createKey(memberId, universityEmail),
-                new VerificationCode(passwordEncoder.encode(code), expiresAt)
-        );
-
-        mailService.sendUniversityVerificationCode(universityEmail, code);
-
-        return new UniversityEmailSendResponse(universityEmail, expiresAt);
+        var issued = codeStore.issue(memberId, universityEmail);
+        mailService.sendUniversityVerificationCode(universityEmail, issued.code());
+        return new UniversityEmailSendResponse(universityEmail, issued.expiresAt());
     }
 
     public boolean isUniversityVerified(Long memberId) {
@@ -69,24 +46,8 @@ public class UniversityEmailVerificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
         validateNotUsedUniversityEmail(universityEmail);
 
-        String key = createKey(memberId, universityEmail);
-        VerificationCode savedCode = verificationCodes.get(key);
-
-        if (savedCode == null) {
-            throw new IllegalArgumentException("인증코드 요청 내역이 없습니다.");
-        }
-
-        if (LocalDateTime.now().isAfter(savedCode.expiresAt())) {
-            verificationCodes.remove(key);
-            throw new IllegalArgumentException("인증코드가 만료되었습니다.");
-        }
-
-        if (!passwordEncoder.matches(request.getCode(), savedCode.codeHash())) {
-            throw new IllegalArgumentException("인증코드가 일치하지 않습니다.");
-        }
-
+        codeStore.verify(memberId, universityEmail, request.getCode());
         user.verifyUniversityEmail(universityEmail);
-        verificationCodes.remove(key);
 
         return new UniversityEmailVerifyResponse(
                 user.getId(),
@@ -108,10 +69,7 @@ public class UniversityEmailVerificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("인증을 해제할 사용자를 찾을 수 없습니다."));
         user.revokeUniversityVerification();
 
-        // Invalidate every pending email for this user, but not IDs with the same numeric prefix.
-        // The current application stores these short-lived codes in this process only.
-        String userKeyPrefix = userId + ":";
-        verificationCodes.keySet().removeIf(key -> key.startsWith(userKeyPrefix));
+        codeStore.invalidateCodes(userId);
     }
 
     private void validateUniversityEmail(String universityEmail) {
@@ -126,14 +84,4 @@ public class UniversityEmailVerificationService {
         }
     }
 
-    private String generateCode() {
-        return String.format("%06d", secureRandom.nextInt(CODE_BOUND));
-    }
-
-    private String createKey(Long memberId, String universityEmail) {
-        return memberId + ":" + universityEmail;
-    }
-
-    private record VerificationCode(String codeHash, LocalDateTime expiresAt) {
-    }
 }

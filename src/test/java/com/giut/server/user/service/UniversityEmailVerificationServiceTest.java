@@ -16,8 +16,10 @@ class UniversityEmailVerificationServiceTest {
     private final UserRepository users = mock(UserRepository.class);
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final MailService mail = mock(MailService.class);
+    private final UniversityEmailVerificationCodeStore codeStore = new UniversityEmailVerificationCodeStore(
+            encoder, new UniversityEmailSendRateLimiter());
     private final UniversityEmailVerificationService service = new UniversityEmailVerificationService(
-            users, encoder, mail, new UniversityEmailSendRateLimiter());
+            users, mail, codeStore);
 
     @Test
     void changedEmailsShareUserQuotaAndRejectionDoesNotHashOrSend() {
@@ -34,10 +36,11 @@ class UniversityEmailVerificationServiceTest {
         when(encoder.encode(anyString())).thenReturn("hash");
         var request = request("target@uos.ac.kr");
         for (int i = 0; i < 5; i++) service.sendCode(1L, request);
-        var codes = (java.util.Map<?, ?>) ReflectionTestUtils.getField(service, "verificationCodes");
-        Object saved = codes.get("1:target@uos.ac.kr");
         assertThatThrownBy(() -> service.sendCode(1L, request)).isInstanceOf(TooManyRequestsException.class);
-        assertThat(codes.get("1:target@uos.ac.kr")).isSameAs(saved);
+        when(encoder.matches("123456", "hash")).thenReturn(true);
+        org.assertj.core.api.Assertions.assertThatCode(() -> codeStore.verify(1L, "target@uos.ac.kr", "123456"))
+                .doesNotThrowAnyException();
+        verify(encoder, times(5)).encode(anyString());
     }
 
     @Test

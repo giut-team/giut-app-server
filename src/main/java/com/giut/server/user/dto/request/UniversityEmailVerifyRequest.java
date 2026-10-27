@@ -19,5 +19,6 @@ public class UniversityEmailVerifyRequest {
     private String universityEmail;
 
     @NotBlank(message = "인증코드는 필수 항목입니다.")
+    @Pattern(regexp = "[0-9]{6}", message = "인증코드는 숫자 6자리여야 합니다.")
     private String code;
 }
