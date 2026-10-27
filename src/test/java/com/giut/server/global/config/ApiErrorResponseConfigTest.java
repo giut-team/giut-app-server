@@ -17,6 +17,29 @@ class ApiErrorResponseConfigTest {
 
     private final ApiErrorResponseConfig config = new ApiErrorResponseConfig();
 
+    @Test
+    void withdrawalControllerExplicitlyDeclaresIts204SuccessForSwagger() throws Exception {
+        var response = com.giut.server.user.controller.UserWithdrawalController.class
+                .getMethod("withdraw", org.springframework.security.core.Authentication.class,
+                        jakarta.servlet.http.HttpServletResponse.class)
+                .getAnnotation(io.swagger.v3.oas.annotations.responses.ApiResponse.class);
+        assertThat(response).isNotNull();
+        assertThat(response.responseCode()).isEqualTo("204");
+        assertThat(response.content()).hasSize(1);
+        assertThat(response.content()[0].mediaType()).isEmpty();
+    }
+
+    @Test
+    void withdrawalDocumentsLeaderConflictAndProtectedAccess() {
+        Operation operation = new Operation().responses(new ApiResponses()
+                .addApiResponse("204", new ApiResponse().description("탈퇴 완료")));
+        OpenAPI api = new OpenAPI().paths(new Paths()
+                .addPathItem("/api/users/me", new PathItem().delete(operation)));
+        config.apiErrorResponseCustomizer().customise(api);
+        assertThat(operation.getResponses()).containsKeys("204", "401", "403", "409");
+        assertThat(operation.getResponses().get("204").getContent()).isNull();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
     void administratorCreationDocumentsAuthenticationAuthorizationAndConflict(String path) {

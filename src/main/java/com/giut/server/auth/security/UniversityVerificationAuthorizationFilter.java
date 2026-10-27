@@ -62,6 +62,10 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String path = request.getServletPath();
         String method = request.getMethod();
 
+        if (HttpMethod.DELETE.matches(method) && "/api/users/me".equals(path)) {
+            return false;
+        }
+
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
             return false;
         }

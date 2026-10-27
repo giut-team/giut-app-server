@@ -150,6 +150,16 @@ class UniversityVerificationAuthorizationFilterTest {
         );
     }
 
+    @Test
+    void unverifiedAccountCanWithdrawOnlyThroughTheExactDeleteRoute() throws Exception {
+        authenticateAsStudent("42");
+        assertThat(invoke("DELETE", "/api/users/me").continued()).isTrue();
+        verifyNoInteractions(userRepository);
+        assertDenied(invoke("GET", "/api/users/me"));
+        assertDenied(invoke("DELETE", "/api/users/me/extra"));
+        assertDenied(invoke("DELETE", "/api/users/43"));
+    }
+
     private void authenticateAsStudent(String userId) {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(

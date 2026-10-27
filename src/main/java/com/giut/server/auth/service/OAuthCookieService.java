@@ -77,6 +77,11 @@ public class OAuthCookieService {
                 Duration.ofMillis(refreshTokenMaxAgeMillis));
     }
 
+    public void clearLoginCookies(HttpServletResponse response) {
+        clearCookie(response, ACCESS_TOKEN_COOKIE, "None");
+        clearCookie(response, REFRESH_TOKEN_COOKIE, "None");
+    }
+
     private void validateState(String expected, String actual) {
         if (expected == null || actual == null || !MessageDigest.isEqual(
                 expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),

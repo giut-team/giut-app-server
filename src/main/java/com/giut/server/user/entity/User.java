@@ -125,4 +125,12 @@ public class User {
         this.nickname = nickname;
         this.updatedAt = LocalDateTime.now();
     }
+
+    public void withdraw() {
+        if (status == Status.DELETED) {
+            return;
+        }
+        this.status = Status.DELETED;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

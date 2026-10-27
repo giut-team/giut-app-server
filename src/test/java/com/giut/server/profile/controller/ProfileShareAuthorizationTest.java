@@ -108,7 +108,9 @@ class ProfileShareAuthorizationTest {
                 .digest(TOKEN.getBytes(StandardCharsets.US_ASCII)));
         verify(links).findByTokenHash(hash);
         verify(profiles).getSharedProfile("anonymous".equals(viewer) ? null : 42L, 12L);
-        verifyNoInteractions(users);
+        if ("anonymous".equals(viewer)) verifyNoInteractions(users);
+        else verify(users).existsByIdAndStatus(42L, User.Status.ACTIVE);
+        verify(users, never()).existsByIdAndUniversityVerifiedAtIsNotNull(anyLong());
     }
 
     @ParameterizedTest
@@ -219,7 +221,11 @@ class ProfileShareAuthorizationTest {
             ProfileShareController.class, ProfileShareLinkService.class, GlobalExceptionHandler.class})
     static class TestConfig {
         @Bean JwtProvider jwtProvider() { return new JwtProvider(); }
-        @Bean UserRepository userRepository() { return mock(UserRepository.class); }
+        @Bean UserRepository userRepository() {
+            UserRepository repository = mock(UserRepository.class);
+            when(repository.existsByIdAndStatus(anyLong(), eq(User.Status.ACTIVE))).thenReturn(true);
+            return repository;
+        }
         @Bean UserBlockService userBlockService() { return mock(UserBlockService.class); }
         @Bean ProfileShareLinkRepository profileShareLinkRepository() { return mock(ProfileShareLinkRepository.class); }
         @Bean UserProfileRepository userProfileRepository() { return mock(UserProfileRepository.class); }

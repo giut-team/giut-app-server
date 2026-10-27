@@ -1,6 +1,7 @@
 package com.giut.server.global.config;
 
 import com.giut.server.auth.security.JwtAuthenticationFilter;
+import com.giut.server.auth.security.ActiveUserAuthorizationFilter;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtProvider;
@@ -60,7 +61,8 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new UniversityVerificationAuthorizationFilter(userRepository), JwtAuthenticationFilter.class)
+                .addFilterAfter(new ActiveUserAuthorizationFilter(userRepository, jwtAccessDeniedHandler), JwtAuthenticationFilter.class)
+                .addFilterAfter(new UniversityVerificationAuthorizationFilter(userRepository), ActiveUserAuthorizationFilter.class)
                 .build();
     }
 
