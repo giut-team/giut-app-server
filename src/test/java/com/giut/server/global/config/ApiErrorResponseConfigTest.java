@@ -8,12 +8,37 @@ import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ApiErrorResponseConfigTest {
 
     private final ApiErrorResponseConfig config = new ApiErrorResponseConfig();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/admin/auth/signup", "/api/admin/auth/sign-up"})
+    void administratorCreationDocumentsAuthenticationAuthorizationAndConflict(String path) {
+        Operation operation = new Operation().responses(new ApiResponses()
+                .addApiResponse("200", new ApiResponse().description("생성 성공")));
+        OpenAPI openApi = new OpenAPI().paths(new Paths().addPathItem(path, new PathItem().post(operation)));
+
+        config.apiErrorResponseCustomizer().customise(openApi);
+
+        assertThat(operation.getResponses()).containsKeys("200", "401", "403", "409", "500");
+    }
+
+    @Test
+    void administratorLoginRemainsPublicInErrorDocumentation() {
+        Operation operation = new Operation().responses(new ApiResponses());
+        OpenAPI openApi = new OpenAPI().paths(new Paths()
+                .addPathItem("/api/admin/auth/login", new PathItem().post(operation)));
+
+        config.apiErrorResponseCustomizer().customise(openApi);
+
+        assertThat(operation.getResponses()).doesNotContainKeys("403", "409");
+    }
 
     @Test
     void documentsProtectedResourceErrorsWithResultDto() {

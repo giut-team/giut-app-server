@@ -7,6 +7,7 @@ import com.giut.server.auth.dto.response.SignUpResponse;
 import com.giut.server.user.entity.User;
 import com.giut.server.auth.exception.AuthenticationFailedException;
 import com.giut.server.global.exception.ConflictException;
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.user.repository.UserRepository;
 import com.giut.server.auth.security.JwtProvider;
 import jakarta.transaction.Transactional;
@@ -23,7 +24,12 @@ public class AuthService {
     private final JwtProvider jwtProvider;
 
     @Transactional
-    public SignUpResponse signUp(SignUpRequest request) {
+    public SignUpResponse signUp(Long adminUserId, SignUpRequest request) {
+        if (adminUserId == null
+                || !userRepository.existsByIdAndRoleAndStatus(adminUserId, User.Role.ADMIN, User.Status.ACTIVE)) {
+            throw new ForbiddenException("활성 관리자만 관리자 계정을 생성할 수 있습니다.");
+        }
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
@@ -54,7 +60,7 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new AuthenticationFailedException("이메일 또는 비밀번호가 올바르지 않습니다."));
 
-        if (user.getRole() != User.Role.ADMIN) {
+        if (user.getRole() != User.Role.ADMIN || user.getStatus() != User.Status.ACTIVE) {
             throw new AuthenticationFailedException("이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
