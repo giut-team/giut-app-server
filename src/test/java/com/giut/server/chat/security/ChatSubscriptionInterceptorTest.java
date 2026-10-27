@@ -3,6 +3,8 @@ package com.giut.server.chat.security;
 import com.giut.server.chat.entity.ChatRoom;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
+import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,10 +27,12 @@ class ChatSubscriptionInterceptorTest {
 
     @Mock ChatRoomRepository chatRoomRepository;
     @Mock ChatRoomMemberRepository chatRoomMemberRepository;
+    @Mock UserRepository userRepository;
     @InjectMocks ChatSubscriptionInterceptor interceptor;
 
     @Test
     void allowsActiveParticipantToSubscribe() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
         ChatRoom room = ChatRoom.createPersonalRoom();
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
         when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
@@ -40,6 +44,7 @@ class ChatSubscriptionInterceptorTest {
 
     @Test
     void rejectsNonParticipant() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom()));
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
@@ -54,12 +59,30 @@ class ChatSubscriptionInterceptorTest {
 
     @Test
     void rejectsOtherDestinationsAndClientSend() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/topic/other", () -> "12"), null));
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/topic/chat-rooms/5", () -> "12"), null));
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SEND, "/user/queue/chat-rooms/5", () -> "12"), null));
+    }
+
+    @Test
+    void rejectsInactiveUserConnectingOrSubscribing() {
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.CONNECT, null, () -> "12"), null));
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+        org.mockito.Mockito.verifyNoInteractions(chatRoomRepository, chatRoomMemberRepository);
+    }
+
+    @Test
+    void activeAccountCanConnectButMalformedPrincipalCannot() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        assertDoesNotThrow(() -> interceptor.preSend(frame(StompCommand.CONNECT, null, () -> "12"), null));
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.CONNECT, null, () -> "not-an-id"), null));
     }
 
     private Message<byte[]> frame(StompCommand command, String destination, Principal user) {

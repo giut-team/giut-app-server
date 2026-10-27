@@ -62,6 +62,7 @@ public class ApiErrorResponseConfig {
                 }
                 if ((method == PathItem.HttpMethod.POST && path.contains("/applications"))
                         || path.endsWith("/auth/signup")
+                        || (method == PathItem.HttpMethod.DELETE && path.equals("/api/users/me"))
                         || path.endsWith("/university-email/send")
                         || path.endsWith("/university-email/verify")) {
                     addError(responses, "409");
@@ -87,7 +88,6 @@ public class ApiErrorResponseConfig {
 
     private boolean isPublic(String path) {
         return path.startsWith("/api/oauth/")
-                || path.equals("/api/admin/auth/signup")
                 || path.equals("/api/admin/auth/login")
                 || path.startsWith("/api/profile/shares/");
     }

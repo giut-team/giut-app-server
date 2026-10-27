@@ -33,6 +33,8 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     List<Team> findAllByLeader_Id(Long leaderUserId);
 
+    boolean existsByLeader_IdAndStatusNot(Long leaderUserId, Team.Status excludedStatus);
+
     @Query("""
             select team
             from Team team

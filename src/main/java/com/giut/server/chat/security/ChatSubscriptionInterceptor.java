@@ -3,6 +3,8 @@ package com.giut.server.chat.security;
 import com.giut.server.chat.entity.ChatRoom;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
+import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -26,6 +28,7 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final UserRepository userRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -49,9 +52,16 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
         if (user == null) {
             throw new AccessDeniedException("인증이 필요합니다.");
         }
-        if (accessor.getCommand() == StompCommand.CONNECT) {
-            return message;
+        long userId;
+        try {
+            userId = Long.parseLong(user.getName());
+        } catch (NumberFormatException e) {
+            throw new AccessDeniedException("잘못된 구독 요청입니다.");
         }
+        if (!userRepository.existsByIdAndStatus(userId, User.Status.ACTIVE)) {
+            throw new AccessDeniedException("비활성 계정입니다.");
+        }
+        if (accessor.getCommand() == StompCommand.CONNECT) return message;
 
         Matcher matcher = ROOM_QUEUE.matcher(
                 String.valueOf(accessor.getDestination()));
@@ -60,10 +70,8 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
         }
 
         long roomId;
-        long userId;
         try {
             roomId = Long.parseLong(matcher.group(1));
-            userId = Long.parseLong(user.getName());
         } catch (NumberFormatException e) {
             throw new AccessDeniedException("잘못된 구독 요청입니다.");
         }

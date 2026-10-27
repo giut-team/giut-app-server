@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,14 +24,17 @@ public class AdminAuthController {
 
     private final AuthService authService;
 
-    @PostMapping({"/signup", "/signup"})
-    @Operation(summary = "관리자 전용 회원가입", description = "관리자 전용 계정을 생성합니다.")
-    public ResponseEntity<SignUpResponse> signUp(@Valid @RequestBody SignUpRequest request) {
-        return ResponseEntity.ok(authService.signUp(request));
+    @PostMapping("/signup")
+    @Operation(summary = "관리자 계정 생성", description = "현재 활성 관리자만 새 관리자 계정을 생성할 수 있습니다. 공개 회원가입 및 최초 관리자 생성 용도로는 사용할 수 없습니다.")
+    public ResponseEntity<SignUpResponse> signUp(
+            Authentication authentication,
+            @Valid @RequestBody SignUpRequest request) {
+        Long adminUserId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(authService.signUp(adminUserId, request));
     }
 
     @PostMapping("/login")
-    @Operation(summary = "관리자 전용 로그인", description = "관리자 전용 계정으로 로그인합니다.")
+    @Operation(summary = "관리자 전용 로그인", description = "활성 상태의 관리자 계정으로 로그인합니다. 정지·삭제된 계정은 로그인할 수 없습니다.")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
     }

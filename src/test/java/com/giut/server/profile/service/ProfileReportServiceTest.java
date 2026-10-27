@@ -4,6 +4,7 @@ import com.giut.server.profile.dto.request.CreateProfileReportRequest;
 import com.giut.server.profile.dto.request.ReviewProfileReportRequest;
 import com.giut.server.profile.dto.response.ProfileReportResponse;
 import com.giut.server.profile.entity.ProfileReport;
+import com.giut.server.profile.event.ProfileReportCreatedEvent;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.global.exception.ConflictException;
@@ -17,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -34,6 +36,7 @@ class ProfileReportServiceTest {
     @Mock private ProfileReportRepository profileReportRepository;
     @Mock private UserRepository userRepository;
     @Mock private UserProfileRepository userProfileRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @InjectMocks private ProfileReportService profileReportService;
 
     @Test
@@ -68,6 +71,10 @@ class ProfileReportServiceTest {
         assertThat(saved.getValue().getDescription()).isNull();
         assertThat(saved.getValue().getSnapshotNickname()).isEqualTo("회원2");
         assertThat(saved.getValue().getSnapshotBio()).isEqualTo("소개");
+        ArgumentCaptor<ProfileReportCreatedEvent> event = ArgumentCaptor.forClass(ProfileReportCreatedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue()).isEqualTo(new ProfileReportCreatedEvent(
+                10L, ProfileReport.Reason.OTHER, saved.getValue().getCreatedAt()));
     }
 
     @Test
@@ -83,6 +90,7 @@ class ProfileReportServiceTest {
                 new CreateProfileReportRequest(ProfileReport.Reason.SPAM_ADVERTISING, null)))
                 .isInstanceOf(ConflictException.class);
         verify(profileReportRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

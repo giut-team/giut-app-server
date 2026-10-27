@@ -136,7 +136,12 @@ class AdminUserProfileControllerTest {
         JwtProvider jwtProvider() { return new JwtProvider(); }
 
         @Bean
-        UserRepository userRepository() { return mock(UserRepository.class); }
+        UserRepository userRepository() {
+            UserRepository repository = mock(UserRepository.class);
+            when(repository.existsByIdAndStatus(org.mockito.ArgumentMatchers.anyLong(),
+                    org.mockito.ArgumentMatchers.eq(User.Status.ACTIVE))).thenReturn(true);
+            return repository;
+        }
 
         @Bean
         AdminUserProfileService adminUserProfileService() { return mock(AdminUserProfileService.class); }

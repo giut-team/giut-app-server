@@ -7,6 +7,7 @@ import com.giut.server.profile.dto.response.ProfileReportPageResponse;
 import com.giut.server.profile.dto.response.ProfileReportResponse;
 import com.giut.server.profile.dto.response.PendingProfileReportResponse;
 import com.giut.server.profile.entity.ProfileReport;
+import com.giut.server.profile.event.ProfileReportCreatedEvent;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.global.exception.ConflictException;
@@ -16,6 +17,7 @@ import com.giut.server.profile.repository.ProfileReportRepository;
 import com.giut.server.profile.repository.UserProfileRepository;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -29,6 +31,7 @@ public class ProfileReportService {
     private final ProfileReportRepository profileReportRepository;
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public ProfileReportResponse reportPublicProfile(Long reporterUserId, Long targetUserId,
@@ -101,6 +104,8 @@ public class ProfileReportService {
                 ? null : request.description().trim();
         ProfileReport report = profileReportRepository.save(
                 ProfileReport.create(reporter, profile, request.reason(), description));
+        eventPublisher.publishEvent(new ProfileReportCreatedEvent(
+                report.getId(), report.getReason(), report.getCreatedAt()));
         return ProfileReportResponse.from(report);
     }
 

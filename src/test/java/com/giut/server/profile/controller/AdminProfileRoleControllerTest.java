@@ -136,7 +136,10 @@ class AdminProfileRoleControllerTest {
 
         @Bean
         UserRepository userRepository() {
-            return mock(UserRepository.class);
+            UserRepository repository = mock(UserRepository.class);
+            when(repository.existsByIdAndStatus(org.mockito.ArgumentMatchers.anyLong(),
+                    org.mockito.ArgumentMatchers.eq(User.Status.ACTIVE))).thenReturn(true);
+            return repository;
         }
 
         @Bean
