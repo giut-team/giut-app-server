@@ -38,6 +38,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -87,6 +89,47 @@ class AdminUniversityVerificationPersistenceTest {
         pendingCodes().clear();
         profiles.deleteAll();
         users.deleteAll();
+    }
+
+    @Test
+    void sixthSendReturns429AndLastCodeStillVerifiesWhileOtherUserCanSend() throws Exception {
+        String email = "rate-limit@uos.ac.kr";
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"universityEmail\":\"" + email + "\"}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .header("Origin", "http://localhost:3000")
+                        .content("{\"universityEmail\":\"changed-rate-limit@uos.ac.kr\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "1800"))
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Expose-Headers", org.hamcrest.Matchers.containsString("Retry-After")))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(429));
+        ArgumentCaptor<String> codes = ArgumentCaptor.forClass(String.class);
+        verify(mail, times(5)).sendUniversityVerificationCode(eq(email), codes.capture());
+        mvc.perform(as(other, verification(email, codes.getAllValues().getLast())))
+                .andExpect(status().isOk());
+        assertThat(users.findById(other.getId()).orElseThrow().getUniversityEmail()).isEqualTo(email);
+        issueCode(target, "independent-rate-limit@uos.ac.kr");
+        // Successful verification and admin revocation must not reset the send budget.
+        mvc.perform(as(admin, delete(path(other)))).andExpect(status().isNoContent());
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"" + email + "\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void sendStillRejectsAnonymousAndMalformedEmailWithoutSendingMail() throws Exception {
+        mvc.perform(post(SEND).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"test@uos.ac.kr\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"test@example.com\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(mail);
     }
 
     @Test

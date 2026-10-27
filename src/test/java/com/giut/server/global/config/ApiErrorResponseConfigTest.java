@@ -16,6 +16,27 @@ class ApiErrorResponseConfigTest {
     private final ApiErrorResponseConfig config = new ApiErrorResponseConfig();
 
     @Test
+    void emailSendDeclares429HeaderAndCustomizerKeepsResultDtoContract() throws Exception {
+        var annotations = com.giut.server.user.controller.UniversityEmailVerificationController.class
+                .getMethod("sendCode", org.springframework.security.core.Authentication.class,
+                        com.giut.server.user.dto.request.UniversityEmailSendRequest.class)
+                .getAnnotation(io.swagger.v3.oas.annotations.responses.ApiResponses.class).value();
+        var rateLimit = java.util.Arrays.stream(annotations)
+                .filter(response -> response.responseCode().equals("429")).findFirst().orElseThrow();
+        assertThat(rateLimit.headers()[0].name()).isEqualTo("Retry-After");
+        var operation = new Operation().responses(new ApiResponses().addApiResponse("429",
+                new ApiResponse().description(rateLimit.description())
+                        .addHeaderObject("Retry-After", new io.swagger.v3.oas.models.headers.Header())));
+        var api = new OpenAPI().paths(new Paths().addPathItem("/api/members/university-email/send",
+                new PathItem().post(operation)));
+        config.apiErrorResponseCustomizer().customise(api);
+        var response = operation.getResponses().get("429");
+        assertThat(response.getHeaders()).containsKey("Retry-After");
+        assertThat(response.getContent().get("application/json").getSchema().get$ref())
+                .isEqualTo("#/components/schemas/ResultDto");
+    }
+
+    @Test
     void withdrawalControllerExplicitlyDeclaresIts204SuccessForSwagger() throws Exception {
         var response = com.giut.server.user.controller.UserWithdrawalController.class
                 .getMethod("withdraw", org.springframework.security.core.Authentication.class,

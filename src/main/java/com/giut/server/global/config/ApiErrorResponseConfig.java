@@ -31,6 +31,7 @@ public class ApiErrorResponseConfig {
             Map.entry("406", "지원하지 않는 응답 형식"),
             Map.entry("409", "현재 리소스 상태와 충돌"),
             Map.entry("415", "지원하지 않는 Content-Type"),
+            Map.entry("429", "요청 횟수 제한 초과"),
             Map.entry("500", "서버 내부 오류"),
             Map.entry("502", "외부 인증 서버 통신 실패")
     );

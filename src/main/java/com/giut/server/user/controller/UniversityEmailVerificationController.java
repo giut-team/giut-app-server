@@ -9,6 +9,7 @@ import com.giut.server.user.dto.response.UniversityEmailVerificationStatusRespon
 import com.giut.server.auth.exception.AuthenticationFailedException;
 import com.giut.server.user.service.UniversityEmailVerificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -47,7 +48,11 @@ public class UniversityEmailVerificationController {
     }
 
     @PostMapping("/send")
-    @Operation(summary = "학교 이메일 인증코드 발송", description = "서울시립대 이메일(@uos.ac.kr)로 인증코드를 발송합니다.")
+    @Operation(summary = "학교 이메일 인증코드 발송", description = "서울시립대 이메일(@uos.ac.kr)로 인증코드를 발송합니다. "
+            + "사용자별 최근 30분 동안 첫 발송을 포함해 5회 허용하며 이메일을 바꿔도 합산합니다. "
+            + "초과 요청 시점부터 30분간 발송을 차단하고 429와 Retry-After(남은 초)를 반환합니다. "
+            + "차단 중 재요청해도 차단 시간은 연장되지 않으며 기존 코드 인증은 가능합니다. "
+            + "메일 전송 시도 실패도 횟수에 포함하며 서버 재시작 시 제한 기록은 초기화됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             // 성공 응답
@@ -70,6 +75,12 @@ public class UniversityEmailVerificationController {
                     responseCode = "401",
                     description = "인증 실패 또는 토큰 누락",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
+            ),
+            @ApiResponse(
+                    responseCode = "429",
+                    description = "발송 한도 초과: Retry-After 초 후 재요청 가능",
+                    headers = @Header(name = "Retry-After", description = "차단 해제까지 남은 초", schema = @Schema(type = "integer", example = "1800")),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class))
             ),
             @ApiResponse(
                     responseCode = "500",

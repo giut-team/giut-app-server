@@ -32,11 +32,14 @@ public class UniversityEmailVerificationService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
+    private final UniversityEmailSendRateLimiter sendRateLimiter;
 
     public UniversityEmailSendResponse sendCode(Long memberId, UniversityEmailSendRequest request) {
         String universityEmail = request.getUniversityEmail();
         validateUniversityEmail(universityEmail);
         validateNotUsedUniversityEmail(universityEmail);
+
+        sendRateLimiter.acquire(memberId);
 
         String code = generateCode();
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(CODE_EXPIRE_MINUTES);
