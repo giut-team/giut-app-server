@@ -39,6 +39,30 @@ class UniversityVerificationAuthorizationFilterTest {
     }
 
     @Test
+    void unverifiedStudentCanReachExactAdminLoginPostWithoutSchoolCheck() throws Exception {
+        authenticateAsStudent("42");
+        assertThat(invoke("POST", "/api/admin/auth/login").continued()).isTrue();
+        verifyNoInteractions(userRepository);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "GET,/api/admin/auth/login",
+            "PUT,/api/admin/auth/login",
+            "DELETE,/api/admin/auth/login",
+            "POST,/api/admin/auth/login/extra",
+            "POST,/api/admin/auth/login/",
+            "POST,/api/admin/auth/signup",
+            "POST,/api/admin/auth/sign-up",
+            "POST,/api/admin/users"
+    })
+    void adminLoginExceptionDoesNotOpenOtherMethodsOrPaths(String method, String path) throws Exception {
+        authenticateAsStudent("42");
+        assertDenied(invoke(method, path));
+        verify(userRepository).existsByIdAndUniversityVerifiedAtIsNotNull(42L);
+    }
+
+    @Test
     void unverifiedUserCanReadCompetitionsWithoutDatabaseCheck() throws Exception {
         authenticateAsStudent("42");
 

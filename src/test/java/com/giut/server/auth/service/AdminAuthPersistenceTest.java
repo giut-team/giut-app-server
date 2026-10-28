@@ -174,6 +174,89 @@ class AdminAuthPersistenceTest {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unverifiedStudentTokenDoesNotPreventLoginWithRealAdminCredentials(boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        User student = saveUnverifiedStudent();
+        String studentToken = jwt.generateAccessToken(student);
+        String body = mvc.perform(withToken(login(admin.getEmail(), PASSWORD), studentToken, cookie))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ADMIN"))
+                .andReturn().getResponse().getContentAsString();
+        String adminToken = JSON.readTree(body).get("accessToken").asText();
+        assertThat(jwt.validateToken(adminToken)).isTrue();
+        assertThat(jwt.getTokenType(adminToken)).isEqualTo("access");
+        assertThat(jwt.getUserIdAsLong(adminToken)).isEqualTo(admin.getId());
+        assertThat(users.findById(student.getId()).orElseThrow().getRole()).isEqualTo(User.Role.STUDENT);
+        assertThat(users.findById(student.getId()).orElseThrow().getUniversityVerifiedAt()).isNull();
+        mvc.perform(withToken(signup(SIGNUP), studentToken, cookie)).andExpect(status().isForbidden());
+        mvc.perform(withToken(post("/api/admin/alerts/discord/test").servletPath("/api/admin/alerts/discord/test"),
+                        studentToken, cookie)).andExpect(status().isForbidden());
+        assertThat(users.count()).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unverifiedStudentStillCannotLoginWithStudentCredentialsOrWrongAdminPassword(boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        User student = saveUnverifiedStudent();
+        String token = jwt.generateAccessToken(student);
+        for (String email : java.util.List.of(student.getEmail(), admin.getEmail())) {
+            String password = email.equals(admin.getEmail()) ? "wrong-password" : PASSWORD;
+            mvc.perform(withToken(login(email, password), token, cookie))
+                    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value(401))
+                    .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 올바르지 않습니다."))
+                    .andExpect(jsonPath("$.accessToken").doesNotExist());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void activeAdminTokenStillRequiresCorrectLoginCredentials(boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        String token = jwt.generateAccessToken(admin);
+        mvc.perform(withToken(login(admin.getEmail(), PASSWORD), token, cookie)).andExpect(status().isOk());
+        mvc.perform(withToken(login(admin.getEmail(), "wrong-password"), token, cookie))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.accessToken").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @MethodSource("inactiveLoginRequesters")
+    void publicLoginStillRejectsInactiveOrMissingTokenOwner(String accountStatus, boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        User student = saveUnverifiedStudent();
+        String token = jwt.generateAccessToken(student);
+        if (accountStatus.equals("MISSING")) {
+            users.deleteById(student.getId());
+        } else {
+            ReflectionTestUtils.setField(student, "status", User.Status.valueOf(accountStatus));
+            users.saveAndFlush(student);
+        }
+        mvc.perform(withToken(login(admin.getEmail(), PASSWORD), token, cookie))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.accessToken").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void invalidAndRefreshTokensDoNotReplaceCredentialChecksAtPublicLogin(boolean cookie) throws Exception {
+        User admin = saveAdmin();
+        for (String token : java.util.List.of("invalid-token", jwt.generateRefreshToken(admin))) {
+            mvc.perform(withToken(login(admin.getEmail(), PASSWORD), token, cookie))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ADMIN"));
+            mvc.perform(withToken(login(admin.getEmail(), "wrong-password"), token, cookie))
+                    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.accessToken").doesNotExist());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unverifiedStudentLoginReachesRequestBodyValidation(boolean cookie) throws Exception {
+        User student = saveUnverifiedStudent();
+        mvc.perform(withToken(post(LOGIN).servletPath(LOGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"), jwt.generateAccessToken(student), cookie))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.accessToken").doesNotExist());
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"SUSPENDED", "DELETED"})
     void inactiveAdministratorCannotLoginEvenWithCorrectPassword(String accountStatus) throws Exception {
         User admin = saveAdmin();
@@ -239,6 +322,12 @@ class AdminAuthPersistenceTest {
         return users.saveAndFlush(User.createAdmin("admin@example.com", encoder.encode(PASSWORD), "기존 관리자"));
     }
 
+    private User saveUnverifiedStudent() {
+        User student = User.createAdmin("login-student@example.com", encoder.encode(PASSWORD), "미인증 학생");
+        ReflectionTestUtils.setField(student, "role", User.Role.STUDENT);
+        return users.saveAndFlush(student);
+    }
+
     private MockHttpServletRequestBuilder signup(String path) throws Exception {
         return post(path).servletPath(path).contentType(MediaType.APPLICATION_JSON).content(signupBody());
     }
@@ -268,6 +357,11 @@ class AdminAuthPersistenceTest {
 
     static Stream<Arguments> signupTransports() {
         return Stream.of(false, true).map(cookie -> Arguments.of(SIGNUP, cookie));
+    }
+
+    static Stream<Arguments> inactiveLoginRequesters() {
+        return Stream.of("SUSPENDED", "DELETED", "MISSING")
+                .flatMap(accountStatus -> Stream.of(false, true).map(cookie -> Arguments.of(accountStatus, cookie)));
     }
 
     static Stream<Arguments> studentRequests() {

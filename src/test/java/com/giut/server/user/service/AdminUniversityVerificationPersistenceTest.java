@@ -38,6 +38,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -63,6 +65,7 @@ class AdminUniversityVerificationPersistenceTest {
     @Autowired private UserRepository users;
     @Autowired private UserProfileRepository profiles;
     @Autowired private UniversityEmailVerificationService service;
+    @Autowired private UniversityEmailVerificationCodeStore codeStore;
     @Autowired private PlatformTransactionManager transactionManager;
     @MockitoBean private MailService mail;
     @MockitoSpyBean private PasswordEncoder encoder;
@@ -84,9 +87,110 @@ class AdminUniversityVerificationPersistenceTest {
 
     @AfterEach
     void cleanUp() {
-        pendingCodes().clear();
+        pendingStates().clear();
         profiles.deleteAll();
         users.deleteAll();
+    }
+
+    @Test
+    void fifthWrongAnswerReturns429AndBlocksBothEndpointsWithoutLosingLockoutOnRollback() throws Exception {
+        String email = "wrong-limit@uos.ac.kr";
+        String correct = issueCode(other, email);
+        String wrong = "000000".equals(correct) ? "000001" : "000000";
+        for (int i = 0; i < 4; i++) {
+            mvc.perform(as(other, verification(email, wrong)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(400));
+        }
+        mvc.perform(as(other, verification(email, wrong)).header("Origin", "http://localhost:3000"))
+                .andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value(429))
+                .andExpect(header().string("Retry-After", "1800"))
+                .andExpect(header().string("Access-Control-Expose-Headers", org.hamcrest.Matchers.containsString("Retry-After")));
+        // Each HTTP transaction rolls back on the exception, but security state must survive it.
+        mvc.perform(as(other, verification(email, correct)))
+                .andExpect(status().isTooManyRequests());
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"changed-after-wrong@uos.ac.kr\"}"))
+                .andExpect(status().isTooManyRequests());
+        mvc.perform(as(admin, delete(path(other)))).andExpect(status().isNoContent());
+        mvc.perform(as(other, verification(email, correct))).andExpect(status().isTooManyRequests());
+        verify(mail, times(1)).sendUniversityVerificationCode(anyString(), anyString());
+        User stored = users.findById(other.getId()).orElseThrow();
+        assertThat(stored.getUniversityVerifiedAt()).isNull();
+        assertThat(stored.getUniversityEmail()).isNull();
+        issueCode(target, "unaffected-after-wrong@uos.ac.kr");
+    }
+
+    @Test
+    void malformedCodeDoesNotConsumeFiveWrongGuesses() throws Exception {
+        String email = "malformed-code@uos.ac.kr";
+        String correct = issueCode(other, email);
+        for (int i = 0; i < 6; i++) {
+            mvc.perform(as(other, verification(email, "12345x")))
+                    .andExpect(status().isBadRequest());
+        }
+        String wrong = "000000".equals(correct) ? "000001" : "000000";
+        for (int i = 0; i < 4; i++) {
+            mvc.perform(as(other, verification(email, wrong))).andExpect(status().isBadRequest());
+        }
+        mvc.perform(as(other, verification(email, correct))).andExpect(status().isOk());
+        assertThat(users.findById(other.getId()).orElseThrow().getUniversityEmail()).isEqualTo(email);
+    }
+
+    @Test
+    void verificationUsesAccountWideFailureBudgetAcrossEmailsAndResends() throws Exception {
+        String email = "before-resend-wrong@uos.ac.kr";
+        String correct = issueCode(other, email);
+        String wrong = "000000".equals(correct) ? "000001" : "000000";
+        for (int i = 0; i < 4; i++) {
+            mvc.perform(as(other, verification(email, wrong))).andExpect(status().isBadRequest());
+        }
+        String changedEmail = "after-resend-wrong@uos.ac.kr";
+        String changedCode = issueCode(other, changedEmail);
+        String changedWrong = "000000".equals(changedCode) ? "000001" : "000000";
+        mvc.perform(as(other, verification(changedEmail, changedWrong)))
+                .andExpect(status().isTooManyRequests());
+        mvc.perform(as(other, verification(email, correct))).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void sixthSendReturns429AndLastCodeStillVerifiesWhileOtherUserCanSend() throws Exception {
+        String email = "rate-limit@uos.ac.kr";
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"universityEmail\":\"" + email + "\"}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .header("Origin", "http://localhost:3000")
+                        .content("{\"universityEmail\":\"changed-rate-limit@uos.ac.kr\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "1800"))
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Expose-Headers", org.hamcrest.Matchers.containsString("Retry-After")))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(429));
+        ArgumentCaptor<String> codes = ArgumentCaptor.forClass(String.class);
+        verify(mail, times(5)).sendUniversityVerificationCode(eq(email), codes.capture());
+        mvc.perform(as(other, verification(email, codes.getAllValues().getLast())))
+                .andExpect(status().isOk());
+        assertThat(users.findById(other.getId()).orElseThrow().getUniversityEmail()).isEqualTo(email);
+        issueCode(target, "independent-rate-limit@uos.ac.kr");
+        // Successful verification and admin revocation must not reset the send budget.
+        mvc.perform(as(admin, delete(path(other)))).andExpect(status().isNoContent());
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"" + email + "\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void sendStillRejectsAnonymousAndMalformedEmailWithoutSendingMail() throws Exception {
+        mvc.perform(post(SEND).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"test@uos.ac.kr\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(as(other, post(SEND)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"universityEmail\":\"test@example.com\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(mail);
     }
 
     @Test
@@ -180,15 +284,15 @@ class AdminUniversityVerificationPersistenceTest {
         String second = issueCode(target, "revoke-pending-two@uos.ac.kr");
         String otherCode = issueCode(other, "revoke-other-pending@uos.ac.kr");
         // A different user's key must not be removed just because its ID starts with the target ID.
-        String sameNumericPrefix = target.getId() + "0:prefix-other@uos.ac.kr";
-        pendingCodes().put(sameNumericPrefix, pendingCodes().get(target.getId() + ":revoke-pending-one@uos.ac.kr"));
+        Long sameNumericPrefix = Long.parseLong(target.getId() + "0");
+        codeStore.issue(sameNumericPrefix, "prefix-other@uos.ac.kr");
 
         mvc.perform(as(admin, delete(path(target)))).andExpect(status().isNoContent());
         mvc.perform(as(target, verification("revoke-pending-one@uos.ac.kr", first)))
                 .andExpect(status().isBadRequest());
         mvc.perform(as(target, verification("revoke-pending-two@uos.ac.kr", second)))
                 .andExpect(status().isBadRequest());
-        assertThat(pendingCodes()).containsKey(sameNumericPrefix);
+        assertThat(pendingStates()).containsKey(sameNumericPrefix);
         mvc.perform(as(other, verification("revoke-other-pending@uos.ac.kr", otherCode)))
                 .andExpect(status().isOk());
     }
@@ -296,8 +400,8 @@ class AdminUniversityVerificationPersistenceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> pendingCodes() {
-        return (Map<String, Object>) ReflectionTestUtils.getField(service, "verificationCodes");
+    private Map<Long, Object> pendingStates() {
+        return (Map<Long, Object>) ReflectionTestUtils.getField(codeStore, "states");
     }
 
     private String path(User user) {

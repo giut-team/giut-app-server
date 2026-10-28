@@ -30,6 +30,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void rateLimitReturns429AndRetryAfterWithoutServerErrorAlert() {
+        var response = handler.handleTooManyRequests(new TooManyRequestsException("발송 제한", 123));
+        assertError(response, 429);
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("123");
+        assertThat(response.getBody().getMessage()).isEqualTo("발송 제한");
+        verifyNoMoreInteractions(discordAlertService);
+    }
+
+    @Test
     void doesNotExposeInternalStateDetails() {
         ResponseEntity<ResultDto> response = handler.handleIllegalState(
                 new IllegalStateException("비밀 설정값"), request);

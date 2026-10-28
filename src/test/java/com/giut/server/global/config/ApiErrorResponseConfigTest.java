@@ -15,6 +15,30 @@ class ApiErrorResponseConfigTest {
 
     private final ApiErrorResponseConfig config = new ApiErrorResponseConfig();
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"sendCode", "verifyCode"})
+    void emailVerificationDeclares429HeaderAndCustomizerKeepsResultDtoContract(String method) throws Exception {
+        Class<?> request = method.equals("sendCode")
+                ? com.giut.server.user.dto.request.UniversityEmailSendRequest.class
+                : com.giut.server.user.dto.request.UniversityEmailVerifyRequest.class;
+        var annotations = com.giut.server.user.controller.UniversityEmailVerificationController.class
+                .getMethod(method, org.springframework.security.core.Authentication.class, request)
+                .getAnnotation(io.swagger.v3.oas.annotations.responses.ApiResponses.class).value();
+        var rateLimit = java.util.Arrays.stream(annotations)
+                .filter(response -> response.responseCode().equals("429")).findFirst().orElseThrow();
+        assertThat(rateLimit.headers()[0].name()).isEqualTo("Retry-After");
+        var operation = new Operation().responses(new ApiResponses().addApiResponse("429",
+                new ApiResponse().description(rateLimit.description())
+                        .addHeaderObject("Retry-After", new io.swagger.v3.oas.models.headers.Header())));
+        var api = new OpenAPI().paths(new Paths().addPathItem("/api/members/university-email/" + (method.equals("sendCode") ? "send" : "verify"),
+                new PathItem().post(operation)));
+        config.apiErrorResponseCustomizer().customise(api);
+        var response = operation.getResponses().get("429");
+        assertThat(response.getHeaders()).containsKey("Retry-After");
+        assertThat(response.getContent().get("application/json").getSchema().get$ref())
+                .isEqualTo("#/components/schemas/ResultDto");
+    }
+
     @Test
     void withdrawalControllerExplicitlyDeclaresIts204SuccessForSwagger() throws Exception {
         var response = com.giut.server.user.controller.UserWithdrawalController.class
