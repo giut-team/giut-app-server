@@ -22,7 +22,8 @@ public class TeamScrapService {
 
     @Transactional
     public TeamScrapResponse scrap(Long userId, Long teamId) {
-        User user = userRepository.findById(userId)
+        // Both add and remove serialize on the existing user row, even before a scrap exists.
+        User user = userRepository.findByIdForUpdate(userId)
                 .filter(found -> found.getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         Team team = teamRepository.findById(teamId)
@@ -35,6 +36,7 @@ public class TeamScrapService {
 
     @Transactional
     public TeamScrapResponse removeScrap(Long userId, Long teamId) {
+        userRepository.findByIdForUpdate(userId);
         teamScrapRepository.deleteByUser_IdAndTeam_Id(userId, teamId);
         return new TeamScrapResponse(teamId, false);
     }

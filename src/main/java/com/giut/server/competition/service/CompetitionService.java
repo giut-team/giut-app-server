@@ -171,7 +171,7 @@ public class CompetitionService {
 
     @Transactional
     public CompetitionScrapResponse scrapCompetition(Long userId, Long competitionId) {
-        User user = findActiveUser(userId);
+        User user = findActiveUserForScrapUpdate(userId);
         Competition competition = findPublishedCompetition(competitionId);
 
         if (!competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId)) {
@@ -182,7 +182,7 @@ public class CompetitionService {
 
     @Transactional
     public CompetitionScrapResponse removeCompetitionScrap(Long userId, Long competitionId) {
-        findActiveUser(userId);
+        findActiveUserForScrapUpdate(userId);
         findPublishedCompetition(competitionId);
 
         competitionScrapRepository.deleteByUser_IdAndCompetition_Id(userId, competitionId);
@@ -315,8 +315,9 @@ public class CompetitionService {
         return admin;
     }
 
-    private User findActiveUser(Long userId) {
-        User user = userRepository.findById(userId)
+    private User findActiveUserForScrapUpdate(Long userId) {
+        // Share the same lock for adding and removing, including the first insert.
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
         if (user.getStatus() != User.Status.ACTIVE) {
             throw new ForbiddenException("활성 상태의 사용자만 공모전을 스크랩할 수 있습니다.");

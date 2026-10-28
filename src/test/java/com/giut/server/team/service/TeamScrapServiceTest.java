@@ -32,7 +32,7 @@ class TeamScrapServiceTest {
     void savesTeamOnceAndReturnsScrappedState() {
         User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
         Team team = org.mockito.Mockito.mock(Team.class);
-        when(userRepository.findById(12L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
         when(teamRepository.findById(7L)).thenReturn(Optional.of(team));
 
         assertThat(teamScrapService.scrap(12L, 7L).scrapped()).isTrue();
@@ -43,11 +43,19 @@ class TeamScrapServiceTest {
     void repeatedScrapDoesNotCreateDuplicate() {
         User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
         Team team = org.mockito.Mockito.mock(Team.class);
-        when(userRepository.findById(12L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
         when(teamRepository.findById(7L)).thenReturn(Optional.of(team));
         when(teamScrapRepository.existsByUser_IdAndTeam_Id(12L, 7L)).thenReturn(true);
 
         assertThat(teamScrapService.scrap(12L, 7L).scrapped()).isTrue();
         verify(teamScrapRepository, never()).save(any(TeamScrap.class));
+    }
+
+    @Test
+    void removeLocksUserBeforeDeletingScrap() {
+        teamScrapService.removeScrap(12L, 7L);
+        var order = org.mockito.Mockito.inOrder(userRepository, teamScrapRepository);
+        order.verify(userRepository).findByIdForUpdate(12L);
+        order.verify(teamScrapRepository).deleteByUser_IdAndTeam_Id(12L, 7L);
     }
 }
