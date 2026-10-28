@@ -45,8 +45,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run tests
+        run: ./gradlew clean test
+
       - name: Build
-        run: ./gradlew clean bootJar -x test
+        run: ./gradlew bootJar
 
       - name: Prepare JAR
         run: |
