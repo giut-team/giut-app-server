@@ -11,15 +11,29 @@ class NoRedirect(request.HTTPRedirectHandler):
         return None
 
 
+_clients = {}
+
+
 def aws_client(service):
+    # Built once per execution environment and reused across warm invocations,
+    # so a warm call does not pay a fresh connection/TLS handshake every time.
     # boto3 is supplied by the Lambda Python runtime; offline tests replace this boundary.
-    import boto3
-    from botocore.config import Config
-    return boto3.client(service, config=Config(
-        connect_timeout=2, read_timeout=3, retries={"total_max_attempts": 2}))
+    if service not in _clients:
+        import boto3
+        from botocore.config import Config
+        _clients[service] = boto3.client(service, config=Config(
+            connect_timeout=2, read_timeout=3, retries={"total_max_attempts": 2}))
+    return _clients[service]
 
 
-def notification(record, environment, topic_arn, alarm_arn):
+def log_group_console_url(region, log_group_name):
+    """Deep link to the log group's page; no time range, no log content fetched here."""
+    encoded = parse.quote(parse.quote(log_group_name, safe=""), safe="").replace("%", "$")
+    return "https://{0}.console.aws.amazon.com/cloudwatch/home?region={0}#logsV2:log-groups/log-group/{1}".format(
+        region, encoded)
+
+
+def notification(record, environment, topic_arn, alarm_arn, log_group_name=None, region=None):
     """Allowlisted fields only; SNS reason/description/SQL are deliberately ignored."""
     if record.get("EventSource") != "aws:sns":
         raise ValueError("unexpected event source")
@@ -55,10 +69,13 @@ def notification(record, environment, topic_arn, alarm_arn):
                   "DB 전체 정상·수집 정상까지 보장하지는 않습니다.")
     if alarm.get("NewStateReason") == "GIUT_SYNTHETIC_TEST":
         title = "🧪 [연결 테스트] " + title
+    log_line = "\nCloudWatch의 RDS slowquery 로그와 수집 상태를 확인하세요."
+    if log_group_name and region:
+        log_line += ("\n로그 그룹: " + log_group_name
+                     + "\n바로가기: " + log_group_console_url(region, log_group_name))
     return {
         "content": (title + "\n환경: " + environment + "\n경보 시각(UTC): " + timestamp
-                    + "\n" + detail
-                    + "\nCloudWatch의 RDS slowquery 로그와 수집 상태를 확인하세요."
+                    + "\n" + detail + log_line
                     + "\n원문 SQL·사용자 정보는 이 알림에 포함하지 않습니다."),
         "allowed_mentions": {"parse": []},
     }
@@ -97,8 +114,13 @@ def handler(event, context):
         # SNS invokes Lambda with one message. Reject batches to avoid partial replay.
         if not isinstance(records, list) or len(records) != 1:
             raise ValueError("expected one SNS record")
+        # Optional: absent on a stack not yet updated with this env var, or malformed -> no link, not a failure.
+        log_group_name = os.environ.get("SLOW_LOG_GROUP_NAME", "")
+        if not re.fullmatch(r"/aws/rds/instance/[A-Za-z0-9-]+/slowquery", log_group_name):
+            log_group_name = None
         payload = notification(records[0], environment, os.environ["EXPECTED_TOPIC_ARN"],
-                               os.environ["EXPECTED_ALARM_ARN"])
+                               os.environ["EXPECTED_ALARM_ARN"],
+                               log_group_name, os.environ.get("AWS_REGION"))
         if payload is None:
             return {"status": "ignored"}
         secret = aws_client("secretsmanager").get_secret_value(

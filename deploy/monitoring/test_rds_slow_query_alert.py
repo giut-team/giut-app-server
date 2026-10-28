@@ -16,8 +16,10 @@ TOPIC = "arn:aws:sns:ap-northeast-2:123456789012:test-topic"
 ALARM = "arn:aws:cloudwatch:ap-northeast-2:123456789012:alarm:test-slowquery"
 SECRET = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:test-abc123"
 WEBHOOK = "https://discord.com/api/webhooks/123456789/FAKE_TOKEN"
+LOG_GROUP = "/aws/rds/instance/giut-dev/slowquery"
 ENV = {"ENVIRONMENT": "dev", "EXPECTED_TOPIC_ARN": TOPIC,
-       "EXPECTED_ALARM_ARN": ALARM, "WEBHOOK_SECRET_ARN": SECRET}
+       "EXPECTED_ALARM_ARN": ALARM, "WEBHOOK_SECRET_ARN": SECRET,
+       "SLOW_LOG_GROUP_NAME": LOG_GROUP, "AWS_REGION": "ap-northeast-2"}
 
 
 def event(state="ALARM", old="OK", **extra):
@@ -51,10 +53,22 @@ class HandlerTest(unittest.TestCase):
         self.assertIn("2026-10-23T09:00:00+00:00", payload["content"])
         for secret in ("private SQL", "wjdanr", "@everyone", WEBHOOK, "secret SQL"):
             self.assertNotIn(secret, payload["content"])
+        self.assertIn(LOG_GROUP, payload["content"])
+        self.assertIn("ap-northeast-2.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-2", payload["content"])
+        self.assertIn("#logsV2:log-groups/log-group/", payload["content"])
         self.assertEqual({"parse": []}, payload["allowed_mentions"])
         self.assertEqual(WEBHOOK + "?wait=true", url)
         self.aws.assert_called_once_with("secretsmanager")
         self.aws.return_value.get_secret_value.assert_called_once_with(SecretId=SECRET)
+
+    def test_missing_or_malformed_log_group_omits_link_without_failing(self):
+        for changes in ({"SLOW_LOG_GROUP_NAME": ""}, {"SLOW_LOG_GROUP_NAME": "not-a-log-group"},
+                        {"AWS_REGION": ""}):
+            with patch.dict(os.environ, changes):
+                self.assertEqual({"status": "sent"}, alert.handler(event(), None))
+                content = self.send.call_args.args[0]["content"]
+                self.assertNotIn("바로가기", content)
+                self.assertNotIn("logsV2", content)
 
     def test_recovery_is_not_health_claim(self):
         alert.handler(event("OK", "ALARM"), None)
@@ -147,6 +161,39 @@ class HandlerTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 alert.handler(event(), None)
         self.send.assert_not_called()
+
+
+class AwsClientCachingTest(unittest.TestCase):
+    def setUp(self):
+        alert._clients.clear()
+        self.addCleanup(alert._clients.clear)
+
+    def test_client_is_built_once_and_reused_across_warm_calls(self):
+        fake_boto3 = MagicMock()
+        with patch.dict("sys.modules", {"boto3": fake_boto3, "botocore.config": MagicMock()}):
+            first = alert.aws_client("secretsmanager")
+            second = alert.aws_client("secretsmanager")
+        self.assertIs(first, second)
+        fake_boto3.client.assert_called_once()
+
+    def test_different_services_get_their_own_cached_client(self):
+        fake_boto3 = MagicMock()
+        fake_boto3.client.side_effect = lambda service, **kwargs: MagicMock(name="client:" + service)
+        with patch.dict("sys.modules", {"boto3": fake_boto3, "botocore.config": MagicMock()}):
+            secretsmanager = alert.aws_client("secretsmanager")
+            other = alert.aws_client("other-service")
+        self.assertIsNot(secretsmanager, other)
+        self.assertEqual(2, fake_boto3.client.call_count)
+
+
+class LogGroupUrlTest(unittest.TestCase):
+    def test_slashes_are_double_encoded_for_console_hash_routing(self):
+        url = alert.log_group_console_url("ap-northeast-2", LOG_GROUP)
+        self.assertEqual(
+            "https://ap-northeast-2.console.aws.amazon.com/cloudwatch/home"
+            "?region=ap-northeast-2#logsV2:log-groups/log-group/"
+            "$252Faws$252Frds$252Finstance$252Fgiut-dev$252Fslowquery",
+            url)
 
 
 class TransportTest(unittest.TestCase):
