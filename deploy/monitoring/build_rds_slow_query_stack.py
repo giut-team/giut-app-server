@@ -79,6 +79,7 @@ def build_template():
                     "WEBHOOK_SECRET_ARN": ref("WebhookSecretArn"),
                     "EXPECTED_TOPIC_ARN": ref("AlarmTopic"),
                     "EXPECTED_ALARM_ARN": alarm_arn,
+                    "SLOW_LOG_GROUP_NAME": ref("SlowLogGroupName"),
                 }}}, DependsOn=["LambdaLogGroup"]),
             "AsyncDelivery": resource("Lambda::EventInvokeConfig", {
                 "FunctionName": ref("DeliveryFunction"), "Qualifier": "$LATEST",

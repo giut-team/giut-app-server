@@ -6,6 +6,7 @@ import com.giut.server.competition.entity.Competition;
 import com.giut.server.team.entity.Team;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
@@ -40,7 +41,25 @@ class CompetitionServiceTeamTest {
     @Mock private CompetitionUrlRepository competitionUrlRepository;
     @Mock private CompetitionTeamRepository competitionTeamRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
+    @Mock private UserRepository userRepository;
     @InjectMocks private CompetitionService competitionService;
+
+    @Test
+    void scrapAndRemovalAcquireUserLockBeforeCheckingOrChangingScrap() {
+        User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
+        Competition competition = mock(Competition.class);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
+        when(competitionRepository.findByIdAndPublicationStatus(1L, Competition.PublicationStatus.PUBLISHED))
+                .thenReturn(Optional.of(competition));
+        assertThat(competitionService.scrapCompetition(12L, 1L).scrapped()).isTrue();
+        assertThat(competitionService.removeCompetitionScrap(12L, 1L).scrapped()).isFalse();
+        var order = org.mockito.Mockito.inOrder(userRepository, competitionScrapRepository);
+        order.verify(userRepository).findByIdForUpdate(12L);
+        order.verify(competitionScrapRepository).existsByUser_IdAndCompetition_Id(12L, 1L);
+        order.verify(competitionScrapRepository).save(any());
+        order.verify(userRepository).findByIdForUpdate(12L);
+        order.verify(competitionScrapRepository).deleteByUser_IdAndCompetition_Id(12L, 1L);
+    }
 
     @Test
     void publishedCompetitionDetailIncludesTeamsAndActiveMemberCounts() {
