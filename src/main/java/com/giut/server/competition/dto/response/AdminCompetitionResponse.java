@@ -8,6 +8,8 @@ import java.util.List;
 public record AdminCompetitionResponse(
         Long id,
         String title,
+        Competition.ActivityType activityType,
+        String activityTypeName,
         Competition.Category category,
         String hostOrganization,
         String targetParticipants,
@@ -24,6 +26,8 @@ public record AdminCompetitionResponse(
         return new AdminCompetitionResponse(
                 competition.getId(),
                 competition.getTitle(),
+                competition.getActivityType(),
+                competition.getActivityType() == null ? null : competition.getActivityType().getDisplayName(),
                 competition.getCategory(),
                 competition.getHostOrganization(),
                 competition.getTargetParticipants(),

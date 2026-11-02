@@ -35,7 +35,7 @@ class AiCompetitionControllerTest {
     private static final String PATH = "/api/integrations/competitions";
     private static final String KEY = "0123456789abcdef0123456789abcdef";
     private static final String BODY = """
-            {"title":"AI 공모전", "category":"WEB_MOBILE_IT", "targetParticipants":"대학생",
+            {"title":"AI 공모전", "activityType":"HACKATHON", "category":"WEB_MOBILE_IT", "targetParticipants":"대학생",
              "applicationStartAt":"2026-11-01T00:00:00Z", "applicationEndAt":"2026-12-01T00:00:00Z",
              "urls":[{"type":"RECRUITMENT","url":"https://example.com/ai-contest","primary":true}]}
             """;
@@ -60,16 +60,26 @@ class AiCompetitionControllerTest {
     void aiDataCategoryPersistsAndCanBeFilteredInPublicList() throws Exception {
         String aiBody = BODY.replace("WEB_MOBILE_IT", "AI_DATA");
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(aiBody))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.category").value("AI_DATA"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.category").value("AI_DATA"))
+                .andExpect(jsonPath("$.activityType").value("HACKATHON"))
+                .andExpect(jsonPath("$.activityTypeName").value("해커톤"));
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
                         .content(BODY.replace("ai-contest", "it-contest")))
                 .andExpect(status().isCreated());
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content(aiBody.replace("HACKATHON", "COMPETITION").replace("ai-contest", "ai-competition")))
+                .andExpect(status().isCreated());
         User user = users.saveAndFlush(User.createOAuthUser("ai-category@example.com", "학생", User.OAuthProvider.KAKAO, "ai-category"));
-        mvc.perform(get("/api/competitions").param("category", "AI_DATA")
+        mvc.perform(get("/api/competitions").param("activityType", "HACKATHON").param("category", "AI_DATA")
                         .header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].category").value("AI_DATA"))
+                .andExpect(jsonPath("$.competitions[0].activityTypeName").value("해커톤"))
                 .andExpect(jsonPath("$.competitions[0].categoryName").value("AI/데이터"));
+        mvc.perform(get("/api/competitions").param("activityType", "COMPETITION").param("category", "AI_DATA")
+                        .header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].activityType").value("COMPETITION"));
     }
 
     @Test
@@ -105,6 +115,8 @@ class AiCompetitionControllerTest {
                 BODY.replace("\"대학생\"", "\"\""),
                 BODY.replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z"),
                 BODY.replace("\"primary\":true", "\"primary\":false"),
+                BODY.replace("\"activityType\":\"HACKATHON\",", ""),
+                BODY.replace("HACKATHON", "INVALID"),
                 BODY.replace("\"applicationStartAt\":\"2026-11-01T00:00:00Z\",", "")
         }) {
             mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))

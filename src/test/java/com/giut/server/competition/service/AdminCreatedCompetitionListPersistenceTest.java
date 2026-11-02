@@ -87,6 +87,25 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void activityTypeCanBeSetFilteredAndLegacyUpdatePreservesIt() throws Exception {
+        String body = """
+                {"title":"행사", "category":"WEB_MOBILE_IT", "summary":"소개",
+                 "publicationStatus":"PUBLISHED",
+                 "urls":[{"type":"RECRUITMENT","url":"https://example.com/activity","primary":true}]}
+                """;
+        String withType = body.replace("\"title\":\"행사\",", "\"title\":\"행사\",\"activityType\":\"EDUCATION_PROGRAM\",");
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(withType))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("EDUCATION_PROGRAM"));
+        Long id = competitions.findAll().getFirst().getId();
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activityType").value("EDUCATION_PROGRAM"));
+        mvc.perform(as(admin, get(PATH).param("activityType", "EDUCATION_PROGRAM").param("category", "WEB_MOBILE_IT")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(as(verified, get("/api/competitions/" + id)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activityTypeName").value("교육/프로그램"));
+    }
+
+    @Test
     void creationPostIsImmediatelyListedWithAdminFieldsAndUrlsWithoutIncrementingViews() throws Exception {
         mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content("""
                 {"title":"관리자 생성", "category":"WEB_MOBILE_IT", "summary":"소개",

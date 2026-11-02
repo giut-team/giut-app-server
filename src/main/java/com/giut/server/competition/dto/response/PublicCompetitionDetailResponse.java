@@ -9,6 +9,8 @@ import java.util.List;
 public record PublicCompetitionDetailResponse(
         Long id,
         String title,
+        Competition.ActivityType activityType,
+        String activityTypeName,
         Competition.Category category,
         String categoryName,
         String hostOrganization,
@@ -45,6 +47,8 @@ public record PublicCompetitionDetailResponse(
         return new PublicCompetitionDetailResponse(
                 competition.getId(),
                 competition.getTitle(),
+                competition.getActivityType(),
+                competition.getActivityType() == null ? null : competition.getActivityType().getDisplayName(),
                 competition.getCategory(),
                 competition.getCategory().getDisplayName(),
                 competition.getHostOrganization(),

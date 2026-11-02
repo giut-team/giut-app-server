@@ -19,5 +19,7 @@ public record AiCompetitionRequest(
         @Size(max = 10000) String summary,
         @NotNull Instant applicationStartAt,
         @NotNull Instant applicationEndAt,
-        @NotEmpty List<@NotNull @Valid CompetitionUrlRequest> urls
+        @NotEmpty List<@NotNull @Valid CompetitionUrlRequest> urls,
+        @Schema(description = "활동 유형. category와 독립적으로 선택합니다.", example = "HACKATHON")
+        @NotNull(message = "활동 유형은 필수입니다.") Competition.ActivityType activityType
 ) {}

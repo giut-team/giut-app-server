@@ -75,6 +75,9 @@ public class CompetitionService {
         if (request.category() != null) {
             specification = specification.and(hasCategory(request.category()));
         }
+        if (request.activityType() != null) {
+            specification = specification.and(hasActivityType(request.activityType()));
+        }
         if (request.status() != null) {
             specification = specification.and(hasRecruitmentStatus(request.status(), now));
         }
@@ -203,6 +206,9 @@ public class CompetitionService {
         if (request.category() != null) {
             specification = specification.and(hasCategory(request.category()));
         }
+        if (request.activityType() != null) {
+            specification = specification.and(hasActivityType(request.activityType()));
+        }
         Page<Competition> page = competitionRepository.findAll(specification,
                 PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
         Map<Long, List<CompetitionUrlResponse>> urlsById = page.isEmpty() ? Map.of()
@@ -226,7 +232,7 @@ public class CompetitionService {
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
 
-        Competition competition = competitionRepository.save(Competition.create(
+        Competition competition = Competition.create(
                 request.title().trim(),
                 request.category(),
                 trimToNull(request.hostOrganization()),
@@ -237,7 +243,9 @@ public class CompetitionService {
                 request.publicationStatus(),
                 verificationStatus,
                 admin
-        ));
+        );
+        competition.changeActivityType(request.activityType());
+        competition = competitionRepository.save(competition);
 
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
@@ -259,11 +267,13 @@ public class CompetitionService {
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
-        Competition competition = competitionRepository.save(Competition.create(
+        Competition competition = Competition.create(
                 request.title().trim(), request.category(), trimToNull(request.hostOrganization()),
                 request.targetParticipants().trim(), trimToNull(request.summary()), request.applicationStartAt(),
                 request.applicationEndAt(), Competition.PublicationStatus.PUBLISHED,
-                Competition.VerificationStatus.AUTO_VERIFIED, null));
+                Competition.VerificationStatus.AUTO_VERIFIED, null);
+        competition.changeActivityType(input.activityType());
+        competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
         return toResponse(competition, savedUrls);
@@ -289,6 +299,9 @@ public class CompetitionService {
                 competition.getVerificationStatus(),
                 admin
         );
+        if (request.activityType() != null) {
+            competition.changeActivityType(request.activityType());
+        }
 
         competitionUrlRepository.deleteByCompetition_Id(competitionId);
         competitionUrlRepository.flush();
@@ -393,6 +406,10 @@ public class CompetitionService {
 
     private Specification<Competition> hasCategory(Competition.Category category) {
         return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("category"), category);
+    }
+
+    private Specification<Competition> hasActivityType(Competition.ActivityType activityType) {
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("activityType"), activityType);
     }
 
     private Specification<Competition> hasRecruitmentStatus(

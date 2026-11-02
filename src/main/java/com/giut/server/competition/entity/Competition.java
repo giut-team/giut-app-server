@@ -4,6 +4,8 @@ import com.giut.server.global.entity.BaseTimeEntity;
 import com.giut.server.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 @Entity @Table(name = "competitions") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -17,6 +19,11 @@ public class Competition extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     private Category category;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "activity_type", length = 30)
+    private ActivityType activityType;
 
     @Column(name = "host_organization", length = 150)
     private String hostOrganization;
@@ -117,6 +124,10 @@ public class Competition extends BaseTimeEntity {
         this.publicationStatus = PublicationStatus.PUBLISHED;
     }
 
+    public void changeActivityType(ActivityType activityType) {
+        this.activityType = activityType;
+    }
+
     /** Preserves dependent teams, scraps and review history while removing public visibility. */
     public void archive() {
         this.publicationStatus = PublicationStatus.ARCHIVED;
@@ -130,6 +141,18 @@ public class Competition extends BaseTimeEntity {
     private boolean isVerified(VerificationStatus verificationStatus) {
         return verificationStatus == VerificationStatus.AUTO_VERIFIED
                 || verificationStatus == VerificationStatus.MANUALLY_VERIFIED;
+    }
+
+    @Getter
+    @RequiredArgsConstructor
+    public enum ActivityType {
+        COMPETITION("공모전"), CONTEST("경진대회"), HACKATHON("해커톤"),
+        SUPPORTERS("서포터즈"), VOLUNTEERING("봉사"), STARTUP("창업"),
+        EDUCATION_PROGRAM("교육/프로그램"), OVERSEAS_EXPLORATION("해외탐방"),
+        EVENT_NETWORKING("행사/네트워킹"), ETC("기타");
+
+        private final String displayName;
+
     }
 
     @Getter
