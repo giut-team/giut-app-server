@@ -25,6 +25,12 @@ public record AiCompetitionRequest(
         @NotEmpty List<@NotNull @Valid CompetitionUrlRequest> urls,
         @Schema(description = "AI 코드 사용: CONTEST=공모전, COMPETITION=경진대회. MULTIPLE_ACTIVITIES는 검토가 필요해 등록되지 않으며 INTERNSHIP은 미지원입니다.", example = "HACKATHON")
         @NotNull(message = "활동 유형은 필수입니다.") AiActivityType activityType,
-        @Schema(description = "상금·시상 정보 원문. 정보가 없으면 해당 내용을 명시합니다.", example = "총상금 1,000만 원")
-        @NotBlank(message = "상금·시상 정보는 필수입니다.") @Size(max = 3000) String prizeInfo
-) {}
+        @Schema(description = "상금·시상 정보 원문. 생략, null 또는 공백이면 상금 미정으로 저장합니다.", example = "총상금 1,000만 원")
+        @Size(max = 3000) String prizeInfo
+) {
+    public AiCompetitionRequest {
+        if (prizeInfo == null || prizeInfo.isBlank()) {
+            prizeInfo = "상금 미정";
+        }
+    }
+}

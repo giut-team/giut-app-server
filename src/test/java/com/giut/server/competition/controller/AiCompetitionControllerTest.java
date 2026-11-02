@@ -137,19 +137,33 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void prizeInfoIsRequiredForSingleAndBatchRequests() throws Exception {
-        for (String invalid : new String[] {
+    void missingAndBlankPrizeInfoDefaultsForSingleAndBatch() throws Exception {
+        String[] variants = {
                 BODY.replace("\"prizeInfo\":\"상금 미정\", ", ""),
                 BODY.replace("\"상금 미정\"", "null"),
+                BODY.replace("상금 미정", ""),
                 BODY.replace("상금 미정", "   ")
-        }) {
-            mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(invalid))
-                    .andExpect(status().isBadRequest());
-            String batch = "{\"competitions\":[" + BODY + "," + invalid.replace("ai-contest", "second") + "]}";
-            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
-                    .andExpect(status().isBadRequest());
-            assertThat(competitions.count()).isZero();
+        };
+        for (int i = 0; i < variants.length; i++) {
+            String single = variants[i].replace("ai-contest", "single-" + i);
+            String batchItem = variants[i].replace("ai-contest", "batch-" + i);
+            mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(single))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.prizeInfo").value("상금 미정"));
+            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"competitions\":[" + batchItem + "]}"))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$[0].prizeInfo").value("상금 미정"));
         }
+        assertThat(competitions.count()).isEqualTo(8);
+        assertThat(competitions.findAll()).allSatisfy(competition ->
+                assertThat(competition.getPrizeInfo()).isEqualTo("상금 미정"));
+    }
+
+    @Test
+    void prizeInfoOverLimitIsRejected() throws Exception {
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(BODY.replace("상금 미정", "가".repeat(3001))))
+                .andExpect(status().isBadRequest());
+        assertThat(competitions.count()).isZero();
     }
 
     @Test
