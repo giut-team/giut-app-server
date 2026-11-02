@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -84,6 +85,35 @@ class AiCompetitionControllerTest {
                         .content(BODY.replace("UNIV_ONLY", participants.name())))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.targetParticipants").value(participants.name()));
         assertThat(competitions.findAll().getFirst().getTargetParticipants()).isEqualTo(participants.name());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "IDEA, PLANNING_IDEA", "MARKETING, ADVERTISING_MARKETING", "AI_DATA, AI_DATA",
+            "IT_DEVELOP, WEB_MOBILE_IT", "SCIENCE_ENGINEERING, SCIENCE_ENGINEERING",
+            "DESIGN, DESIGN_CHARACTER_WEBTOON", "PHOTO_CONTENTS, VIDEO_UCC_PHOTO",
+            "LITERATURE, LITERATURE_WRITING_SCENARIO", "RESEARCH, PAPER_REPORT",
+            "CULTURE_ARTS, ENTERTAINMENT_ART_MUSIC", "ETC, ETC", "WEB_MOBILE_IT, WEB_MOBILE_IT"
+    })
+    void aiCategoriesAreMappedAndStored(String aiCategory, String expectedCategory) throws Exception {
+        String body = BODY.replace("WEB_MOBILE_IT", aiCategory);
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.category").value(expectedCategory));
+        assertThat(competitions.findAll().getFirst().getCategory().name()).isEqualTo(expectedCategory);
+    }
+
+    @Test
+    void batchMapsAiCategoriesAndRejectsUnknownCode() throws Exception {
+        String first = BODY.replace("WEB_MOBILE_IT", "IDEA");
+        String second = BODY.replace("WEB_MOBILE_IT", "IT_DEVELOP").replace("ai-contest", "second");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + first + "," + second + "]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$[0].category").value("PLANNING_IDEA"))
+                .andExpect(jsonPath("$[1].category").value("WEB_MOBILE_IT"));
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content(BODY.replace("WEB_MOBILE_IT", "UNKNOWN")))
+                .andExpect(status().isBadRequest());
+        assertThat(competitions.count()).isEqualTo(2);
     }
 
     @Test

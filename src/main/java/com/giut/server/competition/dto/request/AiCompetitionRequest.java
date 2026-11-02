@@ -1,5 +1,6 @@
 package com.giut.server.competition.dto.request;
 
+import tools.jackson.databind.annotation.JsonDeserialize;
 import com.giut.server.competition.entity.Competition;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -12,7 +13,8 @@ import java.util.List;
 
 public record AiCompetitionRequest(
         @NotBlank @Size(max = 200) String title,
-        @Schema(description = "영문 enum 사용. 기획/아이디어=PLANNING_IDEA, 홍보/마케팅=ADVERTISING_MARKETING, AI/데이터=AI_DATA, IT/개발=WEB_MOBILE_IT, 과학/공학=SCIENCE_ENGINEERING, 디자인=DESIGN_CHARACTER_WEBTOON, 사진/영상/콘텐츠=VIDEO_UCC_PHOTO, 문학/글쓰기=LITERATURE_WRITING_SCENARIO, 학술/연구=PAPER_REPORT, 문화/예체능=ENTERTAINMENT_ART_MUSIC, 기타=ETC", example = "AI_DATA")
+        @Schema(description = "AI 카테고리: IDEA, MARKETING, AI_DATA, IT_DEVELOP, SCIENCE_ENGINEERING, DESIGN, PHOTO_CONTENTS, LITERATURE, RESEARCH, CULTURE_ARTS, ETC. 기존 기웃 코드도 허용합니다.", example = "IT_DEVELOP", allowableValues = {"IDEA", "MARKETING", "AI_DATA", "IT_DEVELOP", "SCIENCE_ENGINEERING", "DESIGN", "PHOTO_CONTENTS", "LITERATURE", "RESEARCH", "CULTURE_ARTS", "ETC", "PLANNING_IDEA", "ADVERTISING_MARKETING", "WEB_MOBILE_IT", "DESIGN_CHARACTER_WEBTOON", "VIDEO_UCC_PHOTO", "LITERATURE_WRITING_SCENARIO", "PAPER_REPORT", "ENTERTAINMENT_ART_MUSIC", "GAME_SOFTWARE", "ARCHITECTURE_CONSTRUCTION_INTERIOR", "NAMING_SLOGAN"})
+        @JsonDeserialize(using = AiCompetitionCategoryDeserializer.class)
         @NotNull Competition.Category category,
         @Size(max = 150) String hostOrganization,
         @Schema(description = "대학생만 UNIV_ONLY, 대학생 및 일반인 ALL, 대학생 참여 불가 NONE", example = "ALL")
