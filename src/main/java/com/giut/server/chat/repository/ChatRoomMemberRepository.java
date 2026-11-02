@@ -3,6 +3,7 @@ package com.giut.server.chat.repository;
 import com.giut.server.chat.entity.ChatRoomMember;
 import com.giut.server.chat.entity.ChatRoom;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,5 +37,23 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
             @Param("targetUserId") Long targetUserId,
             @Param("type") ChatRoom.Type type,
             @Param("status") ChatRoom.Status status
+    );
+
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+        UPDATE ChatRoomMember member
+        SET member.lastReadMessageId = :messageId
+        WHERE member.id = :memberId
+          AND (
+              member.lastReadMessageId IS NULL
+              OR member.lastReadMessageId < :messageId
+          )
+        """)
+    int updateLastReadMessageIdIfGreater(
+            @Param("memberId") Long memberId,
+            @Param("messageId") Long messageId
     );
 }

@@ -119,17 +119,29 @@ public class ChatService {
     @Transactional
     public ChatMessageResponse sendMessage(Long userId, Long chatRoomId, SendChatMessageRequest request) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
-        validateActiveParticipant(chatRoom.getId(), userId);
+
+        ChatRoomMember participant =
+                validateActiveParticipant(
+                        chatRoom.getId(),
+                        userId
+                );
 
         ChatMessage message = chatMessageRepository.save(
-                ChatMessage.createText(chatRoom.getId(), userId, request.content())
+                ChatMessage.createText(
+                        chatRoom.getId(),
+                        userId,
+                        request.content()
+                )
         );
 
-        chatRoomMemberRepository.findByChatRoomIdAndUserId(chatRoom.getId(), userId)
-                .ifPresent(member -> member.updateLastReadMessage(message.getId()));
+        chatRoomMemberRepository.updateLastReadMessageIdIfGreater(
+                participant.getId(),
+                message.getId()
+        );
 
         ChatMessageResponse response = ChatMessageResponse.from(message);
         eventPublisher.publishEvent(new ChatMessageEvent(response));
+
         return response;
     }
 
@@ -229,8 +241,14 @@ public class ChatService {
 
     @Transactional
     public void markChatRoomAsRead(Long userId, Long chatRoomId, Long messageId) {
+
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
-        ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+
+        ChatRoomMember participant =
+                validateActiveParticipant(
+                        chatRoom.getId(),
+                        userId
+                );
 
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("메시지를 찾을 수 없습니다."));
@@ -239,7 +257,10 @@ public class ChatService {
             throw new ResourceNotFoundException("해당 채팅방의 메시지가 아닙니다.");
         }
 
-        participant.updateLastReadMessage(messageId);
+        chatRoomMemberRepository.updateLastReadMessageIdIfGreater(
+                participant.getId(),
+                messageId
+        );
     }
 
     @Transactional(readOnly = true)
