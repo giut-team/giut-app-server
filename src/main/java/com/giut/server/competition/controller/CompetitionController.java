@@ -88,7 +88,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/{competitionId}")
-    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL과 모집 중인 팀 정보를 조회합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. teams에는 RECRUITING 상태의 팀만 포함되며, teamCount와 recruitingTeamCount는 이 목록의 개수로 동일합니다. 팀 조회와 집계는 공모전 마감일과 무관합니다. 조회수는 이 요청마다 1 증가합니다.")
+    @Operation(summary = "공모전 상세 조회", description = "게시된 공모전의 상세 정보, URL과 모집 중인 팀 정보를 조회합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. teams에는 RECRUITING 상태의 팀만 포함됩니다. teamCount는 상태와 무관한 전체 팀 수이고, recruitingTeamCount는 teams 목록과 같은 RECRUITING 팀 수로 서로 다를 수 있습니다. 팀 조회와 집계는 공모전 마감일과 무관합니다. 조회수는 이 요청마다 1 증가합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "공모전 상세 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionDetailResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_DETAIL))),

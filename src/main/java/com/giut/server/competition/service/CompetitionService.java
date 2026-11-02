@@ -29,10 +29,10 @@ import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.repository.CompetitionScrapSummaryProjection;
 import com.giut.server.competition.repository.CompetitionTeamRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
-import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -60,7 +60,6 @@ public class CompetitionService {
     private final CompetitionUrlRepository competitionUrlRepository;
     private final CompetitionVerificationLogRepository competitionVerificationLogRepository;
     private final CompetitionTeamRepository competitionTeamRepository;
-    private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
 
@@ -112,14 +111,14 @@ public class CompetitionService {
         Instant deadline = now.plus(7, ChronoUnit.DAYS);
         Specification<Competition> specification = publishedCompetition().and((root, query, criteriaBuilder) ->
                 criteriaBuilder.and(
-                        criteriaBuilder.isNotNull(root.get("applicationEndAt")),
-                        criteriaBuilder.greaterThan(root.get("applicationEndAt"), now),
-                        criteriaBuilder.lessThanOrEqualTo(root.get("applicationEndAt"), deadline),
-                        criteriaBuilder.or(
-                                criteriaBuilder.isNull(root.get("applicationStartAt")),
-                                criteriaBuilder.lessThanOrEqualTo(root.get("applicationStartAt"), now)
-                        )
+                criteriaBuilder.isNotNull(root.get("applicationEndAt")),
+                criteriaBuilder.greaterThan(root.get("applicationEndAt"), now),
+                criteriaBuilder.lessThanOrEqualTo(root.get("applicationEndAt"), deadline),
+                criteriaBuilder.or(
+                        criteriaBuilder.isNull(root.get("applicationStartAt")),
+                        criteriaBuilder.lessThanOrEqualTo(root.get("applicationStartAt"), now)
                 )
+        )
         );
 
         List<Competition> competitions = competitionRepository.findAll(
@@ -132,42 +131,39 @@ public class CompetitionService {
     @Transactional
     public PublicCompetitionDetailResponse getPublishedCompetition(Long userId, Long competitionId) {
         Instant now = Instant.now();
-        findPublishedCompetition(competitionId);
-        competitionRepository.incrementViewCount(competitionId);
+        if (competitionRepository.incrementViewCount(competitionId, Competition.PublicationStatus.PUBLISHED) == 0) {
+            throw new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다.");
+        }
 
         Competition competition = findPublishedCompetition(competitionId);
-        boolean scrapped = competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId);
-        long scrapCount = competitionScrapRepository.countByCompetition_Id(competitionId);
+        CompetitionScrapSummaryProjection scrapSummary =
+                competitionScrapRepository.findScrapSummary(userId, competitionId);
         List<CompetitionUrlResponse> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId).stream()
                 .map(CompetitionUrlResponse::from)
                 .toList();
-        List<Team> competitionTeams = competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(
-                competitionId, Team.Status.RECRUITING);
-        Map<Long, Long> activeMemberCounts = competitionTeams.isEmpty()
-                ? Map.of()
-                : teamMemberRepository.countByTeamIdsAndStatus(
-                        competitionTeams.stream().map(Team::getId).toList(),
-                        TeamMember.Status.ACTIVE
-                ).stream().collect(Collectors.toMap(
-                        TeamMemberRepository.TeamMemberCount::getTeamId,
-                        TeamMemberRepository.TeamMemberCount::getMemberCount
-                ));
-        List<CompetitionTeamResponse> teams = competitionTeams.stream()
-                .map(team -> CompetitionTeamResponse.from(
-                        team,
-                        userId,
-                        activeMemberCounts.getOrDefault(team.getId(), 0L)
+        List<CompetitionTeamResponse> teams = competitionTeamRepository
+                .findWithActiveMemberCount(competitionId, Team.Status.RECRUITING, TeamMember.Status.ACTIVE)
+                .stream()
+                .map(row -> new CompetitionTeamResponse(
+                        row.getTeamId(),
+                        row.getName(),
+                        row.getLeaderId().equals(userId),
+                        row.getDescription(),
+                        row.getMaxMemberCount(),
+                        row.getActiveMemberCount(),
+                        row.getStatus()
                 ))
                 .toList();
-        long recruitingTeamCount = competitionTeams.size();
+        long recruitingTeamCount = teams.size();
+        long teamCount = competitionTeamRepository.countByCompetition_Id(competitionId);
 
         return PublicCompetitionDetailResponse.from(
                 competition,
                 recruitmentStatusOf(competition, now),
-                scrapCount,
-                scrapped,
+                scrapSummary.getScrapCount(),
+                scrapSummary.isScrapped(),
                 urls,
-                competitionTeams.size(),
+                teamCount,
                 recruitingTeamCount,
                 teams
         );
@@ -555,13 +551,15 @@ public class CompetitionService {
     }
 
     private void validateUrlOwnership(List<NormalizedCompetitionUrl> urls, Long currentCompetitionId) {
-        for (NormalizedCompetitionUrl url : urls) {
-            competitionUrlRepository.findByNormalizedUrlHash(url.hash())
-                    .filter(existingUrl -> currentCompetitionId == null
-                            || !existingUrl.getCompetition().getId().equals(currentCompetitionId))
-                    .ifPresent(existingUrl -> {
-                        throw new ConflictException("이미 다른 공모전에 등록된 URL입니다.");
-                    });
+        if (urls.isEmpty()) {
+            return;
+        }
+        List<String> hashes = urls.stream().map(NormalizedCompetitionUrl::hash).toList();
+        boolean ownedByAnotherCompetition = competitionUrlRepository.findAllByNormalizedUrlHashIn(hashes).stream()
+                .anyMatch(existingUrl -> currentCompetitionId == null
+                        || !existingUrl.getCompetition().getId().equals(currentCompetitionId));
+        if (ownedByAnotherCompetition) {
+            throw new ConflictException("이미 다른 공모전에 등록된 URL입니다.");
         }
     }
 

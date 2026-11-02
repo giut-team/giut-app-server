@@ -13,15 +13,4 @@ public record CompetitionTeamResponse(
         @Schema(description = "현재 활성 팀원 수", example = "2") long currentMemberCount,
         @Schema(description = "팀 상태", example = "RECRUITING") Team.Status status
 ) {
-    public static CompetitionTeamResponse from(Team team, Long currentUserId, long currentMemberCount) {
-        return new CompetitionTeamResponse(
-                team.getId(),
-                team.getName(),
-                team.getLeader().getId().equals(currentUserId),
-                team.getDescription(),
-                team.getMaxMemberCount(),
-                currentMemberCount,
-                team.getStatus()
-        );
-    }
 }

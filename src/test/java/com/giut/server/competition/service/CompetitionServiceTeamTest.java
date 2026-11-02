@@ -10,8 +10,8 @@ import com.giut.server.user.repository.UserRepository;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.repository.CompetitionScrapSummaryProjection;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
-import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.competition.repository.CompetitionTeamRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,7 +40,6 @@ class CompetitionServiceTeamTest {
     @Mock private CompetitionScrapRepository competitionScrapRepository;
     @Mock private CompetitionUrlRepository competitionUrlRepository;
     @Mock private CompetitionTeamRepository competitionTeamRepository;
-    @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private UserRepository userRepository;
     @InjectMocks private CompetitionService competitionService;
 
@@ -64,15 +63,12 @@ class CompetitionServiceTeamTest {
     @Test
     void publishedCompetitionDetailIncludesTeamsAndActiveMemberCounts() {
         publishedCompetition();
-        Team newestTeam = team(3L, "새 팀", 12L, Team.Status.RECRUITING);
-        Team olderTeam = team(2L, "기존 팀", 15L, Team.Status.RECRUITING);
-        TeamMemberRepository.TeamMemberCount count = mock(TeamMemberRepository.TeamMemberCount.class);
-        when(count.getTeamId()).thenReturn(3L);
-        when(count.getMemberCount()).thenReturn(2L);
-        when(competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING))
-                .thenReturn(List.of(newestTeam, olderTeam));
-        when(teamMemberRepository.countByTeamIdsAndStatus(List.of(3L, 2L), TeamMember.Status.ACTIVE))
-                .thenReturn(List.of(count));
+        var newestTeamRow = teamWithCount(3L, "새 팀", 12L, "팀 소개", (short) 5, Team.Status.RECRUITING, 2L);
+        var olderTeamRow = teamWithCount(2L, "기존 팀", 15L, "팀 소개", (short) 5, Team.Status.RECRUITING, 0L);
+        when(competitionTeamRepository.findWithActiveMemberCount(1L, Team.Status.RECRUITING, TeamMember.Status.ACTIVE))
+                .thenReturn(List.of(newestTeamRow, olderTeamRow));
+        // 모집 중 2팀 + 마감/보관된 팀도 있다고 가정해 teamCount와 recruitingTeamCount가 실제로 달라지는지 확인한다.
+        when(competitionTeamRepository.countByCompetition_Id(1L)).thenReturn(5L);
 
         PublicCompetitionDetailResponse response = competitionService.getPublishedCompetition(12L, 1L);
 
@@ -84,24 +80,25 @@ class CompetitionServiceTeamTest {
         assertThat(response.teams()).extracting("currentMemberCount").containsExactly(2L, 0L);
         assertThat(response.teams()).extracting("status")
                 .containsExactly(Team.Status.RECRUITING, Team.Status.RECRUITING);
-        assertThat(response.teamCount()).isEqualTo(2);
+        assertThat(response.teamCount()).isEqualTo(5);
         assertThat(response.recruitingTeamCount()).isEqualTo(2);
         verify(competitionTeamRepository)
-                .findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING);
+                .findWithActiveMemberCount(1L, Team.Status.RECRUITING, TeamMember.Status.ACTIVE);
     }
 
     @Test
-    void detailReturnsEmptyTeamsWithoutCountingMembersWhenNoneExist() {
+    void detailReturnsEmptyTeamsWhenNoneExist() {
         publishedCompetition();
-        when(competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING))
+        when(competitionTeamRepository.findWithActiveMemberCount(1L, Team.Status.RECRUITING, TeamMember.Status.ACTIVE))
                 .thenReturn(List.of());
+        // 모집 중인 팀은 없지만, 이미 마감된 팀은 있는 경우 teamCount만 그걸 반영해야 한다.
+        when(competitionTeamRepository.countByCompetition_Id(1L)).thenReturn(4L);
 
         PublicCompetitionDetailResponse response = competitionService.getPublishedCompetition(12L, 1L);
 
         assertThat(response.teams()).isEmpty();
-        assertThat(response.teamCount()).isZero();
+        assertThat(response.teamCount()).isEqualTo(4);
         assertThat(response.recruitingTeamCount()).isZero();
-        verify(teamMemberRepository, never()).countByTeamIdsAndStatus(any(), any());
     }
 
     @Test
@@ -130,27 +127,40 @@ class CompetitionServiceTeamTest {
         assertThatThrownBy(() -> competitionService.getPublishedCompetition(12L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(competitionTeamRepository, never()).findAllByCompetition_IdAndStatusOrderByIdDesc(any(), any());
+        verify(competitionTeamRepository, never()).findWithActiveMemberCount(any(), any(), any());
+        verify(competitionTeamRepository, never()).countByCompetition_Id(any());
     }
 
     private Competition publishedCompetition() {
         Competition competition = mock(Competition.class);
         when(competitionRepository.findByIdAndPublicationStatus(1L, Competition.PublicationStatus.PUBLISHED))
                 .thenReturn(Optional.of(competition));
+        when(competitionRepository.incrementViewCount(1L, Competition.PublicationStatus.PUBLISHED))
+                .thenReturn(1);
         when(competition.getCategory()).thenReturn(Competition.Category.WEB_MOBILE_IT);
+        CompetitionScrapSummaryProjection scrapSummary = scrapSummary(0L, false);
+        when(competitionScrapRepository.findScrapSummary(12L, 1L)).thenReturn(scrapSummary);
         return competition;
     }
 
-    private Team team(Long id, String name, Long leaderId, Team.Status status) {
-        Team team = mock(Team.class);
-        User leader = mock(User.class);
-        when(team.getId()).thenReturn(id);
-        when(team.getName()).thenReturn(name);
-        when(team.getLeader()).thenReturn(leader);
-        when(leader.getId()).thenReturn(leaderId);
-        when(team.getDescription()).thenReturn("팀 소개");
-        when(team.getMaxMemberCount()).thenReturn((short) 5);
-        when(team.getStatus()).thenReturn(status);
-        return team;
+    private CompetitionScrapSummaryProjection scrapSummary(long scrapCount, boolean scrapped) {
+        var summary = mock(CompetitionScrapSummaryProjection.class);
+        when(summary.getScrapCount()).thenReturn(scrapCount);
+        when(summary.isScrapped()).thenReturn(scrapped);
+        return summary;
+    }
+
+    private CompetitionTeamRepository.RecruitingTeamWithActiveMemberCount teamWithCount(
+            Long teamId, String name, Long leaderId, String description,
+            Short maxMemberCount, Team.Status status, long activeMemberCount) {
+        var row = mock(CompetitionTeamRepository.RecruitingTeamWithActiveMemberCount.class);
+        when(row.getTeamId()).thenReturn(teamId);
+        when(row.getName()).thenReturn(name);
+        when(row.getLeaderId()).thenReturn(leaderId);
+        when(row.getDescription()).thenReturn(description);
+        when(row.getMaxMemberCount()).thenReturn(maxMemberCount);
+        when(row.getStatus()).thenReturn(status);
+        when(row.getActiveMemberCount()).thenReturn(activeMemberCount);
+        return row;
     }
 }

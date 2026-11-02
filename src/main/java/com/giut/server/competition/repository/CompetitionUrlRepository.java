@@ -17,5 +17,7 @@ public interface CompetitionUrlRepository extends JpaRepository<CompetitionUrl, 
 
     Optional<CompetitionUrl> findByNormalizedUrlHash(String normalizedUrlHash);
 
+    List<CompetitionUrl> findAllByNormalizedUrlHashIn(Collection<String> normalizedUrlHashes);
+
     void deleteByCompetition_Id(Long competitionId);
 }
