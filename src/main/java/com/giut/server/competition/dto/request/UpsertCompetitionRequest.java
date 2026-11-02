@@ -52,19 +52,22 @@ public record UpsertCompetitionRequest(
         Competition.ActivityType activityType,
 
         @Schema(description = "상금·시상 정보. 수정 시 생략 또는 null이면 기존 값을 유지하고 빈 문자열은 삭제합니다.")
-        @Size(max = 3000, message = "상금 정보는 3000자 이하여야 합니다.") String prizeInfo
+        @Size(max = 3000, message = "상금 정보는 3000자 이하여야 합니다.") String prizeInfo,
+
+        @Schema(description = "총상금 숫자. 수정 시 생략하거나 null이면 기존 값을 유지합니다.", example = "10000000")
+        Long totalPrizeAmount
 ) {
     public UpsertCompetitionRequest(String title, Competition.Category category, String hostOrganization,
             String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
             Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls) {
         this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
-                applicationEndAt, publicationStatus, urls, null, null);
+                applicationEndAt, publicationStatus, urls, null, null, null);
     }
 
     public UpsertCompetitionRequest(String title, Competition.Category category, String hostOrganization,
             String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
             Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls, Competition.ActivityType activityType) {
         this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
-                applicationEndAt, publicationStatus, urls, activityType, null);
+                applicationEndAt, publicationStatus, urls, activityType, null, null);
     }
 }

@@ -244,6 +244,7 @@ public class CompetitionService {
             competition.changeActivityType(request.activityType());
         }
         competition.changePrizeInfo(trimToNull(request.prizeInfo()));
+        competition.changeTotalPrizeAmount(request.totalPrizeAmount());
         competition = competitionRepository.save(competition);
 
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
@@ -311,6 +312,10 @@ public class CompetitionService {
         }
         if (request.prizeInfo() != null) {
             competition.changePrizeInfo(trimToNull(request.prizeInfo()));
+        }
+
+        if (request.totalPrizeAmount() != null) {
+            competition.changeTotalPrizeAmount(request.totalPrizeAmount());
         }
 
         competitionUrlRepository.deleteByCompetition_Id(competitionId);
