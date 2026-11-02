@@ -57,11 +57,12 @@ class SwaggerExamplesTest {
 
         JsonNode detail = objectMapper.readTree(SwaggerExamples.COMPETITION_DETAIL);
         JsonNode teams = detail.path("teams");
-        assertThat(detail.path("teamCount").asLong()).isEqualTo(teams.size());
+        assertThat(detail.path("teamCount").asLong()).isEqualTo(3);
+        assertThat(detail.path("recruitingTeamCount").asLong()).isEqualTo(teams.size());
         assertThat(page.at("/competitions/0/teamCount").asLong())
-                .isEqualTo(detail.path("teamCount").asLong());
+                .isEqualTo(detail.path("recruitingTeamCount").asLong());
         assertThat(objectMapper.readTree(SwaggerExamples.COMPETITION_LIST).at("/0/teamCount").asLong())
-                .isEqualTo(detail.path("teamCount").asLong());
+                .isEqualTo(detail.path("recruitingTeamCount").asLong());
         teams.forEach(team -> assertThat(team.path("status").asText()).isEqualTo("RECRUITING"));
         assertThat(detail.path("recruitingTeamCount").asLong())
                 .isEqualTo(java.util.stream.StreamSupport.stream(teams.spliterator(), false)
