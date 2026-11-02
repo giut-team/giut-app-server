@@ -5,8 +5,10 @@ import com.giut.server.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.type.SqlTypes;
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity @Table(name = "competitions") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Competition extends BaseTimeEntity {
@@ -22,8 +24,9 @@ public class Competition extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
-    @Column(name = "activity_type", length = 30)
-    private ActivityType activityType;
+    @Column(name = "activity_type", length = 30, nullable = false)
+    @ColumnDefault("'COMPETITION'")
+    private ActivityType activityType = ActivityType.COMPETITION;
 
     @Column(name = "host_organization", length = 150)
     private String hostOrganization;
@@ -125,7 +128,7 @@ public class Competition extends BaseTimeEntity {
     }
 
     public void changeActivityType(ActivityType activityType) {
-        this.activityType = activityType;
+        this.activityType = Objects.requireNonNull(activityType, "활동 유형은 필수입니다.");
     }
 
     /** Preserves dependent teams, scraps and review history while removing public visibility. */

@@ -112,8 +112,10 @@ class AdminCreatedCompetitionListPersistenceTest {
                  "targetParticipants":"대학생", "publicationStatus":"DRAFT",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/created-post","primary":true}]}
                 """))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$.activityTypeName").value("공모전"));
         Competition created = competitions.findAll().getFirst();
+        assertThat(created.getActivityType()).isEqualTo(Competition.ActivityType.COMPETITION);
         mvc.perform(as(admin, get(PATH)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.size").value(10))

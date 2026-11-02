@@ -244,7 +244,9 @@ public class CompetitionService {
                 verificationStatus,
                 admin
         );
-        competition.changeActivityType(request.activityType());
+        if (request.activityType() != null) {
+            competition.changeActivityType(request.activityType());
+        }
         competition = competitionRepository.save(competition);
 
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);

@@ -42,7 +42,7 @@ public record CreateCompetitionRequest(
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
         List<@Valid CompetitionUrlRequest> urls,
 
-        @Schema(description = "활동 유형. 생략하면 미지정으로 저장합니다.", example = "HACKATHON")
+        @Schema(description = "활동 유형. 생략하거나 null이면 공모전으로 저장합니다.", example = "HACKATHON")
         Competition.ActivityType activityType
 ) {
     public CreateCompetitionRequest(String title, Competition.Category category, String hostOrganization,
