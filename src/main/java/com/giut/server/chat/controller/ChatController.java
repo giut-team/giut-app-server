@@ -10,6 +10,7 @@ import com.giut.server.chat.dto.response.ChatRoomListResponse;
 import com.giut.server.chat.dto.response.ChatRoomUnreadCountResponse;
 import com.giut.server.chat.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -216,13 +217,18 @@ public class ChatController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ChatMessageListResponse.class),
-                            examples = @ExampleObject(value = "{\"chatRoomId\":5,\"page\":0,\"size\":30,\"hasNext\":false,\"messages\":[{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}]}")
+                            examples = @ExampleObject(value = "{\"chatRoomId\":5,\"nextCursor\":71,\"size\":30,\"hasNext\":true,\"messages\":[{\"messageId\":71,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-11-03T01:00:00Z\"}]}")
                     )
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "페이지 또는 요청 값 오류",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
+                    description = "커서 또는 요청 값 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"메시지 커서는 1 이상이어야 합니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "채팅방 참여자가 아님",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -238,7 +244,9 @@ public class ChatController {
     public ResponseEntity<ChatMessageListResponse> getMessages(
             Authentication authentication,
             @PathVariable Long chatRoomId,
+            @Parameter(description = "이 ID보다 오래된 메시지를 조회합니다. 첫 조회에서는 생략합니다.", example = "71")
             @RequestParam(required = false) Long beforeMessageId,
+            @Parameter(description = "한 번에 조회할 메시지 수", example = "30")
             @RequestParam(defaultValue = "30") int size
     ) {
         Long userId = Long.valueOf(authentication.getName());
