@@ -3,6 +3,9 @@ package com.giut.server.competition.controller;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
+import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.user.entity.User;
+import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import org.springframework.web.context.WebApplicationContext;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
@@ -39,6 +43,8 @@ class AiCompetitionControllerTest {
     @Autowired CompetitionRepository competitions;
     @Autowired CompetitionUrlRepository urls;
     @Autowired CompetitionVerificationLogRepository logs;
+    @Autowired UserRepository users;
+    @Autowired JwtProvider jwt;
     MockMvc mvc;
 
     @BeforeEach
@@ -47,6 +53,23 @@ class AiCompetitionControllerTest {
         logs.deleteAll();
         urls.deleteAll();
         competitions.deleteAll();
+        users.deleteAll();
+    }
+
+    @Test
+    void aiDataCategoryPersistsAndCanBeFilteredInPublicList() throws Exception {
+        String aiBody = BODY.replace("WEB_MOBILE_IT", "AI_DATA");
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(aiBody))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.category").value("AI_DATA"));
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content(BODY.replace("ai-contest", "it-contest")))
+                .andExpect(status().isCreated());
+        User user = users.saveAndFlush(User.createOAuthUser("ai-category@example.com", "학생", User.OAuthProvider.KAKAO, "ai-category"));
+        mvc.perform(get("/api/competitions").param("category", "AI_DATA")
+                        .header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].category").value("AI_DATA"))
+                .andExpect(jsonPath("$.competitions[0].categoryName").value("AI/데이터"));
     }
 
     @Test

@@ -137,6 +137,7 @@ public class Competition extends BaseTimeEntity {
     public enum Category {
         PLANNING_IDEA("기획/아이디어"),
         ADVERTISING_MARKETING("광고/마케팅"),
+        AI_DATA("AI/데이터"),
         PAPER_REPORT("논문/리포트"),
         VIDEO_UCC_PHOTO("영상/UCC/사진"),
         DESIGN_CHARACTER_WEBTOON("디자인/캐릭터/웹툰"),
