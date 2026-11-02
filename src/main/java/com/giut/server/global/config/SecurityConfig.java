@@ -18,6 +18,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.annotation.Order;
+import com.giut.server.auth.security.AiIngestionAuthenticationFilter;
 
 @Configuration
 @RequiredArgsConstructor
@@ -32,6 +35,20 @@ public class SecurityConfig {
     private final UserRepository userRepository;
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain aiIngestionSecurity(HttpSecurity http,
+            @Value("${app.ai-ingestion.secret:}") String secret) throws Exception {
+        return http.securityMatcher("/api/internal/ai/competitions")
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .addFilterBefore(new AiIngestionAuthenticationFilter(secret), UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())

@@ -56,6 +56,15 @@ public class CompetitionVerificationLog {
         return log;
     }
 
+    public static CompetitionVerificationLog createAiVerificationLog(Competition competition) {
+        CompetitionVerificationLog log = new CompetitionVerificationLog();
+        log.competition = competition;
+        log.toStatus = Competition.VerificationStatus.AUTO_VERIFIED;
+        log.verificationMethod = Method.AUTO_EXTRACTION;
+        log.reason = "AI 서버 검증 후 등록";
+        return log;
+    }
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = Instant.now();

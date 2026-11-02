@@ -3,6 +3,7 @@ package com.giut.server.competition.service;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
+import com.giut.server.competition.dto.request.AiCompetitionRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
@@ -247,6 +248,24 @@ public class CompetitionService {
                 CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
 
+        return toResponse(competition, savedUrls);
+    }
+
+    @Transactional
+    public AdminCompetitionResponse createByAi(AiCompetitionRequest input) {
+        UpsertCompetitionRequest request = new UpsertCompetitionRequest(
+                input.title(), input.category(), input.hostOrganization(), input.targetParticipants(), input.summary(),
+                input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.PUBLISHED, input.urls());
+        validateRequest(request);
+        List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
+        validateUrlOwnership(urls, null);
+        Competition competition = competitionRepository.save(Competition.create(
+                request.title().trim(), request.category(), trimToNull(request.hostOrganization()),
+                request.targetParticipants().trim(), trimToNull(request.summary()), request.applicationStartAt(),
+                request.applicationEndAt(), Competition.PublicationStatus.PUBLISHED,
+                Competition.VerificationStatus.AUTO_VERIFIED, null));
+        List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
+        competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
         return toResponse(competition, savedUrls);
     }
 
