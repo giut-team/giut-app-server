@@ -200,8 +200,13 @@ public class ChatController {
 
     @GetMapping("/{chatRoomId}/messages")
     @Operation(
-            summary = "채팅 메시지 목록 조회",
-            description = "채팅방 참여자가 메시지 목록을 조회합니다. 조회 성공 시 마지막 메시지를 읽은 메시지로 기록합니다."
+            summary = "채팅 메시지 커서 목록 조회",
+            description = """
+                beforeMessageId가 없으면 최신 메시지를 조회합니다.
+                값이 있으면 해당 메시지 ID보다 오래된 메시지를 조회합니다.
+                응답의 nextCursor를 다음 요청의 beforeMessageId로 사용합니다.
+                메시지 조회만으로 읽음 처리되지는 않습니다.
+                """
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -233,11 +238,19 @@ public class ChatController {
     public ResponseEntity<ChatMessageListResponse> getMessages(
             Authentication authentication,
             @PathVariable Long chatRoomId,
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) Long beforeMessageId,
             @RequestParam(defaultValue = "30") int size
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        return ResponseEntity.ok(chatService.getMessages(userId, chatRoomId, page, size));
+
+        return ResponseEntity.ok(
+                chatService.getMessages(
+                        userId,
+                        chatRoomId,
+                        beforeMessageId,
+                        size
+                )
+        );
     }
 
     @DeleteMapping("/{chatRoomId}/messages/{messageId}")

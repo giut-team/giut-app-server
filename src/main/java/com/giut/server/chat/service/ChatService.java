@@ -24,6 +24,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -132,32 +133,66 @@ public class ChatService {
         return response;
     }
 
-    @Transactional
-    public ChatMessageListResponse getMessages(Long userId, Long chatRoomId, int page, int size) {
+    @Transactional(readOnly = true)
+    public ChatMessageListResponse getMessages(
+            Long userId,
+            Long chatRoomId,
+            Long beforeMessageId,
+            int size
+    ) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
-        ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+        validateActiveParticipant(chatRoom.getId(), userId);
 
-        int normalizedPage = Math.max(page, 0);
-        int normalizedSize = normalizeSize(size);
-        Page<ChatMessage> messagePage = chatMessageRepository.findAllByChatRoomIdAndStatusOrderByIdAsc(
-                chatRoom.getId(),
-                ChatMessage.Status.ACTIVE,
-                PageRequest.of(normalizedPage, normalizedSize)
-        );
-
-        List<ChatMessageResponse> messages = messagePage.getContent().stream()
-                .map(ChatMessageResponse::from)
-                .toList();
-
-        if (!messages.isEmpty()) {
-            participant.updateLastReadMessage(messages.get(messages.size() - 1).messageId());
+        if (beforeMessageId != null && beforeMessageId <= 0) {
+            throw new IllegalArgumentException(
+                    "메시지 커서는 1 이상이어야 합니다."
+            );
         }
+
+        int normalizedSize = normalizeSize(size);
+        PageRequest pageable = PageRequest.of(0, normalizedSize);
+
+        Slice<ChatMessage> messageSlice =
+                beforeMessageId == null
+                        ? chatMessageRepository
+                        .findByChatRoomIdAndStatusOrderByIdDesc(
+                                chatRoom.getId(),
+                                ChatMessage.Status.ACTIVE,
+                                pageable
+                        )
+                        : chatMessageRepository
+                        .findByChatRoomIdAndStatusAndIdLessThanOrderByIdDesc(
+                                chatRoom.getId(),
+                                ChatMessage.Status.ACTIVE,
+                                beforeMessageId,
+                                pageable
+                        );
+
+        List<ChatMessage> descendingMessages =
+                messageSlice.getContent();
+
+        Long nextCursor =
+                messageSlice.hasNext() && !descendingMessages.isEmpty()
+                        ? descendingMessages
+                        .get(descendingMessages.size() - 1)
+                        .getId()
+                        : null;
+
+        List<ChatMessageResponse> messages =
+                descendingMessages.stream()
+                        .sorted(
+                                java.util.Comparator.comparing(
+                                        ChatMessage::getId
+                                )
+                        )
+                        .map(ChatMessageResponse::from)
+                        .toList();
 
         return new ChatMessageListResponse(
                 chatRoom.getId(),
-                normalizedPage,
+                nextCursor,
                 normalizedSize,
-                messagePage.hasNext(),
+                messageSlice.hasNext(),
                 messages
         );
     }

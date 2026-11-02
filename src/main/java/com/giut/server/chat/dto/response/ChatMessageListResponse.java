@@ -9,16 +9,19 @@ public record ChatMessageListResponse(
         @Schema(description = "채팅방 ID", example = "5")
         Long chatRoomId,
 
-        @Schema(description = "현재 페이지 번호", example = "0")
-        int page,
+        @Schema(
+                description = "다음 과거 메시지 조회에 사용할 커서. 다음 데이터가 없으면 null",
+                example = "71"
+        )
+        Long nextCursor,
 
-        @Schema(description = "페이지 크기", example = "30")
+        @Schema(description = "조회 크기", example = "30")
         int size,
 
-        @Schema(description = "다음 페이지 존재 여부", example = "true")
+        @Schema(description = "다음 과거 메시지 존재 여부", example = "true")
         boolean hasNext,
 
-        @Schema(description = "메시지 목록")
+        @Schema(description = "오래된 순서로 정렬된 메시지 목록")
         List<ChatMessageResponse> messages
 ) {
 }
