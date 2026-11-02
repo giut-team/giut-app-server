@@ -274,6 +274,7 @@ public class CompetitionService {
                 Competition.VerificationStatus.AUTO_VERIFIED, null);
         competition.changeActivityType(activityType);
         competition.changePrizeInfo(trimToNull(input.prizeInfo()));
+        competition.changeTotalPrizeAmount(input.totalPrizeAmount());
         competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));

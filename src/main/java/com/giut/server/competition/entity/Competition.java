@@ -37,6 +37,9 @@ public class Competition extends BaseTimeEntity {
     @Column(name = "prize_info", columnDefinition = "text")
     private String prizeInfo;
 
+    @Column(name = "total_prize_amount")
+    private Long totalPrizeAmount;
+
     @Column(columnDefinition = "text")
     private String summary;
 
@@ -136,6 +139,10 @@ public class Competition extends BaseTimeEntity {
 
     public void changePrizeInfo(String prizeInfo) {
         this.prizeInfo = prizeInfo;
+    }
+
+    public void changeTotalPrizeAmount(Long totalPrizeAmount) {
+        this.totalPrizeAmount = totalPrizeAmount;
     }
 
     /** Preserves dependent teams, scraps and review history while removing public visibility. */

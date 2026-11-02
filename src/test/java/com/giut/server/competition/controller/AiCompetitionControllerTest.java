@@ -78,6 +78,25 @@ class AiCompetitionControllerTest {
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"));
     }
 
+    @Test
+    void totalPrizeAmountIsOptionalAndSavedForSingleAndBatch() throws Exception {
+        String single = BODY.replace("\"title\":\"AI 공모전\",", "\"total_prize_amount\":10000000,\"title\":\"AI 공모전\",");
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(single))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        Long id = competitions.findAll().getFirst().getId();
+        User user = users.saveAndFlush(User.createOAuthUser("amount@example.com", "학생", User.OAuthProvider.KAKAO, "amount"));
+        mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        String withAmount = BODY.replace("ai-contest", "with-amount")
+                .replace("\"title\":\"AI 공모전\",", "\"total_prize_amount\":0,\"title\":\"AI 공모전\",");
+        String withoutAmount = BODY.replace("ai-contest", "no-amount");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + withAmount + "," + withoutAmount + "]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$[0].totalPrizeAmount").value(0))
+                .andExpect(jsonPath("$[1].totalPrizeAmount").value(org.hamcrest.Matchers.nullValue()));
+        assertThat(competitions.findById(id).orElseThrow().getTotalPrizeAmount()).isEqualTo(10000000L);
+    }
+
     @ParameterizedTest
     @EnumSource(AiTargetParticipants.class)
     void allAiParticipantCodesAreSaved(AiTargetParticipants participants) throws Exception {
