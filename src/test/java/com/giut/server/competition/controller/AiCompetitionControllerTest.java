@@ -149,8 +149,20 @@ class AiCompetitionControllerTest {
     }
 
     @Test
+    void batchAcceptsTwentyCompetitions() throws Exception {
+        String items = IntStream.range(0, 20).mapToObj(i -> BODY.replace("ai-contest", "contest-" + i))
+                .collect(Collectors.joining(","));
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + items + "]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(20));
+        assertThat(competitions.count()).isEqualTo(20);
+        assertThat(urls.count()).isEqualTo(20);
+        assertThat(logs.count()).isEqualTo(20);
+    }
+
+    @Test
     void batchRejectsEmptyNullAndOverLimit() throws Exception {
-        String many = IntStream.range(0, 51).mapToObj(i -> BODY.replace("ai-contest", "contest-" + i))
+        String many = IntStream.range(0, 21).mapToObj(i -> BODY.replace("ai-contest", "contest-" + i))
                 .collect(Collectors.joining(","));
         for (String batch : new String[] {"{\"competitions\":[]}", "{\"competitions\":[null]}",
                 "{\"competitions\":[" + many + "]}"}) {

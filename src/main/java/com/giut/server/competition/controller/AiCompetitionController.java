@@ -34,7 +34,7 @@ public class AiCompetitionController {
     }
 
     @PostMapping("/batch")
-    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~50건. 한 건이라도 실패하면 전체 저장을 취소합니다.",
+    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~20건. 한 건이라도 실패하면 전체 저장을 취소합니다.",
             parameters = @Parameter(name = "X-AI-API-Key", in = ParameterIn.HEADER, required = true,
                     description = "AI 서버 전용 비밀키"))
     public ResponseEntity<List<AdminCompetitionResponse>> createBatch(@Valid @RequestBody AiCompetitionBatchRequest request) {
