@@ -63,11 +63,11 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void aiTargetAndPrizeAreSavedAndNonActivityMayBePublished() throws Exception {
-        String body = BODY.replace("HACKATHON", "NOT_ACTIVITY").replace("UNIV_ONLY", "NONE")
+    void aiTargetAndPrizeAreSavedAndPublished() throws Exception {
+        String body = BODY.replace("UNIV_ONLY", "NONE")
                 .replace("상금 미정", "총상금 1,000만 원");
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("NOT_ACTIVITY"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("HACKATHON"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"))
                 .andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
                 .andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"));
@@ -136,8 +136,8 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void multipleActivityAndUnconfirmedInternshipAreNotRegistered() throws Exception {
-        for (String value : new String[] {"MULTIPLE_ACTIVITIES", "INTERNSHIP"}) {
+    void invalidAndRetiredActivityTypesAreNotRegistered() throws Exception {
+        for (String value : new String[] {"INVALID_ACTIVITY", "NOT_ACTIVITY", "MULTIPLE_ACTIVITIES", "INTERNSHIP"}) {
             mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
                             .content(BODY.replace("HACKATHON", value)))
                     .andExpect(status().isBadRequest());
@@ -146,8 +146,8 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void multipleActivityInBatchRollsBackEverything() throws Exception {
-        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("HACKATHON", "MULTIPLE_ACTIVITIES") + "]}";
+    void invalidActivityInBatchRollsBackEverything() throws Exception {
+        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("HACKATHON", "INVALID_ACTIVITY").replace("ai-contest", "invalid-contest") + "]}";
         mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
                 .andExpect(status().isBadRequest());
         assertThat(competitions.count()).isZero();

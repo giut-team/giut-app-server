@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 
@@ -66,6 +67,10 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20, columnDefinition = "varchar(20)")
     private Status status;
+
+    @Column(name = "token_version", nullable = false)
+    @ColumnDefault("0")
+    private long tokenVersion = 0L;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -132,5 +137,10 @@ public class User {
         }
         this.status = Status.DELETED;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 발급된 모든 토큰을 서버 측에서 무효화한다(로그아웃용). */
+    public void bumpTokenVersion() {
+        this.tokenVersion++;
     }
 }

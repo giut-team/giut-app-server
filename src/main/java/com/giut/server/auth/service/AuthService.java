@@ -8,6 +8,7 @@ import com.giut.server.user.entity.User;
 import com.giut.server.auth.exception.AuthenticationFailedException;
 import com.giut.server.global.exception.ConflictException;
 import com.giut.server.global.exception.ForbiddenException;
+import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.user.repository.UserRepository;
 import com.giut.server.auth.security.JwtProvider;
 import jakarta.transaction.Transactional;
@@ -80,5 +81,12 @@ public class AuthService {
                 refreshToken,
                 "Bearer"
         );
+    }
+
+    @Transactional
+    public void logout(Long userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        user.bumpTokenVersion();
     }
 }

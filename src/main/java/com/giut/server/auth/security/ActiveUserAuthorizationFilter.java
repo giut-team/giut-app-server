@@ -21,6 +21,7 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
 
     private final UserRepository userRepository;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final JwtProvider jwtProvider;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -32,11 +33,32 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
             return;
         }
         Long userId = parseUserId(authentication.getName());
-        if (userId == null || !userRepository.existsByIdAndStatus(userId, User.Status.ACTIVE)) {
+        User user = userId == null ? null : userRepository.findById(userId).orElse(null);
+        String token = resolveToken(request);
+        boolean tokenVersionMatches = user != null && token != null
+                && user.getTokenVersion() == jwtProvider.getTokenVersion(token);
+        if (user == null || user.getStatus() != User.Status.ACTIVE || !tokenVersionMatches) {
             accessDeniedHandler.handle(request, response, new AccessDeniedException("비활성 계정입니다."));
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    private String resolveToken(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (jakarta.servlet.http.Cookie cookie : cookies) {
+            if ("giut_access_token".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     private Long parseUserId(String name) {

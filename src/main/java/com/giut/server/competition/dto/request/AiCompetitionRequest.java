@@ -24,7 +24,7 @@ public record AiCompetitionRequest(
         @NotNull Instant applicationStartAt,
         @NotNull Instant applicationEndAt,
         @NotEmpty List<@NotNull @Valid CompetitionUrlRequest> urls,
-        @Schema(description = "AI 코드 사용: CONTEST=공모전, COMPETITION=경진대회. MULTIPLE_ACTIVITIES는 검토가 필요해 등록되지 않으며 INTERNSHIP은 미지원입니다.", example = "HACKATHON")
+        @Schema(description = "AI 코드 사용: CONTEST=공모전, COMPETITION=경진대회. INVALID_ACTIVITY는 부적합 활동으로 등록되지 않으며 INTERNSHIP은 미지원입니다.", example = "HACKATHON")
         @NotNull(message = "활동 유형은 필수입니다.") AiActivityType activityType,
         @Schema(description = "상금·시상 정보 원문. 생략, null 또는 공백이면 상금 미정으로 저장합니다.", example = "총상금 1,000만 원")
         @Size(max = 3000) String prizeInfo,

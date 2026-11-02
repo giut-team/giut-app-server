@@ -78,7 +78,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new ActiveUserAuthorizationFilter(userRepository, jwtAccessDeniedHandler), JwtAuthenticationFilter.class)
+                .addFilterAfter(new ActiveUserAuthorizationFilter(userRepository, jwtAccessDeniedHandler, jwtProvider), JwtAuthenticationFilter.class)
                 .addFilterAfter(new UniversityVerificationAuthorizationFilter(userRepository), ActiveUserAuthorizationFilter.class)
                 .build();
     }
