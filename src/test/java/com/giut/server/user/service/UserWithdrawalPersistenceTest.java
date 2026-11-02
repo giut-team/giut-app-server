@@ -217,7 +217,7 @@ class UserWithdrawalPersistenceTest {
     void memberHistoryAndChatRecordsRemainButAccountCannotSubscribeOrReceiveNewMessages() throws Exception {
         Team team = team(viewer);
         TeamMember membership = teamMembers.saveAndFlush(TeamMember.createMember(team.getId(), target.getId(), "BACKEND"));
-        ChatRoom room = rooms.saveAndFlush(ChatRoom.createPersonalRoom());
+        ChatRoom room = rooms.saveAndFlush(ChatRoom.createPersonalRoom(target.getId(), viewer.getId()));
         roomMembers.saveAndFlush(ChatRoomMember.join(room.getId(), target.getId()));
         roomMembers.saveAndFlush(ChatRoomMember.join(room.getId(), viewer.getId()));
         ChatMessage message = messages.saveAndFlush(ChatMessage.createText(room.getId(), viewer.getId(), "보존할 메시지"));

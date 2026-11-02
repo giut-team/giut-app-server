@@ -33,7 +33,7 @@ class ChatSubscriptionInterceptorTest {
     @Test
     void allowsActiveParticipantToSubscribe() {
         when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
-        ChatRoom room = ChatRoom.createPersonalRoom();
+        ChatRoom room = ChatRoom.createPersonalRoom(12L, 13L);
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
         when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
                 .thenReturn(true);
@@ -45,7 +45,7 @@ class ChatSubscriptionInterceptorTest {
     @Test
     void rejectsNonParticipant() {
         when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
-        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom()));
+        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom(12L, 13L)));
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));

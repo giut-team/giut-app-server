@@ -38,7 +38,7 @@ class ChatServiceWebSocketTest {
 
     @Test
     void sendingMessagePublishesSavedMessage() {
-        ChatRoom room = ChatRoom.createPersonalRoom();
+        ChatRoom room = ChatRoom.createPersonalRoom(12L, 13L);
         ReflectionTestUtils.setField(room, "id", 5L);
         ChatRoomMember member = ChatRoomMember.join(5L, 12L);
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
@@ -61,7 +61,7 @@ class ChatServiceWebSocketTest {
 
     @Test
     void deletingMessagePublishesDeletedStatus() {
-        ChatRoom room = ChatRoom.createPersonalRoom();
+        ChatRoom room = ChatRoom.createPersonalRoom(12L, 13L);
         ReflectionTestUtils.setField(room, "id", 5L);
         ChatMessage message = ChatMessage.createText(5L, 12L, "hello");
         ReflectionTestUtils.setField(message, "id", 30L);
