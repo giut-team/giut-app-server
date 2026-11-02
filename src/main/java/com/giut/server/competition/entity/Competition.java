@@ -10,7 +10,10 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.Objects;
 
-@Entity @Table(name = "competitions") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Entity @Table(name = "competitions", indexes = {
+        @Index(name = "idx_competitions_status_id", columnList = "publication_status, id"),
+        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at")
+}) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Competition extends BaseTimeEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
