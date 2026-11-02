@@ -152,8 +152,8 @@ class AdminSkillTagControllerTest {
         @Bean
         UserRepository userRepository() {
             UserRepository repository = mock(UserRepository.class);
-            when(repository.existsByIdAndStatus(org.mockito.ArgumentMatchers.anyLong(),
-                    org.mockito.ArgumentMatchers.eq(User.Status.ACTIVE))).thenReturn(true);
+            when(repository.findById(org.mockito.ArgumentMatchers.anyLong())).thenReturn(java.util.Optional.of(
+                    User.createOAuthUser("active@example.com", "활성 회원", User.OAuthProvider.KAKAO, "active-provider-id")));
             return repository;
         }
 

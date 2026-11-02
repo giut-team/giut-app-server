@@ -47,6 +47,7 @@ public class JwtProvider {
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("type", "access")
+                .claim("tokenVersion", user.getTokenVersion())
                 .issuedAt(now)
                 .expiration(expiredDate)
                 .signWith(key)
@@ -62,6 +63,7 @@ public class JwtProvider {
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("type", "refresh")
+                .claim("tokenVersion", user.getTokenVersion())
                 .issuedAt(now)
                 .expiration(expiredDate)
                 .signWith(key)
@@ -134,6 +136,12 @@ public class JwtProvider {
     public String getTokenType(String token) {
         return parseClaims(token)
                 .get("type", String.class);
+    }
+
+    /** 클레임이 없는(이 필드 도입 이전에 발급된) 토큰은 버전 0으로 간주해 호환성을 유지한다. */
+    public long getTokenVersion(String token) {
+        Long tokenVersion = parseClaims(token).get("tokenVersion", Long.class);
+        return tokenVersion == null ? 0L : tokenVersion;
     }
 
     public String getRole(String token) {

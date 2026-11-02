@@ -109,7 +109,7 @@ class ProfileShareAuthorizationTest {
         verify(links).findByTokenHash(hash);
         verify(profiles).getSharedProfile("anonymous".equals(viewer) ? null : 42L, 12L);
         if ("anonymous".equals(viewer)) verifyNoInteractions(users);
-        else verify(users).existsByIdAndStatus(42L, User.Status.ACTIVE);
+        else verify(users).findById(42L);
         verify(users, never()).existsByIdAndUniversityVerifiedAtIsNotNull(anyLong());
     }
 
@@ -223,7 +223,8 @@ class ProfileShareAuthorizationTest {
         @Bean JwtProvider jwtProvider() { return new JwtProvider(); }
         @Bean UserRepository userRepository() {
             UserRepository repository = mock(UserRepository.class);
-            when(repository.existsByIdAndStatus(anyLong(), eq(User.Status.ACTIVE))).thenReturn(true);
+            when(repository.findById(anyLong())).thenReturn(Optional.of(
+                    User.createOAuthUser("active@example.com", "활성 회원", User.OAuthProvider.KAKAO, "active-provider-id")));
             return repository;
         }
         @Bean UserBlockService userBlockService() { return mock(UserBlockService.class); }
