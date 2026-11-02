@@ -34,6 +34,9 @@ public class Competition extends BaseTimeEntity {
     @Column(name = "target_participants", columnDefinition = "text")
     private String targetParticipants;
 
+    @Column(name = "prize_info", columnDefinition = "text")
+    private String prizeInfo;
+
     @Column(columnDefinition = "text")
     private String summary;
 
@@ -131,6 +134,10 @@ public class Competition extends BaseTimeEntity {
         this.activityType = Objects.requireNonNull(activityType, "활동 유형은 필수입니다.");
     }
 
+    public void changePrizeInfo(String prizeInfo) {
+        this.prizeInfo = prizeInfo;
+    }
+
     /** Preserves dependent teams, scraps and review history while removing public visibility. */
     public void archive() {
         this.publicationStatus = PublicationStatus.ARCHIVED;
@@ -152,7 +159,7 @@ public class Competition extends BaseTimeEntity {
         COMPETITION("공모전"), CONTEST("경진대회"), HACKATHON("해커톤"),
         SUPPORTERS("서포터즈"), VOLUNTEERING("봉사"), STARTUP("창업"),
         EDUCATION_PROGRAM("교육/프로그램"), OVERSEAS_EXPLORATION("해외탐방"),
-        EVENT_NETWORKING("행사/네트워킹"), ETC("기타");
+        EVENT_NETWORKING("행사/네트워킹"), ETC("기타"), NOT_ACTIVITY("참여 가능한 활동이 아님");
 
         private final String displayName;
 

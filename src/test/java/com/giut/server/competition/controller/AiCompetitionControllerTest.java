@@ -3,11 +3,14 @@ package com.giut.server.competition.controller;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
+import com.giut.server.competition.dto.request.AiTargetParticipants;
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -37,7 +40,7 @@ class AiCompetitionControllerTest {
     private static final String PATH = "/api/integrations/competitions";
     private static final String KEY = "0123456789abcdef0123456789abcdef";
     private static final String BODY = """
-            {"title":"AI 공모전", "activityType":"HACKATHON", "category":"WEB_MOBILE_IT", "targetParticipants":"대학생",
+            {"title":"AI 공모전", "activityType":"HACKATHON", "category":"WEB_MOBILE_IT", "targetParticipants":"UNIV_ONLY",
              "applicationStartAt":"2026-11-01T00:00:00Z", "applicationEndAt":"2026-12-01T00:00:00Z",
              "urls":[{"type":"RECRUITMENT","url":"https://example.com/ai-contest","primary":true}]}
             """;
@@ -59,8 +62,53 @@ class AiCompetitionControllerTest {
     }
 
     @Test
+    void aiTargetAndPrizeAreSavedAndNonActivityMayBePublished() throws Exception {
+        String body = BODY.replace("HACKATHON", "NOT_ACTIVITY").replace("UNIV_ONLY", "NONE")
+                .replace("\"title\":\"AI 공모전\",", "\"prizeInfo\":\"총상금 1,000만 원\",\"title\":\"AI 공모전\",");
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("NOT_ACTIVITY"))
+                .andExpect(jsonPath("$.targetParticipants").value("NONE"))
+                .andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
+                .andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"));
+        Long id = competitions.findAll().getFirst().getId();
+        User user = users.saveAndFlush(User.createOAuthUser("prize@example.com", "학생", User.OAuthProvider.KAKAO, "prize"));
+        mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
+                .andExpect(jsonPath("$.targetParticipants").value("NONE"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(AiTargetParticipants.class)
+    void allAiParticipantCodesAreSaved(AiTargetParticipants participants) throws Exception {
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content(BODY.replace("UNIV_ONLY", participants.name())))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.targetParticipants").value(participants.name()));
+        assertThat(competitions.findAll().getFirst().getTargetParticipants()).isEqualTo(participants.name());
+    }
+
+    @Test
+    void multipleActivityAndUnconfirmedInternshipAreNotRegistered() throws Exception {
+        for (String value : new String[] {"MULTIPLE_ACTIVITIES", "INTERNSHIP"}) {
+            mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                            .content(BODY.replace("HACKATHON", value)))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(competitions.count()).isZero();
+    }
+
+    @Test
+    void multipleActivityInBatchRollsBackEverything() throws Exception {
+        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("HACKATHON", "MULTIPLE_ACTIVITIES") + "]}";
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isBadRequest());
+        assertThat(competitions.count()).isZero();
+        assertThat(urls.count()).isZero();
+        assertThat(logs.count()).isZero();
+    }
+
+    @Test
     void batchRequiresKeyAndSavesAllInOrder() throws Exception {
-        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("ai-contest", "second").replace("HACKATHON", "COMPETITION") + "]}";
+        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("ai-contest", "second").replace("HACKATHON", "CONTEST") + "]}";
         mvc.perform(post(PATH + "/batch").contentType(MediaType.APPLICATION_JSON).content(batch))
                 .andExpect(status().isUnauthorized());
         mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", "wrong").contentType(MediaType.APPLICATION_JSON).content(batch))
@@ -123,7 +171,7 @@ class AiCompetitionControllerTest {
                         .content(BODY.replace("ai-contest", "it-contest")))
                 .andExpect(status().isCreated());
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
-                        .content(aiBody.replace("HACKATHON", "COMPETITION").replace("ai-contest", "ai-competition")))
+                        .content(aiBody.replace("HACKATHON", "CONTEST").replace("ai-contest", "ai-competition")))
                 .andExpect(status().isCreated());
         User user = users.saveAndFlush(User.createOAuthUser("ai-category@example.com", "학생", User.OAuthProvider.KAKAO, "ai-category"));
         mvc.perform(get("/api/competitions").param("activityType", "HACKATHON").param("category", "AI_DATA")
@@ -168,7 +216,7 @@ class AiCompetitionControllerTest {
     @Test
     void requiredFieldsDatesAndPrimaryUrlAreValidated() throws Exception {
         for (String body : new String[] {
-                BODY.replace("\"대학생\"", "\"\""),
+                BODY.replace("\"UNIV_ONLY\"", "\"INVALID\""),
                 BODY.replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z"),
                 BODY.replace("\"primary\":true", "\"primary\":false"),
                 BODY.replace("\"activityType\":\"HACKATHON\",", ""),

@@ -43,24 +43,33 @@ public record CreateCompetitionRequest(
         List<@Valid CompetitionUrlRequest> urls,
 
         @Schema(description = "활동 유형. 생략하거나 null이면 공모전으로 저장합니다.", example = "HACKATHON")
-        Competition.ActivityType activityType
+        Competition.ActivityType activityType,
+
+        @Size(max = 3000, message = "상금 정보는 3000자 이하여야 합니다.") String prizeInfo
 ) {
     public CreateCompetitionRequest(String title, Competition.Category category, String hostOrganization,
             String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
             Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls) {
         this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
-                applicationEndAt, publicationStatus, urls, null);
+                applicationEndAt, publicationStatus, urls, null, null);
+    }
+
+    public CreateCompetitionRequest(String title, Competition.Category category, String hostOrganization,
+            String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
+            Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls, Competition.ActivityType activityType) {
+        this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
+                applicationEndAt, publicationStatus, urls, activityType, null);
     }
 
     public UpsertCompetitionRequest toUpsertRequest() {
         return new UpsertCompetitionRequest(title, category, hostOrganization, targetParticipants, summary,
-                applicationStartAt, applicationEndAt, publicationStatus, urls, activityType);
+                applicationStartAt, applicationEndAt, publicationStatus, urls, activityType, prizeInfo);
     }
 
     /** Keeps existing sample payloads and their verified default unchanged. */
     public static CreateCompetitionRequest from(UpsertCompetitionRequest request) {
         return new CreateCompetitionRequest(request.title(), request.category(), request.hostOrganization(),
                 request.targetParticipants(), request.summary(), request.applicationStartAt(), request.applicationEndAt(),
-                request.publicationStatus(), request.urls(), request.activityType());
+                request.publicationStatus(), request.urls(), request.activityType(), request.prizeInfo());
     }
 }

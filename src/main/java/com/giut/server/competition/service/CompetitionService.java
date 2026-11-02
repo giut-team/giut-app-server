@@ -247,6 +247,7 @@ public class CompetitionService {
         if (request.activityType() != null) {
             competition.changeActivityType(request.activityType());
         }
+        competition.changePrizeInfo(trimToNull(request.prizeInfo()));
         competition = competitionRepository.save(competition);
 
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
@@ -263,8 +264,9 @@ public class CompetitionService {
 
     @Transactional
     public AdminCompetitionResponse createByAi(AiCompetitionRequest input) {
+        Competition.ActivityType activityType = input.activityType().toActivityType();
         UpsertCompetitionRequest request = new UpsertCompetitionRequest(
-                input.title(), input.category(), input.hostOrganization(), input.targetParticipants(), input.summary(),
+                input.title(), input.category(), input.hostOrganization(), input.targetParticipants().name(), input.summary(),
                 input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.PUBLISHED, input.urls());
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
@@ -274,7 +276,8 @@ public class CompetitionService {
                 request.targetParticipants().trim(), trimToNull(request.summary()), request.applicationStartAt(),
                 request.applicationEndAt(), Competition.PublicationStatus.PUBLISHED,
                 Competition.VerificationStatus.AUTO_VERIFIED, null);
-        competition.changeActivityType(input.activityType());
+        competition.changeActivityType(activityType);
+        competition.changePrizeInfo(trimToNull(input.prizeInfo()));
         competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
@@ -308,6 +311,9 @@ public class CompetitionService {
         );
         if (request.activityType() != null) {
             competition.changeActivityType(request.activityType());
+        }
+        if (request.prizeInfo() != null) {
+            competition.changePrizeInfo(trimToNull(request.prizeInfo()));
         }
 
         competitionUrlRepository.deleteByCompetition_Id(competitionId);

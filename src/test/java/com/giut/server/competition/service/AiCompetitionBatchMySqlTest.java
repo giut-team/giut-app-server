@@ -1,6 +1,8 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.competition.dto.request.AiCompetitionRequest;
+import com.giut.server.competition.dto.request.AiActivityType;
+import com.giut.server.competition.dto.request.AiTargetParticipants;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
@@ -47,12 +49,16 @@ class AiCompetitionBatchMySqlTest {
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
         assertThat(logs.count()).isEqualTo(2);
+        assertThat(competitions.findAll()).allSatisfy(competition -> {
+            assertThat(competition.getPrizeInfo()).isEqualTo("대상 500만 원");
+            assertThat(competition.getTargetParticipants()).isEqualTo("UNIV_ONLY");
+        });
     }
 
     private AiCompetitionRequest request(String url) {
-        return new AiCompetitionRequest("공고", Competition.Category.AI_DATA, null, "대학생", null,
+        return new AiCompetitionRequest("공고", Competition.Category.AI_DATA, null, AiTargetParticipants.UNIV_ONLY, null,
                 Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-12-01T00:00:00Z"),
                 List.of(new CompetitionUrlRequest(CompetitionUrl.Type.RECRUITMENT, url, true)),
-                Competition.ActivityType.HACKATHON);
+                AiActivityType.HACKATHON, "대상 500만 원");
     }
 }

@@ -87,6 +87,24 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void prizeInformationIsRetainedOnLegacyUpdateAndCanBeCleared() throws Exception {
+        String body = """
+                {"title":"상금", "category":"WEB_MOBILE_IT", "summary":"소개",
+                 "publicationStatus":"PUBLISHED",
+                 "urls":[{"type":"RECRUITMENT","url":"https://example.com/prize","primary":true}]}
+                """;
+        String withPrize = body.replace("\"title\":\"상금\",", "\"prizeInfo\":\"대상 500만 원\",\"title\":\"상금\",");
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(withPrize))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.prizeInfo").value("대상 500만 원"));
+        Long id = competitions.findAll().getFirst().getId();
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value("대상 500만 원"));
+        String clearPrize = body.replace("\"title\":\"상금\",", "\"prizeInfo\":\"\",\"title\":\"상금\",");
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(clearPrize))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value(nullValue()));
+    }
+
+    @Test
     void activityTypeCanBeSetFilteredAndLegacyUpdatePreservesIt() throws Exception {
         String body = """
                 {"title":"행사", "category":"WEB_MOBILE_IT", "summary":"소개",
