@@ -79,7 +79,7 @@ public final class SwaggerExamples {
               "urls": [
                 {"id": 1, "type": "RECRUITMENT", "url": "https://example.com/recruitment", "primary": true}
               ],
-              "teamCount": 2,
+              "teamCount": 3,
               "recruitingTeamCount": 2,
               "teams": [
                 {"teamId": 3, "name": "데이터로 서울을", "myTeam": true, "description": "서울의 공공데이터로 시민이 체감할 수 있는 서비스를 기획하고 있어요.", "maxMemberCount": 5, "currentMemberCount": 3, "status": "RECRUITING"},

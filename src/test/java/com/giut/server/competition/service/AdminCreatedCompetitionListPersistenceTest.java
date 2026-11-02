@@ -105,6 +105,26 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void adminCanCreateAndUpdateTotalPrizeWhileLegacyUpdatesKeepIt() throws Exception {
+        String body = """
+                {"title":"총상금", "category":"WEB_MOBILE_IT", "summary":"소개",
+                 "publicationStatus":"PUBLISHED",
+                 "urls":[{"type":"RECRUITMENT","url":"https://example.com/total-prize","primary":true}]}
+                """;
+        String create = body.replace("\"title\":\"총상금\",", "\"totalPrizeAmount\":10000000,\"title\":\"총상금\",");
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(create))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        Long id = competitions.findAll().getFirst().getId();
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        String update = body.replace("\"title\":\"총상금\",", "\"totalPrizeAmount\":0,\"title\":\"총상금\",");
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(0));
+        mvc.perform(as(verified, get("/api/competitions/" + id)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(0));
+    }
+
+    @Test
     void activityTypeCanBeSetFilteredAndLegacyUpdatePreservesIt() throws Exception {
         String body = """
                 {"title":"행사", "category":"WEB_MOBILE_IT", "summary":"소개",

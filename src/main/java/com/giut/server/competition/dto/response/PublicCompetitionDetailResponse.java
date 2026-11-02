@@ -17,6 +17,7 @@ public record PublicCompetitionDetailResponse(
         String targetParticipants,
         String summary,
         String prizeInfo,
+        Long totalPrizeAmount,
         Instant applicationStartAt,
         Instant applicationEndAt,
         CompetitionRecruitmentStatus recruitmentStatus,
@@ -25,9 +26,9 @@ public record PublicCompetitionDetailResponse(
         long scrapCount,
         boolean scrapped,
         List<CompetitionUrlResponse> urls,
-        @Schema(description = "응답에 포함된 RECRUITING 상태의 팀 수. 공모전 마감일과 무관합니다.", example = "2")
+        @Schema(description = "상태(RECRUITING/CLOSED/ARCHIVED)와 무관한 이 공모전의 전체 팀 수.", example = "3")
         long teamCount,
-        @Schema(description = "RECRUITING 상태의 팀 수. teamCount와 동일하며 공모전 마감일과 무관합니다.", example = "2")
+        @Schema(description = "RECRUITING 상태인 팀 수. 공모전 마감일과는 무관합니다.", example = "2")
         long recruitingTeamCount,
         @Schema(description = "RECRUITING 상태의 팀 목록. 공모전 마감일과 무관하며, 해당 팀이 없으면 빈 배열입니다.")
         List<CompetitionTeamResponse> teams,
@@ -56,6 +57,7 @@ public record PublicCompetitionDetailResponse(
                 competition.getTargetParticipants(),
                 competition.getSummary(),
                 competition.getPrizeInfo(),
+                competition.getTotalPrizeAmount(),
                 competition.getApplicationStartAt(),
                 competition.getApplicationEndAt(),
                 recruitmentStatus,

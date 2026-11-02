@@ -36,6 +36,10 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long>,
     List<Competition> findTop5ByPopularity(@Param("publicationStatus") String publicationStatus);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("update Competition competition set competition.viewCount = competition.viewCount + 1 where competition.id = :competitionId")
-    int incrementViewCount(@Param("competitionId") Long competitionId);
+    @Query("""
+            update Competition competition set competition.viewCount = competition.viewCount + 1
+            where competition.id = :competitionId and competition.publicationStatus = :publicationStatus
+            """)
+    int incrementViewCount(@Param("competitionId") Long competitionId,
+                           @Param("publicationStatus") Competition.PublicationStatus publicationStatus);
 }

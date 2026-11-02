@@ -4,11 +4,11 @@ import com.giut.server.competition.dto.request.CompetitionSearchRequest;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.repository.CompetitionScrapSummaryProjection;
 import com.giut.server.competition.repository.CompetitionTeamRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.team.entity.Team;
-import com.giut.server.team.repository.TeamMemberRepository;
-import com.giut.server.user.entity.User;
+import com.giut.server.team.entity.TeamMember;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -46,7 +46,6 @@ class CompetitionRecruitmentDeadlineTest {
     @Mock private CompetitionScrapRepository competitionScrapRepository;
     @Mock private CompetitionUrlRepository competitionUrlRepository;
     @Mock private CompetitionTeamRepository competitionTeamRepository;
-    @Mock private TeamMemberRepository teamMemberRepository;
     @InjectMocks private CompetitionService competitionService;
 
     @ParameterizedTest
@@ -123,13 +122,17 @@ class CompetitionRecruitmentDeadlineTest {
     }
 
     private void assertDetailIncludesTeam(Competition competition, String competitionRecruitmentStatus) {
-        User leader = User.createAdmin("leader@example.com", "hash", "팀장");
-        ReflectionTestUtils.setField(leader, "id", 12L);
-        Team team = Team.create(competition, leader, "모집 중인 팀", "팀 소개", Team.ActivityMode.HYBRID,
-                (short) 5, (short) 1, Team.MeetingPlace.CAMPUS);
-        ReflectionTestUtils.setField(team, "id", 3L);
-        when(competitionTeamRepository.findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING))
-                .thenReturn(List.of(team));
+        var teamRow = mock(CompetitionTeamRepository.RecruitingTeamWithActiveMemberCount.class);
+        when(teamRow.getTeamId()).thenReturn(3L);
+        when(teamRow.getName()).thenReturn("모집 중인 팀");
+        when(teamRow.getLeaderId()).thenReturn(12L);
+        when(teamRow.getDescription()).thenReturn("팀 소개");
+        when(teamRow.getMaxMemberCount()).thenReturn((short) 5);
+        when(teamRow.getStatus()).thenReturn(Team.Status.RECRUITING);
+        when(teamRow.getActiveMemberCount()).thenReturn(0L);
+        when(competitionTeamRepository.findWithActiveMemberCount(1L, Team.Status.RECRUITING, TeamMember.Status.ACTIVE))
+                .thenReturn(List.of(teamRow));
+        when(competitionTeamRepository.countByCompetition_Id(1L)).thenReturn(1L);
 
         var response = atFixedNow(() -> competitionService.getPublishedCompetition(12L, 1L));
 
@@ -138,7 +141,7 @@ class CompetitionRecruitmentDeadlineTest {
         assertThat(response.recruitingTeamCount()).isEqualTo(1);
         assertThat(response.recruitmentStatus().name()).isEqualTo(competitionRecruitmentStatus);
         verify(competitionTeamRepository)
-                .findAllByCompetition_IdAndStatusOrderByIdDesc(1L, Team.Status.RECRUITING);
+                .findWithActiveMemberCount(1L, Team.Status.RECRUITING, TeamMember.Status.ACTIVE);
     }
 
     private CompetitionSearchRequest searchRequest() {
@@ -149,6 +152,12 @@ class CompetitionRecruitmentDeadlineTest {
         Competition competition = competition(1L, deadline);
         when(competitionRepository.findByIdAndPublicationStatus(1L, Competition.PublicationStatus.PUBLISHED))
                 .thenReturn(Optional.of(competition));
+        when(competitionRepository.incrementViewCount(1L, Competition.PublicationStatus.PUBLISHED))
+                .thenReturn(1);
+        var scrapSummary = mock(CompetitionScrapSummaryProjection.class);
+        when(scrapSummary.getScrapCount()).thenReturn(0L);
+        when(scrapSummary.isScrapped()).thenReturn(false);
+        when(competitionScrapRepository.findScrapSummary(12L, 1L)).thenReturn(scrapSummary);
         return competition;
     }
 

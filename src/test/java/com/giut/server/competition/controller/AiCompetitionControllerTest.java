@@ -43,7 +43,7 @@ class AiCompetitionControllerTest {
     private static final String BODY = """
             {"title":"AI 공모전", "prizeInfo":"상금 미정", "activityType":"HACKATHON", "category":"WEB_MOBILE_IT", "targetParticipants":"UNIV_ONLY",
              "applicationStartAt":"2026-11-01T00:00:00Z", "applicationEndAt":"2026-12-01T00:00:00Z",
-             "urls":[{"type":"RECRUITMENT","url":"https://example.com/ai-contest","primary":true}]}
+             "urls":[{"type":"OFFICIAL","url":"https://example.com/ai-contest","primary":true}]}
             """;
     @Autowired WebApplicationContext context;
     @Autowired CompetitionRepository competitions;
@@ -76,6 +76,25 @@ class AiCompetitionControllerTest {
         mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"));
+    }
+
+    @Test
+    void totalPrizeAmountIsOptionalAndSavedForSingleAndBatch() throws Exception {
+        String single = BODY.replace("\"title\":\"AI 공모전\",", "\"total_prize_amount\":10000000,\"title\":\"AI 공모전\",");
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(single))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        Long id = competitions.findAll().getFirst().getId();
+        User user = users.saveAndFlush(User.createOAuthUser("amount@example.com", "학생", User.OAuthProvider.KAKAO, "amount"));
+        mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
+        String withAmount = BODY.replace("ai-contest", "with-amount")
+                .replace("\"title\":\"AI 공모전\",", "\"total_prize_amount\":0,\"title\":\"AI 공모전\",");
+        String withoutAmount = BODY.replace("ai-contest", "no-amount");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + withAmount + "," + withoutAmount + "]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$[0].totalPrizeAmount").value(0))
+                .andExpect(jsonPath("$[1].totalPrizeAmount").value(org.hamcrest.Matchers.nullValue()));
+        assertThat(competitions.findById(id).orElseThrow().getTotalPrizeAmount()).isEqualTo(10000000L);
     }
 
     @ParameterizedTest
@@ -181,6 +200,40 @@ class AiCompetitionControllerTest {
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
         assertThat(logs.count()).isEqualTo(2);
+    }
+
+    @Test
+    void sharedSourcesAndMissingOfficialAreAllowedButDuplicateOfficialRollsBack() throws Exception {
+        String commonSource = "{\"type\":\"SOURCE_ORIGINAL\",\"url\":\"https://example.com/shared\",\"primary\":true}";
+        String first = BODY.replace("{\"type\":\"OFFICIAL\",\"url\":\"https://example.com/ai-contest\",\"primary\":true}", commonSource);
+        String second = first.replace("AI 공모전", "다른 공모전");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + first + "," + second + "]}"))
+                .andExpect(status().isCreated());
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(2);
+    }
+
+    @Test
+    void differentOfficialsCanShareSourceAndRecruitmentAcrossCompetitions() throws Exception {
+        String shared = ", {\"type\":\"SOURCE_ORIGINAL\",\"url\":\"https://example.com/shared\",\"primary\":false},"
+                + " {\"type\":\"RECRUITMENT\",\"url\":\"https://example.com/apply\",\"primary\":false}";
+        String first = BODY.replace("\"primary\":true}]", "\"primary\":true}" + shared + "]");
+        String second = first.replace("ai-contest", "other-official");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + first + "," + second + "]}"))
+                .andExpect(status().isCreated());
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(6);
+    }
+
+    @Test
+    void repeatedUrlWithinOneCompetitionIsRejected() throws Exception {
+        String sameUrl = BODY.replace("\"primary\":true}]", "\"primary\":true},"
+                + "{\"type\":\"SOURCE_ORIGINAL\",\"url\":\"https://example.com/ai-contest\",\"primary\":false}]");
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(sameUrl))
+                .andExpect(status().isBadRequest());
+        assertThat(competitions.count()).isZero();
     }
 
     @Test
