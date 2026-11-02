@@ -46,6 +46,25 @@ public record UpsertCompetitionRequest(
 
         @Schema(description = "공모전 URL 목록", example = "[{\"type\":\"RECRUITMENT\",\"url\":\"https://example.com/recruitment\",\"primary\":true}]")
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
-        List<@Valid CompetitionUrlRequest> urls
+        List<@Valid CompetitionUrlRequest> urls,
+
+        @Schema(description = "활동 유형. 수정 시 생략하거나 null이면 기존 값을 유지합니다.", example = "HACKATHON")
+        Competition.ActivityType activityType,
+
+        @Schema(description = "상금·시상 정보. 수정 시 생략 또는 null이면 기존 값을 유지하고 빈 문자열은 삭제합니다.")
+        @Size(max = 3000, message = "상금 정보는 3000자 이하여야 합니다.") String prizeInfo
 ) {
+    public UpsertCompetitionRequest(String title, Competition.Category category, String hostOrganization,
+            String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
+            Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls) {
+        this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
+                applicationEndAt, publicationStatus, urls, null, null);
+    }
+
+    public UpsertCompetitionRequest(String title, Competition.Category category, String hostOrganization,
+            String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
+            Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls, Competition.ActivityType activityType) {
+        this(title, category, hostOrganization, targetParticipants, summary, applicationStartAt,
+                applicationEndAt, publicationStatus, urls, activityType, null);
+    }
 }

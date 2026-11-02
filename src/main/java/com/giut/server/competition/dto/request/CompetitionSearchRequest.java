@@ -25,8 +25,15 @@ public record CompetitionSearchRequest(
         Competition.Category category,
 
         @Schema(description = "모집 상태", example = "OPEN")
-        CompetitionRecruitmentStatus status
+        CompetitionRecruitmentStatus status,
+        @Schema(description = "활동 유형. 분야 category와 독립적으로 적용합니다.", example = "HACKATHON")
+        Competition.ActivityType activityType
 ) {
+
+    public CompetitionSearchRequest(Integer page, Integer size, String keyword, Competition.Category category,
+                                    CompetitionRecruitmentStatus status) {
+        this(page, size, keyword, category, status, null);
+    }
 
     public int pageOrDefault() {
         return page == null ? 0 : page;

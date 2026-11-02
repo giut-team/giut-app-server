@@ -87,14 +87,53 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void prizeInformationIsRetainedOnLegacyUpdateAndCanBeCleared() throws Exception {
+        String body = """
+                {"title":"상금", "category":"WEB_MOBILE_IT", "summary":"소개",
+                 "publicationStatus":"PUBLISHED",
+                 "urls":[{"type":"RECRUITMENT","url":"https://example.com/prize","primary":true}]}
+                """;
+        String withPrize = body.replace("\"title\":\"상금\",", "\"prizeInfo\":\"대상 500만 원\",\"title\":\"상금\",");
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(withPrize))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.prizeInfo").value("대상 500만 원"));
+        Long id = competitions.findAll().getFirst().getId();
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value("대상 500만 원"));
+        String clearPrize = body.replace("\"title\":\"상금\",", "\"prizeInfo\":\"\",\"title\":\"상금\",");
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(clearPrize))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value(nullValue()));
+    }
+
+    @Test
+    void activityTypeCanBeSetFilteredAndLegacyUpdatePreservesIt() throws Exception {
+        String body = """
+                {"title":"행사", "category":"WEB_MOBILE_IT", "summary":"소개",
+                 "publicationStatus":"PUBLISHED",
+                 "urls":[{"type":"RECRUITMENT","url":"https://example.com/activity","primary":true}]}
+                """;
+        String withType = body.replace("\"title\":\"행사\",", "\"title\":\"행사\",\"activityType\":\"EDUCATION_PROGRAM\",");
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(withType))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("EDUCATION_PROGRAM"));
+        Long id = competitions.findAll().getFirst().getId();
+        mvc.perform(as(admin, put(PATH + "/" + id)).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activityType").value("EDUCATION_PROGRAM"));
+        mvc.perform(as(admin, get(PATH).param("activityType", "EDUCATION_PROGRAM").param("category", "WEB_MOBILE_IT")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(as(verified, get("/api/competitions/" + id)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activityTypeName").value("교육/프로그램"));
+    }
+
+    @Test
     void creationPostIsImmediatelyListedWithAdminFieldsAndUrlsWithoutIncrementingViews() throws Exception {
         mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content("""
                 {"title":"관리자 생성", "category":"WEB_MOBILE_IT", "summary":"소개",
                  "targetParticipants":"대학생", "publicationStatus":"DRAFT",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/created-post","primary":true}]}
                 """))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$.activityTypeName").value("공모전"));
         Competition created = competitions.findAll().getFirst();
+        assertThat(created.getActivityType()).isEqualTo(Competition.ActivityType.COMPETITION);
         mvc.perform(as(admin, get(PATH)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.size").value(10))

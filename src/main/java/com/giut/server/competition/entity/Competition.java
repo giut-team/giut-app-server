@@ -4,7 +4,11 @@ import com.giut.server.global.entity.BaseTimeEntity;
 import com.giut.server.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity @Table(name = "competitions") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Competition extends BaseTimeEntity {
@@ -18,11 +22,20 @@ public class Competition extends BaseTimeEntity {
     @Column(nullable = false, length = 40)
     private Category category;
 
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "activity_type", length = 30, nullable = false)
+    @ColumnDefault("'COMPETITION'")
+    private ActivityType activityType = ActivityType.COMPETITION;
+
     @Column(name = "host_organization", length = 150)
     private String hostOrganization;
 
     @Column(name = "target_participants", columnDefinition = "text")
     private String targetParticipants;
+
+    @Column(name = "prize_info", columnDefinition = "text")
+    private String prizeInfo;
 
     @Column(columnDefinition = "text")
     private String summary;
@@ -117,6 +130,14 @@ public class Competition extends BaseTimeEntity {
         this.publicationStatus = PublicationStatus.PUBLISHED;
     }
 
+    public void changeActivityType(ActivityType activityType) {
+        this.activityType = Objects.requireNonNull(activityType, "활동 유형은 필수입니다.");
+    }
+
+    public void changePrizeInfo(String prizeInfo) {
+        this.prizeInfo = prizeInfo;
+    }
+
     /** Preserves dependent teams, scraps and review history while removing public visibility. */
     public void archive() {
         this.publicationStatus = PublicationStatus.ARCHIVED;
@@ -134,9 +155,22 @@ public class Competition extends BaseTimeEntity {
 
     @Getter
     @RequiredArgsConstructor
+    public enum ActivityType {
+        COMPETITION("공모전"), CONTEST("경진대회"), HACKATHON("해커톤"),
+        SUPPORTERS("서포터즈"), VOLUNTEERING("봉사"), STARTUP("창업"),
+        EDUCATION_PROGRAM("교육/프로그램"), OVERSEAS_EXPLORATION("해외탐방"),
+        EVENT_NETWORKING("행사/네트워킹"), ETC("기타"), NOT_ACTIVITY("참여 가능한 활동이 아님");
+
+        private final String displayName;
+
+    }
+
+    @Getter
+    @RequiredArgsConstructor
     public enum Category {
         PLANNING_IDEA("기획/아이디어"),
         ADVERTISING_MARKETING("광고/마케팅"),
+        AI_DATA("AI/데이터"),
         PAPER_REPORT("논문/리포트"),
         VIDEO_UCC_PHOTO("영상/UCC/사진"),
         DESIGN_CHARACTER_WEBTOON("디자인/캐릭터/웹툰"),
