@@ -38,7 +38,7 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain aiIngestionSecurity(HttpSecurity http,
             @Value("${app.ai-ingestion.secret:}") String secret) throws Exception {
-        return http.securityMatcher("/api/integrations/competitions")
+        return http.securityMatcher("/api/integrations/competitions", "/api/integrations/competitions/batch")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())

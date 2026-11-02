@@ -282,6 +282,11 @@ public class CompetitionService {
     }
 
     @Transactional
+    public List<AdminCompetitionResponse> createBatchByAi(List<AiCompetitionRequest> inputs) {
+        return inputs.stream().map(this::createByAi).toList();
+    }
+
+    @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);

@@ -14,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -54,6 +56,60 @@ class AiCompetitionControllerTest {
         urls.deleteAll();
         competitions.deleteAll();
         users.deleteAll();
+    }
+
+    @Test
+    void batchRequiresKeyAndSavesAllInOrder() throws Exception {
+        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("ai-contest", "second").replace("HACKATHON", "COMPETITION") + "]}";
+        mvc.perform(post(PATH + "/batch").contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", "wrong").contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].activityType").value("HACKATHON"))
+                .andExpect(jsonPath("$[1].activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"));
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(2);
+        assertThat(logs.count()).isEqualTo(2);
+    }
+
+    @Test
+    void batchRollsBackOnDuplicateOrLaterInvalidDates() throws Exception {
+        for (String second : new String[] {BODY, BODY.replace("ai-contest", "second")
+                .replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z")}) {
+            String batch = "{\"competitions\":[" + BODY + "," + second + "]}";
+            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                    .andExpect(second.equals(BODY) ? status().isConflict() : status().isBadRequest());
+            assertThat(competitions.count()).isZero();
+            assertThat(urls.count()).isZero();
+            assertThat(logs.count()).isZero();
+        }
+    }
+
+    @Test
+    void batchConflictWithExistingCompetitionLeavesExistingDataUntouched() throws Exception {
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isCreated());
+        String batch = "{\"competitions\":[" + BODY.replace("ai-contest", "new-contest") + "," + BODY + "]}";
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isConflict());
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(urls.count()).isEqualTo(1);
+        assertThat(logs.count()).isEqualTo(1);
+    }
+
+    @Test
+    void batchRejectsEmptyNullAndOverLimit() throws Exception {
+        String many = IntStream.range(0, 51).mapToObj(i -> BODY.replace("ai-contest", "contest-" + i))
+                .collect(Collectors.joining(","));
+        for (String batch : new String[] {"{\"competitions\":[]}", "{\"competitions\":[null]}",
+                "{\"competitions\":[" + many + "]}"}) {
+            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(competitions.count()).isZero();
     }
 
     @Test
