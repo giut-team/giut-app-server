@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "DISCORD_ALERT_WEBHOOK_URL=", "DISCORD_SLOW_API_WEBHOOK_URL="
 })
 class AiCompetitionControllerTest {
-    private static final String PATH = "/api/internal/ai/competitions";
+    private static final String PATH = "/api/integrations/competitions";
     private static final String KEY = "0123456789abcdef0123456789abcdef";
     private static final String BODY = """
             {"title":"AI 공모전", "category":"WEB_MOBILE_IT", "targetParticipants":"대학생",
@@ -77,6 +77,8 @@ class AiCompetitionControllerTest {
         mvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
         mvc.perform(post(PATH).header("X-AI-API-Key", "wrong").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/internal/ai/competitions").header("X-AI-API-Key", KEY)
+                .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/admin/competitions").header("X-AI-API-Key", KEY)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isUnauthorized());
         assertThat(competitions.count()).isZero();

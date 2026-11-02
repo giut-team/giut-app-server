@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/internal/ai/competitions")
+@RequestMapping("/api/integrations/competitions")
 @RequiredArgsConstructor
 @Tag(name = "AI Competition Ingestion")
 public class AiCompetitionController {
