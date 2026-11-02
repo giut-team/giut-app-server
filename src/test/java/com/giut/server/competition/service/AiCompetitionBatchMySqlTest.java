@@ -11,12 +11,15 @@ import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
 import com.giut.server.global.exception.ConflictException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,6 +41,35 @@ class AiCompetitionBatchMySqlTest {
     @Autowired CompetitionUrlRepository urls;
     @Autowired CompetitionVerificationLogRepository logs;
 
+    @BeforeEach
+    void clearDatabase() {
+        logs.deleteAll();
+        urls.deleteAll();
+        competitions.deleteAll();
+    }
+
+    @Test
+    void concurrentSameOfficialUrlCreatesOnlyOneCompetition() throws Exception {
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var one = executor.submit(() -> { start.await(); return attemptCreate(); });
+            var two = executor.submit(() -> { start.await(); return attemptCreate(); });
+            start.countDown();
+            assertThat(List.of(one.get(), two.get())).containsExactlyInAnyOrder("created", "conflict");
+        }
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(urls.count()).isEqualTo(1);
+    }
+
+    private String attemptCreate() {
+        try {
+            service.createByAi(request("https://example.com/concurrent-official"));
+            return "created";
+        } catch (ConflictException e) {
+            return "conflict";
+        }
+    }
+
     @Test
     void laterDuplicateRollsBackEarlierCompetitionUrlAndAuditLog() {
         AiCompetitionRequest first = request("https://example.com/batch-one");
@@ -58,7 +90,7 @@ class AiCompetitionBatchMySqlTest {
     private AiCompetitionRequest request(String url) {
         return new AiCompetitionRequest("공고", Competition.Category.AI_DATA, null, AiTargetParticipants.UNIV_ONLY, null,
                 Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-12-01T00:00:00Z"),
-                List.of(new CompetitionUrlRequest(CompetitionUrl.Type.RECRUITMENT, url, true)),
+                List.of(new CompetitionUrlRequest(CompetitionUrl.Type.OFFICIAL, url, true)),
                 AiActivityType.HACKATHON, "대상 500만 원", 10000000L);
     }
 }

@@ -125,10 +125,16 @@ class CompetitionSeedPersistenceTest {
     @Test
     void midBatchConflictRollsBackCompetitionsUrlsAndAdminCreationLogs() {
         var batch = new ArrayList<>(catalog.competitions());
+        var first = batch.getFirst();
+        var official = List.of(new com.giut.server.competition.dto.request.CompetitionUrlRequest(
+                CompetitionUrl.Type.OFFICIAL, first.urls().getFirst().url(), true));
+        batch.set(0, new UpsertCompetitionRequest(first.title(), first.category(), first.hostOrganization(),
+                first.targetParticipants(), first.summary(), first.applicationStartAt(), first.applicationEndAt(),
+                first.publicationStatus(), official));
         var third = batch.get(2);
         batch.set(2, new UpsertCompetitionRequest(third.title(), third.category(), third.hostOrganization(),
                 third.targetParticipants(), third.summary(), third.applicationStartAt(), third.applicationEndAt(),
-                third.publicationStatus(), batch.getFirst().urls()));
+                third.publicationStatus(), official));
         doReturn(List.copyOf(batch)).when(catalog).competitions();
 
         assertThatThrownBy(() -> seeds.seedSamples(admin.getId())).isInstanceOf(ConflictException.class);

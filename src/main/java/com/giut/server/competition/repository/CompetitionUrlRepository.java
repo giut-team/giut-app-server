@@ -5,7 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 public interface CompetitionUrlRepository extends JpaRepository<CompetitionUrl, Long> {
 
@@ -15,9 +14,7 @@ public interface CompetitionUrlRepository extends JpaRepository<CompetitionUrl, 
 
     List<CompetitionUrl> findAllByCompetition_IdInAndPrimaryTrue(Collection<Long> competitionIds);
 
-    Optional<CompetitionUrl> findByNormalizedUrlHash(String normalizedUrlHash);
-
-    List<CompetitionUrl> findAllByNormalizedUrlHashIn(Collection<String> normalizedUrlHashes);
+    List<CompetitionUrl> findAllByOfficialUrlHashIn(Collection<String> officialUrlHashes);
 
     void deleteByCompetition_Id(Long competitionId);
 }

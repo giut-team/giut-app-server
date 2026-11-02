@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
 
-@Entity @Table(name = "competition_urls") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Entity @Table(name = "competition_urls", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_competition_urls_official_hash", columnNames = "official_url_hash"),
+        @UniqueConstraint(name = "uk_competition_urls_competition_hash", columnNames = {"competition_id", "normalized_url_hash"})
+}) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompetitionUrl {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -24,8 +27,12 @@ public class CompetitionUrl {
     @Column(name = "normalized_url", nullable = false, columnDefinition = "text")
     private String normalizedUrl;
 
-    @Column(name = "normalized_url_hash", nullable = false, unique = true, length = 64)
+    @Column(name = "normalized_url_hash", nullable = false, length = 64)
     private String normalizedUrlHash;
+
+    @Column(name = "official_url_hash", insertable = false, updatable = false,
+            columnDefinition = "varchar(64) generated always as (case when url_type = 'OFFICIAL' then normalized_url_hash else null end)")
+    private String officialUrlHash;
 
     @Column(name = "is_primary", nullable = false)
     private boolean primary;

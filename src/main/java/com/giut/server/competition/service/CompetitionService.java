@@ -36,6 +36,7 @@ import com.giut.server.competition.repository.CompetitionVerificationLogReposito
 import com.giut.server.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -560,17 +561,21 @@ public class CompetitionService {
         if (urls.isEmpty()) {
             return;
         }
-        List<String> hashes = urls.stream().map(NormalizedCompetitionUrl::hash).toList();
-        boolean ownedByAnotherCompetition = competitionUrlRepository.findAllByNormalizedUrlHashIn(hashes).stream()
+        List<String> hashes = urls.stream().filter(url -> url.type() == CompetitionUrl.Type.OFFICIAL)
+                .map(NormalizedCompetitionUrl::hash).toList();
+        if (hashes.isEmpty()) return;
+        boolean ownedByAnotherCompetition = competitionUrlRepository
+                .findAllByOfficialUrlHashIn(hashes).stream()
                 .anyMatch(existingUrl -> currentCompetitionId == null
                         || !existingUrl.getCompetition().getId().equals(currentCompetitionId));
         if (ownedByAnotherCompetition) {
-            throw new ConflictException("이미 다른 공모전에 등록된 URL입니다.");
+            throw new ConflictException("이미 다른 공모전에 등록된 공식 URL입니다.");
         }
     }
 
     private List<CompetitionUrl> saveUrls(Competition competition, List<NormalizedCompetitionUrl> urls) {
-        return competitionUrlRepository.saveAll(urls.stream()
+        try {
+            return competitionUrlRepository.saveAllAndFlush(urls.stream()
                 .map(url -> CompetitionUrl.create(
                         competition,
                         url.type(),
@@ -580,6 +585,14 @@ public class CompetitionService {
                         url.primary()
                 ))
                 .toList());
+        } catch (DataIntegrityViolationException e) {
+            Throwable cause = e.getMostSpecificCause();
+            if (cause.getMessage() != null && cause.getMessage().toLowerCase(java.util.Locale.ROOT)
+                    .contains("uk_competition_urls_official_hash")) {
+                throw new ConflictException("이미 다른 공모전에 등록된 공식 URL입니다.", e);
+            }
+            throw e;
+        }
     }
 
     private AdminCompetitionResponse toResponse(Competition competition, List<CompetitionUrl> urls) {
