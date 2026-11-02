@@ -5,7 +5,7 @@ import com.giut.server.competition.entity.Competition;
 /** AI's external codes are independent of the existing public and database codes. */
 public enum AiActivityType {
     CONTEST, COMPETITION, HACKATHON, SUPPORTERS, VOLUNTEER, STARTUP,
-    EDUCATION, OVERSEAS_EXPERIENCE, NETWORKING, ETC, NOT_ACTIVITY, MULTIPLE_ACTIVITIES;
+    EDUCATION, OVERSEAS_EXPERIENCE, NETWORKING, ETC, INVALID_ACTIVITY;
 
     public Competition.ActivityType toActivityType() {
         return switch (this) {
@@ -19,8 +19,7 @@ public enum AiActivityType {
             case OVERSEAS_EXPERIENCE -> Competition.ActivityType.OVERSEAS_EXPLORATION;
             case NETWORKING -> Competition.ActivityType.EVENT_NETWORKING;
             case ETC -> Competition.ActivityType.ETC;
-            case NOT_ACTIVITY -> Competition.ActivityType.NOT_ACTIVITY;
-            case MULTIPLE_ACTIVITIES -> throw new IllegalArgumentException("복수 활동 유형은 검토가 필요해 자동 등록할 수 없습니다.");
+            case INVALID_ACTIVITY -> throw new IllegalArgumentException("부적합 활동은 자동 등록할 수 없습니다.");
         };
     }
 }

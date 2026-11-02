@@ -12,14 +12,14 @@ class AiActivityTypeTest {
     @ParameterizedTest
     @CsvSource({"CONTEST,COMPETITION", "COMPETITION,CONTEST", "HACKATHON,HACKATHON", "SUPPORTERS,SUPPORTERS",
             "VOLUNTEER,VOLUNTEERING", "STARTUP,STARTUP", "EDUCATION,EDUCATION_PROGRAM",
-            "OVERSEAS_EXPERIENCE,OVERSEAS_EXPLORATION", "NETWORKING,EVENT_NETWORKING", "ETC,ETC", "NOT_ACTIVITY,NOT_ACTIVITY"})
+            "OVERSEAS_EXPERIENCE,OVERSEAS_EXPLORATION", "NETWORKING,EVENT_NETWORKING", "ETC,ETC"})
     void convertsExternalAiTypeToExistingInternalCode(AiActivityType external, Competition.ActivityType internal) {
         assertThat(external.toActivityType()).isEqualTo(internal);
     }
 
     @Test
-    void multipleActivitiesRequireReview() {
-        assertThatThrownBy(() -> AiActivityType.MULTIPLE_ACTIVITIES.toActivityType())
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("검토");
+    void invalidActivityIsRejected() {
+        assertThatThrownBy(() -> AiActivityType.INVALID_ACTIVITY.toActivityType())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("부적합");
     }
 }
