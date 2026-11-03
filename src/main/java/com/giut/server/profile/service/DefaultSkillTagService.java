@@ -51,8 +51,9 @@ public class DefaultSkillTagService {
         int existingCount = 0;
         List<Long> skillTagIds = new ArrayList<>();
         for (var skill : skills) {
-            // Reuse case-insensitive name matching and additive role linking.
-            var result = profileOptionService.createSkill(skill);
+            // Reuse case-insensitive name matching; unlike the public API, admin seeding may
+            // add missing role links to an already-existing tag to keep it in sync with the catalog.
+            var result = profileOptionService.createSkillAllowingRoleUpdates(skill);
             if (result.created()) {
                 createdCount++;
             } else {
