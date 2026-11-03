@@ -56,6 +56,7 @@ class AdminCompetitionDeletePersistenceTest {
     @Autowired private JwtProvider jwt;
     @Autowired private UserRepository users;
     @Autowired private CompetitionRepository competitions;
+    @Autowired private CompetitionTop5Cache top5Cache;
     @Autowired private CompetitionUrlRepository urls;
     @Autowired private CompetitionScrapRepository scraps;
     @Autowired private CompetitionVerificationLogRepository logs;
@@ -118,6 +119,9 @@ class AdminCompetitionDeletePersistenceTest {
         TeamMember member = members.saveAndFlush(TeamMember.createLeader(team.getId(), student.getId()));
         ChatRoom room = rooms.saveAndFlush(ChatRoom.createTeamRoom(team.getId()));
 
+        top5Cache.refresh();
+        mvc.perform(as(admin, get("/api/competitions/top5"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
         mvc.perform(as(admin, get("/api/competitions"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2));
         mvc.perform(as(admin, delete(path(target)))).andExpect(status().isNoContent());

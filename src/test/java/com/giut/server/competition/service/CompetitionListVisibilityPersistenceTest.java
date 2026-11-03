@@ -45,6 +45,7 @@ class CompetitionListVisibilityPersistenceTest {
     @Autowired private JwtProvider jwt;
     @Autowired private UserRepository users;
     @Autowired private CompetitionRepository competitions;
+    @Autowired private CompetitionTop5Cache top5Cache;
     @Autowired private CompetitionScrapRepository scraps;
     private MockMvc mvc;
     private User admin;
@@ -122,6 +123,7 @@ class CompetitionListVisibilityPersistenceTest {
                 .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED).findFirst().orElseThrow();
         Competition draft = competitions.findAll().stream()
                 .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.DRAFT).findFirst().orElseThrow();
+        top5Cache.refresh();
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1))
@@ -206,6 +208,7 @@ class CompetitionListVisibilityPersistenceTest {
         Competition draft = competition(Competition.PublicationStatus.DRAFT);
         competition(Competition.PublicationStatus.REJECTED);
         competition(Competition.PublicationStatus.ARCHIVED);
+        top5Cache.refresh();
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1))
