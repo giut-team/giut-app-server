@@ -13,6 +13,7 @@ import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.profile.repository.PortfolioCountProjection;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
@@ -62,8 +63,10 @@ class UserProfileServiceSummaryTest {
     @Test
     void returnsCountsEvenWhenProfileIsNotCompleted() {
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
-        when(portfolioItemRepository.countByUser_Id(12L)).thenReturn(4L);
-        when(portfolioItemRepository.countByUser_IdAndShowcaseOrderIsNotNull(12L)).thenReturn(3L);
+        PortfolioCountProjection portfolioCounts = org.mockito.Mockito.mock(PortfolioCountProjection.class);
+        when(portfolioCounts.getTotal()).thenReturn(4L);
+        when(portfolioCounts.getShowcased()).thenReturn(3L);
+        when(portfolioItemRepository.countSummaryByUserId(12L)).thenReturn(portfolioCounts);
         when(teamMemberRepository.countByUserIdAndStatus(12L, TeamMember.Status.ACTIVE)).thenReturn(2L);
         when(competitionScrapRepository.countByUser_Id(12L)).thenReturn(5L);
         when(teamScrapRepository.countByUser_Id(12L)).thenReturn(3L);
@@ -97,6 +100,8 @@ class UserProfileServiceSummaryTest {
     @Test
     void newStatisticsDefaultToZeroWhenNoHistoryExists() {
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
+        when(portfolioItemRepository.countSummaryByUserId(12L))
+                .thenReturn(org.mockito.Mockito.mock(PortfolioCountProjection.class));
         var response = userProfileService.getMyProfile(12L);
         assertThat(response.summary().receivedProposalCount()).isZero();
         assertThat(response.summary().receivedRecommendationCount()).isZero();
@@ -212,6 +217,8 @@ class UserProfileServiceSummaryTest {
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
         when(userRepository.findById(12L)).thenReturn(Optional.of(user));
         when(user.getUniversityVerifiedAt()).thenReturn(LocalDateTime.parse("2026-10-09T12:00:00"));
+        when(portfolioItemRepository.countSummaryByUserId(12L))
+                .thenReturn(org.mockito.Mockito.mock(PortfolioCountProjection.class));
 
         MyProfileResponse response = userProfileService.getMyProfile(12L);
 

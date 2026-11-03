@@ -9,6 +9,7 @@ import com.giut.server.user.service.UserBlockService;
 import com.giut.server.profile.entity.UserProfile;
 import com.giut.server.profile.repository.ActivityHistoryRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.profile.repository.PortfolioCountProjection;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.profile.repository.PortfolioItemRoleRepository;
 import com.giut.server.profile.repository.ProfileRoleRepository;
@@ -83,6 +84,8 @@ class UserProfileUpdateServiceTest {
         when(portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(12L)).thenReturn(List.of());
         when(activityHistoryRepository.findAllByUser_IdOrderByStartMonthDescEndMonthDescIdDesc(12L))
                 .thenReturn(List.of());
+        when(portfolioItemRepository.countSummaryByUserId(12L))
+                .thenReturn(mock(PortfolioCountProjection.class));
 
         UpdateMyProfileRequest request = new UpdateMyProfileRequest(
                 List.of("DEVELOPMENT"),

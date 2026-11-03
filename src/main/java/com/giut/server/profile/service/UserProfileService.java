@@ -39,6 +39,7 @@ import com.giut.server.profile.repository.ActivityHistoryRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
 import com.giut.server.profile.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.profile.repository.ProfileTagRepository;
+import com.giut.server.profile.repository.PortfolioCountProjection;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.profile.repository.PortfolioItemRoleRepository;
 import com.giut.server.profile.repository.PortfolioItemSkillTagRepository;
@@ -387,9 +388,10 @@ public class UserProfileService {
     private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
         long competitionScrapCount = competitionScrapRepository.countByUser_Id(userId);
         long teamScrapCount = teamScrapRepository.countByUser_Id(userId);
+        PortfolioCountProjection portfolioCounts = portfolioItemRepository.countSummaryByUserId(userId);
         return new MyProfileSummaryResponse(
-                portfolioItemRepository.countByUser_Id(userId),
-                portfolioItemRepository.countByUser_IdAndShowcaseOrderIsNotNull(userId),
+                portfolioCounts.getTotal(),
+                portfolioCounts.getShowcased(),
                 teamMemberRepository.countByUserIdAndStatus(userId, TeamMember.Status.ACTIVE),
                 competitionScrapCount + teamScrapCount,
                 competitionScrapCount,
