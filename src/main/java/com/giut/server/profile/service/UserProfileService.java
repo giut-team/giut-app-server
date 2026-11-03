@@ -196,11 +196,9 @@ public class UserProfileService {
     @Transactional(readOnly = true)
     public SharedProfileResponse getSharedProfile(Long currentUserId, Long userId) {
         userBlockService.requireProfilesVisible(currentUserId, userId);
-        UserProfile profile = userProfileRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
-        User user = userRepository.findById(userId)
-                .filter(found -> found.getStatus() == User.Status.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다."));
+        // 공유 토큰이 공개 프로필 정책(공개 설정·RESTING 제외)을 우회하지 않도록 getPublicProfile과 동일한 검증을 쓴다.
+        UserProfile profile = findPublicProfile(userId);
+        User user = findActiveUser(userId);
 
         List<ProfileTagSummaryResponse> skills = findSkillsByUserId(List.of(userId))
                 .getOrDefault(userId, List.of());

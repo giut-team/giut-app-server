@@ -31,7 +31,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 import java.time.LocalDateTime;
 
+import com.giut.server.global.exception.ResourceNotFoundException;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -156,6 +159,51 @@ class UserProfileServiceSummaryTest {
         verify(userProfileRepository).findById(13L);
         verify(userRepository).findById(13L);
         verifyNoInteractions(profileRecommendationRepository, portfolioItemRepository, activityHistoryRepository);
+    }
+
+    @Test
+    void sharedProfileHidesNonSearchableProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(false);
+
+        assertThatThrownBy(() -> userProfileService.getSharedProfile(12L, 13L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void sharedProfileHidesRestingProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(true);
+        when(profile.getActivityStatus()).thenReturn(UserProfile.ActivityStatus.RESTING);
+
+        assertThatThrownBy(() -> userProfileService.getSharedProfile(12L, 13L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void sharedProfileReturnsContentForPublicProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        User user = org.mockito.Mockito.mock(User.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(true);
+        when(profile.getActivityStatus()).thenReturn(UserProfile.ActivityStatus.LOOKING_FOR_TEAM);
+        when(profile.getUserId()).thenReturn(13L);
+        when(profile.getPrimaryRolesJson()).thenReturn("[]");
+        when(profile.getDepartment()).thenReturn(UserProfile.DepartmentType.COMPUTER_SCIENCE);
+        when(profile.getGrade()).thenReturn((short) 3);
+        when(userRepository.findById(13L)).thenReturn(Optional.of(user));
+        when(user.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(user.getNickname()).thenReturn("테스트 사용자");
+        when(user.getUniversityVerifiedAt()).thenReturn(null);
+        when(profileTagRepository.findAllById(java.util.List.of())).thenReturn(java.util.List.of());
+
+        var response = userProfileService.getSharedProfile(12L, 13L);
+
+        assertThat(response).isNotNull();
     }
 
     @Test
