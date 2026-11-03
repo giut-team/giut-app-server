@@ -90,8 +90,19 @@ public class ProfileOptionService {
         return new ProfileTagListResponse(type, tags);
     }
 
+    /** 일반 사용자 공개 API용. 이미 있는 태그는 다른 사용자가 등록했을 수 있어, 그 역할 연결을 임의로 바꾸지 않는다. */
     @Transactional
     public CreateSkillTagResponse createSkill(CreateSkillTagRequest request) {
+        return createSkill(request, false);
+    }
+
+    /** 관리자 기본 스킬 시드용. 이미 있는 태그라도 카탈로그에 정의된 역할 연결 중 빠진 것을 채워 넣는다. */
+    @Transactional
+    public CreateSkillTagResponse createSkillAllowingRoleUpdates(CreateSkillTagRequest request) {
+        return createSkill(request, true);
+    }
+
+    private CreateSkillTagResponse createSkill(CreateSkillTagRequest request, boolean relinkExistingTag) {
         String name = request.name().trim();
         String normalizedName = name.toLowerCase(Locale.ROOT);
         List<ProfileRole> relatedRoles = findRoles(request.relatedRoleCodes());
@@ -105,7 +116,10 @@ public class ProfileOptionService {
             skill = profileTagRepository.save(ProfileTag.create(ProfileTag.TagType.SKILL, name, normalizedName));
         }
 
-        linkSkillToRoles(skill, relatedRoles);
+        if (created || relinkExistingTag) {
+            linkSkillToRoles(skill, relatedRoles);
+        }
+
         ProfileTagResponse response = toTagResponses(List.of(skill)).getFirst();
         return new CreateSkillTagResponse(created, response);
     }

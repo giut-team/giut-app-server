@@ -13,6 +13,7 @@ import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.profile.repository.PortfolioCountProjection;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamScrapRepository;
@@ -31,7 +32,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 import java.time.LocalDateTime;
 
+import com.giut.server.global.exception.ResourceNotFoundException;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -59,8 +63,10 @@ class UserProfileServiceSummaryTest {
     @Test
     void returnsCountsEvenWhenProfileIsNotCompleted() {
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
-        when(portfolioItemRepository.countByUser_Id(12L)).thenReturn(4L);
-        when(portfolioItemRepository.countByUser_IdAndShowcaseOrderIsNotNull(12L)).thenReturn(3L);
+        PortfolioCountProjection portfolioCounts = org.mockito.Mockito.mock(PortfolioCountProjection.class);
+        when(portfolioCounts.getTotal()).thenReturn(4L);
+        when(portfolioCounts.getShowcased()).thenReturn(3L);
+        when(portfolioItemRepository.countSummaryByUserId(12L)).thenReturn(portfolioCounts);
         when(teamMemberRepository.countByUserIdAndStatus(12L, TeamMember.Status.ACTIVE)).thenReturn(2L);
         when(competitionScrapRepository.countByUser_Id(12L)).thenReturn(5L);
         when(teamScrapRepository.countByUser_Id(12L)).thenReturn(3L);
@@ -94,6 +100,8 @@ class UserProfileServiceSummaryTest {
     @Test
     void newStatisticsDefaultToZeroWhenNoHistoryExists() {
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
+        when(portfolioItemRepository.countSummaryByUserId(12L))
+                .thenReturn(org.mockito.Mockito.mock(PortfolioCountProjection.class));
         var response = userProfileService.getMyProfile(12L);
         assertThat(response.summary().receivedProposalCount()).isZero();
         assertThat(response.summary().receivedRecommendationCount()).isZero();
@@ -159,11 +167,58 @@ class UserProfileServiceSummaryTest {
     }
 
     @Test
+    void sharedProfileHidesNonSearchableProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(false);
+
+        assertThatThrownBy(() -> userProfileService.getSharedProfile(12L, 13L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void sharedProfileHidesRestingProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(true);
+        when(profile.getActivityStatus()).thenReturn(UserProfile.ActivityStatus.RESTING);
+
+        assertThatThrownBy(() -> userProfileService.getSharedProfile(12L, 13L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void sharedProfileReturnsContentForPublicProfile() {
+        UserProfile profile = org.mockito.Mockito.mock(UserProfile.class);
+        User user = org.mockito.Mockito.mock(User.class);
+        when(userProfileRepository.findById(13L)).thenReturn(Optional.of(profile));
+        when(profile.isSearchable()).thenReturn(true);
+        when(profile.getActivityStatus()).thenReturn(UserProfile.ActivityStatus.LOOKING_FOR_TEAM);
+        when(profile.getUserId()).thenReturn(13L);
+        when(profile.getPrimaryRolesJson()).thenReturn("[]");
+        when(profile.getDepartment()).thenReturn(UserProfile.DepartmentType.COMPUTER_SCIENCE);
+        when(profile.getGrade()).thenReturn((short) 3);
+        when(userRepository.findById(13L)).thenReturn(Optional.of(user));
+        when(user.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(user.getNickname()).thenReturn("테스트 사용자");
+        when(user.getUniversityVerifiedAt()).thenReturn(null);
+        when(profileTagRepository.findAllById(java.util.List.of())).thenReturn(java.util.List.of());
+
+        var response = userProfileService.getSharedProfile(12L, 13L);
+
+        assertThat(response).isNotNull();
+    }
+
+    @Test
     void reportsUniversityVerificationWhenProfileIsNotCompleted() {
         User user = org.mockito.Mockito.mock(User.class);
         when(userProfileRepository.findById(12L)).thenReturn(Optional.empty());
         when(userRepository.findById(12L)).thenReturn(Optional.of(user));
         when(user.getUniversityVerifiedAt()).thenReturn(LocalDateTime.parse("2026-10-09T12:00:00"));
+        when(portfolioItemRepository.countSummaryByUserId(12L))
+                .thenReturn(org.mockito.Mockito.mock(PortfolioCountProjection.class));
 
         MyProfileResponse response = userProfileService.getMyProfile(12L);
 

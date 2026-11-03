@@ -8,6 +8,7 @@ import com.giut.server.competition.dto.response.PublicCompetitionDetailResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionListResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionResponse;
 import com.giut.server.competition.service.CompetitionService;
+import com.giut.server.competition.service.CompetitionTop5Cache;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CompetitionController {
 
     private final CompetitionService competitionService;
+    private final CompetitionTop5Cache top5Cache;
 
     @GetMapping
     @Operation(
@@ -64,7 +66,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/top5")
-    @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
+    @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 순위와 집계 정보는 5분 간격으로 갱신되며 게시 취소는 다음 요청부터 제외합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
@@ -72,7 +74,7 @@ public class CompetitionController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
     public ResponseEntity<java.util.List<PublicCompetitionResponse>> getTop5Competitions() {
-        return ResponseEntity.ok(competitionService.getTop5Competitions());
+        return ResponseEntity.ok(top5Cache.getPublishedTop5());
     }
 
     @GetMapping("/closing-soon")
