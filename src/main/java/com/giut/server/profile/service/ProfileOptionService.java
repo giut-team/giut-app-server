@@ -141,6 +141,7 @@ public class ProfileOptionService {
     }
 
     private void linkSkillToRoles(ProfileTag skill, List<ProfileRole> roles) {
+        // 이미 있는 태그를 다시 연결(relinkExistingTag)할 때 기존 연결까지 중복 insert하면 복합키 충돌이 나므로 걸러낸다.
         Set<Long> linkedRoleIds = profileRoleSkillTagRepository.findAllByTag_IdIn(List.of(skill.getId())).stream()
                 .map(link -> link.getRole().getId())
                 .collect(java.util.stream.Collectors.toSet());

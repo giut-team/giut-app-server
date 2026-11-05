@@ -109,6 +109,8 @@ public class ProfileReportService {
         return ProfileReportResponse.from(report);
     }
 
+    // 신고자 행을 잠가서, 같은 사용자가 같은 대상을 동시에 두 번 신고해도 PENDING 중복 검사(existsBy...)가
+    // 둘 다 통과해버리는 경쟁 상태를 막는다.
     private User findActiveReporterForUpdate(Long userId) {
         return userRepository.findByIdForUpdate(userId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)

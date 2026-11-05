@@ -17,6 +17,8 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
+// user 락(findActiveUserForScrapUpdate)이 같은 사용자의 동시 요청을 직렬화하지만,
+// 그 락만으로는 모든 경쟁 상태를 막는다고 가정하지 않고 DB unique 제약을 최종 방어선으로 둔다.
 @Table(
         name = "competition_scraps",
         uniqueConstraints = @UniqueConstraint(

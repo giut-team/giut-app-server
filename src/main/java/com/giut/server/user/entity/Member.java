@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// V1 마이그레이션의 최초 회원 모델. 이후 User 엔티티("users" 테이블)로 대체됐고
+// 현재 어떤 서비스·컨트롤러에서도 참조하지 않는다 — 실제 회원 로직은 User를 본다.
 @Entity
 @Getter
 @Table(name = "members")

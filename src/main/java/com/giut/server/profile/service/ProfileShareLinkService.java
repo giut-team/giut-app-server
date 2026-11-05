@@ -100,6 +100,7 @@ public class ProfileShareLinkService {
     }
 
     private ProfileShareLink findActiveLink(String token) {
+        // 43자는 32바이트를 패딩 없는 Base64Url로 인코딩했을 때의 길이(createLink의 토큰 생성과 맞춤).
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw new ResourceNotFoundException("공유 프로필을 찾을 수 없습니다.");
         }

@@ -44,6 +44,7 @@ public class UniversityEmailVerificationService {
         // A verification already in progress must finish before a later revocation.
         User user = userRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("회원을 찾을 수 없습니다."));
+        // sendCode 때도 같은 검사를 했지만, 그 사이 다른 계정이 같은 학교 이메일을 먼저 인증했을 수 있어 재검사.
         validateNotUsedUniversityEmail(universityEmail);
 
         codeStore.verify(memberId, universityEmail, request.getCode());

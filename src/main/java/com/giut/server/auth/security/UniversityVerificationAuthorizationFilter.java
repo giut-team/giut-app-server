@@ -67,6 +67,7 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
 
+        // 학교 인증을 안 끝낸 사용자도 탈퇴 자체는 막지 않는다.
         if (HttpMethod.DELETE.matches(method) && "/api/users/me".equals(path)) {
             return false;
         }

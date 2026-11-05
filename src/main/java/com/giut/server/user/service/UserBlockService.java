@@ -69,6 +69,7 @@ public class UserBlockService {
     @Transactional(readOnly = true)
     public void requireProfilesVisible(Long viewerId, Long targetUserId) {
         // Anonymous shared cards retain their existing limited token-only access policy.
+        // 403이 아니라 404로 응답 — 서로 차단 관계라는 사실 자체를 상대가 알아채지 못하게 한다.
         if (viewerId != null && !viewerId.equals(targetUserId) && blocks.existsBetween(viewerId, targetUserId)) {
             throw new ResourceNotFoundException("공개 프로필을 찾을 수 없습니다.");
         }

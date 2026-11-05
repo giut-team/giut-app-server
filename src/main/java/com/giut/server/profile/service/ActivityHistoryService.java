@@ -52,11 +52,15 @@ public class ActivityHistoryService {
                 .toList());
     }
 
+    // 요청 DTO의 id는 읽기 전용이라(ActivityHistoryDto 참고) 어떤 항목이 기존 몇 번 행인지 알 수 없다.
+    // 그래서 개별 수정이 아니라 전체 삭제 후 재생성으로 프로필 저장 시 목록을 통째로 교체한다.
     void replaceForProfile(User user, List<ActivityHistoryDto> requests) {
         if (requests == null) {
             throw new IllegalArgumentException("활동 이력 목록은 필수입니다.");
         }
         requests.forEach(this::validatePeriod);
+        // deleteByUser_Id는 derived delete라 실제 DELETE가 다음 flush까지 지연된다. createForProfile의 insert는
+        // IDENTITY 전략이라 즉시 나가므로, 여기서 명시적으로 flush하지 않으면 DB에는 insert가 delete보다 먼저 반영된다.
         activityHistoryRepository.deleteByUser_Id(user.getId());
         activityHistoryRepository.flush();
         createForProfile(user, requests);

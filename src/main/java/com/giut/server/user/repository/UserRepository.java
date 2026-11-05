@@ -25,6 +25,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    // User 행을 사용자 범위 뮤텍스로 빌려 써서, 같은 사용자에 대한 동시 요청이 서로의
+    // 조회-수정 결과를 덮어쓰지 않도록 직렬화한다(예: 포트폴리오 쇼케이스 순서 재배치).
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") Long userId);

@@ -106,6 +106,7 @@ public class PortfolioItem extends BaseTimeEntity {
 
     public void changeShowcaseOrder(Integer showcaseOrder) {
         this.showcaseOrder = showcaseOrder;
+        // 쇼케이스에서 빠지는데 대표 포트폴리오로 남아있는 모순을 막기 위해 같이 해제한다.
         if (showcaseOrder == null) {
             this.representative = false;
         }

@@ -119,6 +119,8 @@ public class Competition extends BaseTimeEntity {
         this.publicationStatus = publicationStatus;
         this.verificationStatus = verificationStatus;
         if (isVerified(verificationStatus)) {
+            // 검증 상태가 그대로 유지된 채 다른 필드만 수정되는 경우에는 verifiedAt을 다시 찍지 않는다
+            // (최초 검증 시각을 보존). 상태가 실제로 바뀌었을 때만 검증 시각·검증자를 갱신한다.
             if (verificationStatusChanged || this.verifiedAt == null) {
                 this.verifiedByUser = verifiedByUser;
                 this.verifiedAt = Instant.now();

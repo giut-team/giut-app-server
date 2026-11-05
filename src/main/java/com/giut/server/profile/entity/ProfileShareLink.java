@@ -36,6 +36,7 @@ public class ProfileShareLink extends BaseTimeEntity {
             foreignKey = @ForeignKey(name = "fk_profile_share_links_profile"))
     private UserProfile profile;
 
+    // 원본 토큰이 아니라 해시만 저장한다 — DB가 유출돼도 토큰 자체를 복원해 공유 링크를 쓸 수 없게 하기 위함.
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
 
@@ -58,6 +59,7 @@ public class ProfileShareLink extends BaseTimeEntity {
     }
 
     public void revoke(Instant now) {
+        // 이미 취소된 링크를 다시 취소해도 최초 취소 시각을 덮어쓰지 않는다(멱등).
         if (revokedAt == null) {
             revokedAt = now;
         }

@@ -35,6 +35,7 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
         Long userId = parseUserId(authentication.getName());
         User user = userId == null ? null : userRepository.findById(userId).orElse(null);
         String token = resolveToken(request);
+        // 로그아웃 시 User.tokenVersion이 올라가므로, 그 이전에 발급된 토큰은 값이 달라 거부된다.
         boolean tokenVersionMatches = user != null && token != null
                 && user.getTokenVersion() == jwtProvider.getTokenVersion(token);
         if (user == null || user.getStatus() != User.Status.ACTIVE || !tokenVersionMatches) {

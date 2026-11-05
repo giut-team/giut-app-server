@@ -143,6 +143,8 @@ public class UserProfileService {
             return toPublicProfileListResponse(profilePage, List.of());
         }
 
+        // UserProfile 행은 탈퇴 후에도 보존 정책상 남아있을 수 있으므로, User가 ACTIVE인 것만 다시 걸러
+        // 비활성·탈퇴 사용자의 프로필이 목록에 섞여 나오지 않게 한다.
         List<Long> profileUserIds = profiles.stream().map(UserProfile::getUserId).toList();
         Map<Long, User> userById = new HashMap<>();
         userRepository.findAllByIdInAndStatus(profileUserIds, User.Status.ACTIVE)
@@ -235,6 +237,9 @@ public class UserProfileService {
 
     @Transactional
     public MyProfileResponse updateMyProfile(Long userId, UpdateMyProfileRequest request) {
+        // 아래 replaceRoles/replaceTags가 같은 프로필의 연결 테이블을 delete 후 재생성하므로, 동시에
+        // 두 번 수정 요청이 들어오면 서로의 delete/insert가 꼬일 수 있어 프로필 행에 쓰기 락을 건다.
+        // User는 이 메서드에서 값을 바꾸지 않으므로(활동 이력 생성에 FK로만 필요) 락이 필요 없다.
         UserProfile profile = userProfileRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("수정할 프로필을 찾을 수 없습니다."));
         User user = userRepository.findById(userId)
@@ -321,6 +326,7 @@ public class UserProfileService {
     }
 
     private void replaceRoles(UserProfile profile, List<ProfileRole> roles) {
+        // derived delete가 다음 flush까지 지연 실행되므로, 뒤이은 insert보다 먼저 반영되도록 명시적으로 flush한다.
         userProfileRoleRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileRoleRepository.flush();
 
@@ -339,6 +345,7 @@ public class UserProfileService {
         allTags.addAll(findTags(interestTagIds, ProfileTag.TagType.INTEREST));
         allTags.addAll(findTags(experienceTagIds, ProfileTag.TagType.EXPERIENCE));
 
+        // replaceRoles와 같은 이유로 delete 직후 flush한다.
         userProfileTagRepository.deleteByProfile_UserId(profile.getUserId());
         userProfileTagRepository.flush();
 
@@ -366,6 +373,7 @@ public class UserProfileService {
             throw new IllegalArgumentException("태그 종류가 올바르지 않습니다.");
         }
 
+        // findAllById는 요청 순서를 보장하지 않으므로, 맵으로 바꿔 tagIds 순서대로 다시 매핑한다.
         Map<Long, ProfileTag> tagById = new HashMap<>();
         tags.forEach(tag -> tagById.put(tag.getId(), tag));
         return tagIds.stream().map(tagById::get).toList();
@@ -388,6 +396,7 @@ public class UserProfileService {
     private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
         long competitionScrapCount = competitionScrapRepository.countByUser_Id(userId);
         long teamScrapCount = teamScrapRepository.countByUser_Id(userId);
+        // total·showcased 개수를 따로 두 번 세지 않고 집계 쿼리 하나로 합쳐 쿼리 수를 줄인다.
         PortfolioCountProjection portfolioCounts = portfolioItemRepository.countSummaryByUserId(userId);
         return new MyProfileSummaryResponse(
                 portfolioCounts.getTotal(),

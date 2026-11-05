@@ -12,6 +12,8 @@ import java.time.YearMonth;
 
 @Schema(description = "활동 이력 생성·수정 요청 및 응답")
 public record ActivityHistoryDto(
+        // READ_ONLY라 요청 바디로는 id가 들어오지 않는다. ActivityHistoryService.replaceForProfile이
+        // id로 기존 행과 매칭하지 못하고 전체 삭제·재생성 방식을 쓰는 이유가 여기 있다.
         @JsonProperty(access = JsonProperty.Access.READ_ONLY)
         @Schema(description = "활동 이력 ID", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
         Long id,
