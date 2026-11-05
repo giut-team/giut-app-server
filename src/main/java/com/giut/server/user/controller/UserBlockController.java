@@ -49,5 +49,6 @@ public class UserBlockController {
     }
 
     private Long currentUserId(Authentication authentication) { return Long.valueOf(authentication.getName()); }
+    // 차단 여부·목록은 사용자별 민감 정보라 중간 캐시·브라우저 캐시에 남지 않게 매번 no-store.
     private <T> ResponseEntity<T> response(T body) { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body); }
 }

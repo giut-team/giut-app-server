@@ -26,6 +26,8 @@ public class AiIngestionAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String key = request.getHeader("X-AI-API-Key");
+        // 32바이트 미만(미설정·빈 값 포함)이면 비밀값이 사실상 없는 것으로 보고 항상 거부한다.
+        // MessageDigest.isEqual은 상수 시간 비교라 타이밍 공격으로 값을 추측하기 어렵다.
         if (secret.length >= 32 && key != null && MessageDigest.isEqual(secret, key.getBytes(StandardCharsets.UTF_8))) {
             var authentication = new UsernamePasswordAuthenticationToken(
                     "ai-ingestion", null, List.of(new SimpleGrantedAuthority("ROLE_AI_INGESTION")));

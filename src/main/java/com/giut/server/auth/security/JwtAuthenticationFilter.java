@@ -26,6 +26,7 @@ public class JwtAuthenticationFilter extends GenericFilterBean {
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
         String token = resolveToken((HttpServletRequest) servletRequest);
 
+        // type 체크가 없으면 refresh 토큰을 그대로 API 인증에 재사용할 수 있게 된다.
         if (token != null && jwtProvider.validateToken(token) && "access".equals(jwtProvider.getTokenType(token))) {
             Authentication authentication = jwtProvider.getAuthentication(token);
             SecurityContextHolder.getContext().setAuthentication(authentication);

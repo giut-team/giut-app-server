@@ -56,6 +56,9 @@ public class AppleService {
     @Transactional
     public LoginResponse loginWithApple(String authorizationCode, String identityToken, String fullName, String expectedNonce) {
         try {
+            // 프런트가 전달한 콜백 identity token은 nonce로 재전송 공격을 막을 수 있지만 위조된 값일 수 있다.
+            // authorizationCode를 Apple 서버와 직접 교환해 받은 두 번째 identity token은 nonce는 없지만
+            // 신뢰할 수 있는 채널에서 왔으므로, 두 토큰의 sub(Apple 사용자 ID)가 같은지 교차 검증한다.
             Map<String, Object> callbackClaims = appleJwtValidator.validateAndGetClaims(identityToken, expectedNonce);
             AppleTokenClient.AppleTokenResponse tokenResponse = appleTokenClient.exchangeAuthorizationCode(authorizationCode);
             Map<String, Object> claims = appleJwtValidator.validateAndGetClaims(tokenResponse.identityToken());
@@ -105,6 +108,7 @@ public class AppleService {
             throw new ConflictException("이미 동일한 이메일로 가입된 계정이 있습니다.");
         }
 
+        // Apple은 사용자 이름을 최초 1회 인가 응답에서만 내려주므로, 재시도·이후 로그인에서는 null일 수 있다.
         String nickname = fullName != null && !fullName.isBlank()
                 ? fullName
                 : "기웃 사용자";

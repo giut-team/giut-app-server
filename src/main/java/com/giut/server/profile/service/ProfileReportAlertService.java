@@ -50,6 +50,8 @@ public class ProfileReportAlertService {
         }
     }
 
+    // 신고 트랜잭션이 실제 커밋된 뒤에만 알림을 보낸다 — 커밋 전에 보내면 롤백된 신고를 알리거나,
+    // 메시지 속 관리자 조회 링크가 아직 DB에 없는 행을 가리킬 수 있다.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onReportCreated(ProfileReportCreatedEvent event) {
         if (!enabled || webhook == null) {
@@ -109,6 +111,8 @@ public class ProfileReportAlertService {
         }
         try {
             URI uri = URI.create(value);
+            // 설정값이 실제 discord.com webhook 경로인지 엄격히 검사한다 — 잘못되거나 변조된 URL로
+            // 다른 호스트에 요청을 보내는 걸 막기 위함(SSRF 방지).
             return "https".equals(uri.getScheme()) && "discord.com".equals(uri.getRawAuthority())
                     && uri.getRawQuery() == null && uri.getRawFragment() == null
                     && uri.getPath().matches("/api/webhooks/[0-9]+/[A-Za-z0-9_.-]+") ? uri : null;

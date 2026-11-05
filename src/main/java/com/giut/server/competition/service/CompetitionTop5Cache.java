@@ -27,15 +27,18 @@ public class CompetitionTop5Cache {
 
     @EventListener(ApplicationReadyEvent.class)
     public void warmUp() {
+        // 기동 중 요청이 먼저 들어와 loadInitialSnapshot()이 이미 채웠다면 중복 로딩하지 않는다.
         if (snapshot.get() == null) refresh();
     }
 
     @Scheduled(initialDelay = 300_000, fixedRate = 300_000)
     public void refresh() {
+        // tryLock: 이미 갱신 중이면(겹친 스케줄 실행, 또는 기동 시 warmUp과 첫 요청이 동시에 탐) 대기하지 않고 그냥 건너뛴다.
         if (!refreshLock.tryLock()) return;
         try {
             snapshot.set(List.copyOf(competitionService.getTop5Competitions()));
         } catch (RuntimeException e) {
+            // 집계 쿼리 실패 시 캐시를 비우지 않고 직전 성공 스냅샷을 그대로 유지한다.
             log.warn("인기 공모전 캐시 갱신 실패: 기존 결과를 유지합니다.", e);
         } finally {
             refreshLock.unlock();
@@ -55,6 +58,8 @@ public class CompetitionTop5Cache {
     }
 
     private List<PublicCompetitionResponse> loadInitialSnapshot() {
+        // refresh()와 달리 여기선 블로킹 lock: 최초 로딩은 결과 없이 빈 값을 돌려줄 수 없어
+        // 동시에 들어온 첫 요청들이 각자 DB를 때리지 않고 한 번의 로딩을 같이 기다리게 한다.
         refreshLock.lock();
         try {
             List<PublicCompetitionResponse> cached = snapshot.get();

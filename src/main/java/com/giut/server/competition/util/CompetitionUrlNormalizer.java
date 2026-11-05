@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 @Component
+// 대소문자·기본 포트 생략·끝 슬래시처럼 사실상 같은 URL이 다른 문자열로 저장돼 중복 등록을
+// 놓치는 걸 막기 위한 정규화다. 정규화된 문자열 대신 SHA-256 해시를 저장/비교하는 이유는
+// URL 길이가 가변적이라 그대로는 unique 인덱스를 걸기 번거롭기 때문(고정 길이 해시가 인덱스에 유리).
 public class CompetitionUrlNormalizer {
 
     public NormalizedUrl normalize(String rawUrl) {

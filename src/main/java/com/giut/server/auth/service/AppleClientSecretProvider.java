@@ -44,6 +44,7 @@ public class AppleClientSecretProvider {
                     .subject(appleClientId)
                     .audience(APPLE_ISSUER)
                     .issueTime(Date.from(now))
+                    // Apple이 client secret JWT에 허용하는 최대 유효기간이 6개월(180일)이다.
                     .expirationTime(Date.from(now.plusSeconds(60 * 60 * 24 * 180)))
                     .build();
 

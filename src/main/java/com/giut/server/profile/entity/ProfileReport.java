@@ -97,6 +97,8 @@ public class ProfileReport extends BaseTimeEntity {
         report.reason = reason;
         report.description = description;
         report.status = Status.PENDING;
+        // 신고 시점의 프로필 내용을 스냅샷으로 남겨서, 이후 당사자가 프로필을 수정해도 관리자가 신고 당시
+        // 내용 그대로 검토할 수 있게 한다.
         report.snapshotNickname = reportedProfile.getUser().getNickname();
         report.snapshotBio = reportedProfile.getBio();
         report.snapshotProfileImageUrl = reportedProfile.getProfileImageUrl();

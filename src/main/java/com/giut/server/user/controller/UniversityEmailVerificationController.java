@@ -153,6 +153,7 @@ public class UniversityEmailVerificationController {
             throw new AuthenticationFailedException("인증 정보가 없습니다.");
         }
 
+        // JWT의 subject를 사용자명이 아니라 User.id 문자열로 발급하므로 바로 파싱 가능.
         return Long.valueOf(authentication.getName());
     }
 }

@@ -25,6 +25,7 @@ public class AdminUserProfileService {
             throw new ForbiddenException("관리자 권한이 필요합니다.");
         }
 
+        // 같은 락을 쓰는 UserProfileService.updateMyProfile과 동시에 실행돼도 서로의 변경을 덮어쓰지 않게 한다.
         UserProfile profile = userProfileRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("변경할 프로필을 찾을 수 없습니다."));
         profile.changeDepartment(request.department());

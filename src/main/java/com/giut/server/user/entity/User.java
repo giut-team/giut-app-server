@@ -118,6 +118,7 @@ public class User {
     }
 
     public void revokeUniversityVerification() {
+        // 이미 미인증 상태면 조용히 반환 — updatedAt을 불필요하게 갱신하지 않기 위함.
         if (universityEmail == null && universityVerifiedAt == null) {
             return;
         }
@@ -132,6 +133,7 @@ public class User {
     }
 
     public void withdraw() {
+        // 중복 탈퇴 요청에도 상태·시각이 다시 덮어써지지 않게 멱등하게 처리.
         if (status == Status.DELETED) {
             return;
         }

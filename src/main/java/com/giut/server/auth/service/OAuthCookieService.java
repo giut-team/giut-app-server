@@ -44,6 +44,8 @@ public class OAuthCookieService {
         String state = randomValue();
         String nonce = randomValue();
 
+        // Apple 콜백은 response_mode=form_post라 애플 도메인이 우리 서버로 교차 사이트 POST를 보낸다.
+        // SameSite=Lax였으면 이 쿠키가 그 요청에 실리지 않으므로 None(+Secure)을 써야 한다.
         addCookie(response, APPLE_STATE_COOKIE, state, "None", Duration.ofMinutes(5));
         addCookie(response, APPLE_NONCE_COOKIE, nonce, "None", Duration.ofMinutes(5));
 
@@ -83,6 +85,7 @@ public class OAuthCookieService {
     }
 
     private void validateState(String expected, String actual) {
+        // 문자열 길이·내용으로 비교 시간이 달라지는 걸 막기 위해 상수 시간 비교를 쓴다.
         if (expected == null || actual == null || !MessageDigest.isEqual(
                 expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 actual.getBytes(java.nio.charset.StandardCharsets.UTF_8)

@@ -72,6 +72,7 @@ public class UserProfile extends BaseTimeEntity {
         return profile;
     }
 
+    // department는 일부러 파라미터에 없다 — 본인이 직접 바꿀 수 없고 changeDepartment()로 관리자만 바꿀 수 있다.
     public void update(
             ActivityStatus activityStatus,
             Short grade,

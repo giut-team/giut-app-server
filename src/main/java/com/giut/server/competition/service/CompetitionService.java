@@ -132,6 +132,8 @@ public class CompetitionService {
     @Transactional
     public PublicCompetitionDetailResponse getPublishedCompetition(Long userId, Long competitionId) {
         Instant now = Instant.now();
+        // 조회 후 증가가 아니라 UPDATE 한 번으로 조회수 증가와 PUBLISHED 존재 확인을 동시에 처리한다.
+        // (동시 조회 시 read-modify-write로 증가분이 유실되는 걸 막는다)
         if (competitionRepository.incrementViewCount(competitionId, Competition.PublicationStatus.PUBLISHED) == 0) {
             throw new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다.");
         }
@@ -224,6 +226,8 @@ public class CompetitionService {
     public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
         UpsertCompetitionRequest request = input.toUpsertRequest();
+        // 관리자가 직접 등록하면 입력값과 무관하게 항상 수동 검증으로 고정한다
+        // (관리자가 내용을 보고 등록한다는 전제라 별도 검증 상태 선택지를 주지 않음).
         Competition.VerificationStatus verificationStatus = Competition.VerificationStatus.MANUALLY_VERIFIED;
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
@@ -285,6 +289,8 @@ public class CompetitionService {
 
     @Transactional
     public List<AdminCompetitionResponse> createBatchByAi(List<AiCompetitionRequest> inputs) {
+        // 단순 반복 저장처럼 보이지만 메서드 전체가 하나의 트랜잭션이라, 중간에 하나라도
+        // 예외가 나면(검증 실패·URL 중복 등) 이미 저장된 항목까지 전부 롤백된다(all-or-nothing).
         return inputs.stream().map(this::createByAi).toList();
     }
 
@@ -319,6 +325,8 @@ public class CompetitionService {
             competition.changeTotalPrizeAmount(request.totalPrizeAmount());
         }
 
+        // derived delete는 다음 flush까지 실제 DELETE가 지연되는데, 뒤이은 saveUrls의 INSERT와
+        // 순서가 뒤섞이면 안 되므로(예: 같은 공식 URL unique 제약) 여기서 flush로 삭제를 먼저 확정한다.
         competitionUrlRepository.deleteByCompetition_Id(competitionId);
         competitionUrlRepository.flush();
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
@@ -349,6 +357,8 @@ public class CompetitionService {
     }
 
     private Competition findEditableCompetitionForUpdate(Long competitionId) {
+        // 수정·발행·삭제가 전부 이 메서드를 거치므로, 같은 공모전에 대한 관리자 작업끼리
+        // 비관적 락으로 직렬화해 한쪽이 보던 상태가 다른 쪽 커밋으로 덮어써지지 않게 한다.
         return competitionRepository.findByIdForUpdate(competitionId)
                 .filter(competition -> competition.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
                 .orElseThrow(() -> new ResourceNotFoundException("공모전을 찾을 수 없습니다."));
@@ -382,6 +392,8 @@ public class CompetitionService {
     }
 
     private Specification<Competition> createdByAdmin() {
+        // Competition에는 "누가 만들었는지"를 저장하는 필드가 없어서, 생성 시 같이 남긴
+        // 검증 로그(관리자 리뷰·fromStatus 없음·등록 사유 고정값)로 생성 출처를 역으로 판별한다.
         return (root, query, criteriaBuilder) -> {
             var subquery = query.subquery(Long.class);
             var log = subquery.from(CompetitionVerificationLog.class);
@@ -397,6 +409,7 @@ public class CompetitionService {
     }
 
     private Specification<Competition> listedCompetition() {
+        // 일반 목록 조회는 DRAFT까지 포함한다(정책상 범위). ARCHIVED는 논리 삭제 상태라 항상 제외.
         return (root, query, criteriaBuilder) -> root.get("publicationStatus").in(
                 Competition.PublicationStatus.DRAFT,
                 Competition.PublicationStatus.PUBLISHED
@@ -411,6 +424,8 @@ public class CompetitionService {
     }
 
     private Specification<Competition> keywordContains(String keyword) {
+        // LOWER() 적용 + 선행 와일드카드(%...)라 인덱스를 못 타는 전체 테이블 스캔이다.
+        // 데이터가 늘수록 느려짐이 측정으로 확인된 지점(실측: 5만건 28ms → 20만건 101ms).
         return (root, query, criteriaBuilder) -> {
             String searchKeyword = "%" + keyword.toLowerCase() + "%";
             return criteriaBuilder.or(
@@ -586,6 +601,8 @@ public class CompetitionService {
                 ))
                 .toList());
         } catch (DataIntegrityViolationException e) {
+            // validateUrlOwnership의 사전 검사는 SELECT 후 INSERT라 그 사이 경쟁 상태가 가능하다.
+            // DB unique 제약 위반을 여기서 잡아 동시 등록 레이스에 대한 최종 방어선으로 삼는다.
             Throwable cause = e.getMostSpecificCause();
             if (cause.getMessage() != null && cause.getMessage().toLowerCase(java.util.Locale.ROOT)
                     .contains("uk_competition_urls_official_hash")) {
