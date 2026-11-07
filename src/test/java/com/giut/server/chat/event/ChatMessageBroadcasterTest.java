@@ -24,7 +24,7 @@ class ChatMessageBroadcasterTest {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
         ChatRoomMemberRepository members = mock(ChatRoomMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
-        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "hello",
+        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "550e8400-e29b-41d4-a716-446655440000", "hello",
                 ChatMessage.MessageType.TEXT, ChatMessage.Status.ACTIVE, null);
         when(members.findAllByChatRoomIdAndLeftAtIsNull(5L))
                 .thenReturn(List.of(ChatRoomMember.join(5L, 12L), ChatRoomMember.join(5L, 13L)));
@@ -42,7 +42,7 @@ class ChatMessageBroadcasterTest {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
         ChatRoomMemberRepository members = mock(ChatRoomMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
-        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "hello",
+        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "550e8400-e29b-41d4-a716-446655440000", "hello",
                 ChatMessage.MessageType.TEXT, ChatMessage.Status.ACTIVE, null);
         when(members.findAllByChatRoomIdAndLeftAtIsNull(5L))
                 .thenReturn(List.of(ChatRoomMember.join(5L, 12L)));
@@ -59,7 +59,7 @@ class ChatMessageBroadcasterTest {
         SimpMessagingTemplate messaging = mock(SimpMessagingTemplate.class);
         ChatRoomMemberRepository members = mock(ChatRoomMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
-        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "hello",
+        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "550e8400-e29b-41d4-a716-446655440000", "hello",
                 ChatMessage.MessageType.TEXT, ChatMessage.Status.ACTIVE, null);
         when(members.findAllByChatRoomIdAndLeftAtIsNull(5L))
                 .thenReturn(List.of(ChatRoomMember.join(5L, 12L), ChatRoomMember.join(5L, 13L)));
@@ -77,7 +77,7 @@ class ChatMessageBroadcasterTest {
         SimpMessagingTemplate messaging = mock(SimpMessagingTemplate.class);
         ChatRoomMemberRepository members = mock(ChatRoomMemberRepository.class);
         UserRepository users = mock(UserRepository.class);
-        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "hello",
+        ChatMessageResponse response = new ChatMessageResponse(30L, 5L, 12L, "550e8400-e29b-41d4-a716-446655440000", "hello",
                 ChatMessage.MessageType.TEXT, ChatMessage.Status.ACTIVE, null);
 
         new ChatMessageBroadcaster(messaging, members, users).broadcast(new ChatMessageEvent(response));

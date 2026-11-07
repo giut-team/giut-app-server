@@ -16,6 +16,9 @@ public record ChatMessageResponse(
         @Schema(description = "보낸 사용자 ID", example = "12")
         Long senderId,
 
+        @Schema(description = "클라이언트가 생성한 메시지 UUID", example = "550e8400-e29b-41d4-a716-446655440000")
+        String clientMessageId,
+
         @Schema(description = "메시지 내용", example = "안녕하세요. 팀 채팅 테스트입니다.")
         String content,
 
@@ -34,6 +37,7 @@ public record ChatMessageResponse(
                 message.getId(),
                 message.getChatRoomId(),
                 message.getSenderId(),
+                message.getClientMessageId(),
                 message.getContent(),
                 message.getMessageType(),
                 message.getStatus(),

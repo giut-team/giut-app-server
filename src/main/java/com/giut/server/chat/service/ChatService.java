@@ -15,6 +15,7 @@ import com.giut.server.chat.entity.ChatRoomMember;
 import com.giut.server.user.entity.User;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.global.exception.ForbiddenException;
+import com.giut.server.global.exception.ConflictException;
 import com.giut.server.chat.repository.ChatMessageRepository;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
@@ -44,6 +45,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final PersonalChatRoomCreator personalChatRoomCreator;
+    private final ChatMessageCreator chatMessageCreator;
 
     public ChatRoomResponse createPersonalChatRoom(
             Long userId,
@@ -116,7 +118,6 @@ public class ChatService {
         }
     }
 
-    @Transactional
     public ChatMessageResponse sendMessage(Long userId, Long chatRoomId, SendChatMessageRequest request) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
 
@@ -126,23 +127,67 @@ public class ChatService {
                         userId
                 );
 
-        ChatMessage message = chatMessageRepository.save(
-                ChatMessage.createText(
+        return chatMessageRepository
+                .findBySenderIdAndClientMessageId(
+                        userId,
+                        request.clientMessageId()
+                )
+                .map(message -> validateIdempotentRetry(
+                        message,
+                        chatRoom.getId(),
+                        request.content()
+                ))
+                .orElseGet(() -> createOrFindMessageAfterConflict(
                         chatRoom.getId(),
                         userId,
-                        request.content()
-                )
-        );
+                        participant.getId(),
+                        request
+                ));
+    }
 
-        chatRoomMemberRepository.updateLastReadMessageIdIfGreater(
-                participant.getId(),
-                message.getId()
-        );
+    private ChatMessageResponse createOrFindMessageAfterConflict(
+            Long chatRoomId,
+            Long userId,
+            Long participantId,
+            SendChatMessageRequest request
+    ) {
+        try {
+            return chatMessageCreator.create(
+                    chatRoomId,
+                    userId,
+                    participantId,
+                    request.clientMessageId(),
+                    request.content()
+            );
+        } catch (DataIntegrityViolationException exception) {
+            ChatMessage existingMessage = chatMessageRepository
+                    .findBySenderIdAndClientMessageId(
+                            userId,
+                            request.clientMessageId()
+                    )
+                    .orElseThrow(() -> exception);
 
-        ChatMessageResponse response = ChatMessageResponse.from(message);
-        eventPublisher.publishEvent(new ChatMessageEvent(response));
+            return validateIdempotentRetry(
+                    existingMessage,
+                    chatRoomId,
+                    request.content()
+            );
+        }
+    }
 
-        return response;
+    private ChatMessageResponse validateIdempotentRetry(
+            ChatMessage message,
+            Long chatRoomId,
+            String content
+    ) {
+        if (!Objects.equals(message.getChatRoomId(), chatRoomId)
+                || !Objects.equals(message.getContent(), content)) {
+            throw new ConflictException(
+                    "동일한 clientMessageId를 다른 메시지에 재사용할 수 없습니다."
+            );
+        }
+
+        return ChatMessageResponse.from(message);
     }
 
     @Transactional(readOnly = true)

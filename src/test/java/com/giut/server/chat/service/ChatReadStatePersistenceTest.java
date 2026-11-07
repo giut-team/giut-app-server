@@ -287,7 +287,10 @@ class ChatReadStatePersistenceTest {
         ChatMessageResponse sentMessage = chatService.sendMessage(
                 firstUser.getId(),
                 chatRoom.getId(),
-                new SendChatMessageRequest("내가 보낸 메시지")
+                new SendChatMessageRequest(
+                        "550e8400-e29b-41d4-a716-446655440000",
+                        "내가 보낸 메시지"
+                )
         );
 
         assertThat(sentMessage.messageId())

@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +35,8 @@ class ChatServiceWebSocketTest {
     @Mock ChatMessageRepository chatMessageRepository;
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock ChatMessageCreator chatMessageCreator;
+    @Mock PersonalChatRoomCreator personalChatRoomCreator;
     @InjectMocks ChatService chatService;
 
     @Test
@@ -44,19 +47,39 @@ class ChatServiceWebSocketTest {
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
         when(chatRoomMemberRepository.findByChatRoomIdAndUserId(5L, 12L))
                 .thenReturn(Optional.of(member));
-        when(chatMessageRepository.save(any(ChatMessage.class))).thenAnswer(invocation -> {
-            ChatMessage message = invocation.getArgument(0);
-            ReflectionTestUtils.setField(message, "id", 30L);
-            return message;
-        });
+        ChatMessage message = ChatMessage.createText(
+                5L,
+                12L,
+                "550e8400-e29b-41d4-a716-446655440000",
+                "hello"
+        );
+        ReflectionTestUtils.setField(message, "id", 30L);
+        when(chatMessageCreator.create(
+                5L,
+                12L,
+                member.getId(),
+                "550e8400-e29b-41d4-a716-446655440000",
+                "hello"
+        )).thenReturn(com.giut.server.chat.dto.response.ChatMessageResponse.from(message));
 
-        chatService.sendMessage(12L, 5L, new SendChatMessageRequest("hello"));
+        var response = chatService.sendMessage(
+                12L,
+                5L,
+                new SendChatMessageRequest(
+                        "550e8400-e29b-41d4-a716-446655440000",
+                        "hello"
+                )
+        );
 
-        ArgumentCaptor<ChatMessageEvent> event = ArgumentCaptor.forClass(ChatMessageEvent.class);
-        verify(eventPublisher).publishEvent(event.capture());
-        assertEquals(30L, event.getValue().message().messageId());
-        assertEquals("hello", event.getValue().message().content());
-        assertEquals(30L, member.getLastReadMessageId());
+        verify(chatMessageCreator).create(
+                eq(5L),
+                eq(12L),
+                eq(member.getId()),
+                eq("550e8400-e29b-41d4-a716-446655440000"),
+                eq("hello")
+        );
+        assertEquals(30L, response.messageId());
+        assertEquals("hello", response.content());
     }
 
     @Test

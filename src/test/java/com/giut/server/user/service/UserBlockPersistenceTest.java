@@ -170,7 +170,8 @@ class UserBlockPersistenceTest {
                 .andExpect(status().isCreated()).andReturn();
         long roomId = new ObjectMapper().readTree(response.getResponse().getContentAsString()).path("chatRoomId").asLong();
         mvc.perform(as(actor, post("/api/chat-rooms/" + roomId + "/messages"))
-                        .contentType("application/json").content("{\"content\":\"계속 가능한 채팅\"}"))
+                        .contentType("application/json")
+                        .content("{\"clientMessageId\":\"550e8400-e29b-41d4-a716-446655440000\",\"content\":\"계속 가능한 채팅\"}"))
                 .andExpect(status().isCreated());
         mvc.perform(as(target, get("/api/chat-rooms/" + roomId + "/messages")))
                 .andExpect(status().isOk());

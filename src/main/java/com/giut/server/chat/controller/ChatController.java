@@ -98,7 +98,7 @@ public class ChatController {
     @PostMapping("/{chatRoomId}/messages")
     @Operation(
             summary = "채팅 메시지 전송",
-            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. 저장 성공 후 활성 참여자의 /user/queue/chat-rooms/{chatRoomId} 구독에 실시간 전달합니다."
+            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. clientMessageId가 같은 재시도 요청에는 기존 메시지를 반환하며 중복 저장하거나 다시 실시간 전송하지 않습니다. 최초 저장 성공 후 활성 참여자의 /user/queue/chat-rooms/{chatRoomId} 구독에 실시간 전달합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -108,7 +108,7 @@ public class ChatController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ChatMessageResponse.class),
-                            examples = @ExampleObject(value = "{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}")
+                            examples = @ExampleObject(value = "{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"clientMessageId\":\"550e8400-e29b-41d4-a716-446655440000\",\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}")
                     )
             ),
             @ApiResponse(
@@ -125,6 +125,11 @@ public class ChatController {
                     responseCode = "404",
                     description = "채팅방을 찾을 수 없음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 채팅방을 찾을 수 없습니다.\",\"code\":404}"))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "동일한 clientMessageId를 다른 채팅방 또는 내용에 재사용함",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"동일한 clientMessageId를 다른 메시지에 재사용할 수 없습니다.\",\"code\":409}"))
             )
     })
     public ResponseEntity<ChatMessageResponse> sendMessage(

@@ -5,7 +5,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 
+import java.util.Optional;
+
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+
+    Optional<ChatMessage> findBySenderIdAndClientMessageId(
+            Long senderId,
+            String clientMessageId
+    );
 
     Slice<ChatMessage> findByChatRoomIdAndStatusOrderByIdDesc(
             Long chatRoomId,
