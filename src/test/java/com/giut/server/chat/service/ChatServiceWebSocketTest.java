@@ -9,6 +9,7 @@ import com.giut.server.chat.entity.ChatRoomMember;
 import com.giut.server.chat.repository.ChatMessageRepository;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
+import com.giut.server.chat.security.ChatBlockPolicy;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,7 @@ class ChatServiceWebSocketTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock ChatMessageCreator chatMessageCreator;
     @Mock PersonalChatRoomCreator personalChatRoomCreator;
+    @Mock ChatBlockPolicy chatBlockPolicy;
     @InjectMocks ChatService chatService;
 
     @Test

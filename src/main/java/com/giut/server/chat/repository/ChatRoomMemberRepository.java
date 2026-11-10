@@ -20,6 +20,11 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
 
     Optional<ChatRoomMember> findByChatRoomIdAndUserId(Long chatRoomId, Long userId);
 
+    Optional<ChatRoomMember> findFirstByChatRoomIdAndUserIdNot(
+            Long chatRoomId,
+            Long userId
+    );
+
     @Query("""
             SELECT first.chatRoomId
             FROM ChatRoomMember first

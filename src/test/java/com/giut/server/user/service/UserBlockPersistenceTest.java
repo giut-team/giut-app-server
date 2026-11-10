@@ -163,18 +163,16 @@ class UserBlockPersistenceTest {
     }
 
     @Test
-    void blocksDoNotPreventPersonalChatCreationOrMessaging() throws Exception {
+    void blocksPreventPersonalChatCreationInBothDirections() throws Exception {
         mvc.perform(as(actor, post(blockPath(target)))).andExpect(status().isOk());
-        var response = mvc.perform(as(actor, post("/api/chat-rooms/personal"))
+        mvc.perform(as(actor, post("/api/chat-rooms/personal"))
                         .contentType("application/json").content("{\"targetUserId\":" + target.getId() + "}"))
-                .andExpect(status().isCreated()).andReturn();
-        long roomId = new ObjectMapper().readTree(response.getResponse().getContentAsString()).path("chatRoomId").asLong();
-        mvc.perform(as(actor, post("/api/chat-rooms/" + roomId + "/messages"))
-                        .contentType("application/json")
-                        .content("{\"clientMessageId\":\"550e8400-e29b-41d4-a716-446655440000\",\"content\":\"계속 가능한 채팅\"}"))
-                .andExpect(status().isCreated());
-        mvc.perform(as(target, get("/api/chat-rooms/" + roomId + "/messages")))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 사용자와 상호작용할 수 없습니다."));
+        mvc.perform(as(target, post("/api/chat-rooms/personal"))
+                        .contentType("application/json").content("{\"targetUserId\":" + actor.getId() + "}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("해당 사용자와 상호작용할 수 없습니다."));
     }
 
     @Test

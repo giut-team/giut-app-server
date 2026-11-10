@@ -19,6 +19,7 @@ import com.giut.server.global.exception.ConflictException;
 import com.giut.server.chat.repository.ChatMessageRepository;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
+import com.giut.server.chat.security.ChatBlockPolicy;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -46,6 +47,7 @@ public class ChatService {
     private final ApplicationEventPublisher eventPublisher;
     private final PersonalChatRoomCreator personalChatRoomCreator;
     private final ChatMessageCreator chatMessageCreator;
+    private final ChatBlockPolicy chatBlockPolicy;
 
     public ChatRoomResponse createPersonalChatRoom(
             Long userId,
@@ -68,6 +70,8 @@ public class ChatService {
                 targetUserId,
                 "상대 사용자를 찾을 수 없습니다."
         );
+
+        chatBlockPolicy.requireUsersCanChat(userId, targetUserId);
 
         String key = ChatRoom.createPersonalChatKey(
                 userId,
@@ -126,6 +130,7 @@ public class ChatService {
                         chatRoom.getId(),
                         userId
                 );
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         return chatMessageRepository
                 .findBySenderIdAndClientMessageId(
@@ -199,6 +204,7 @@ public class ChatService {
     ) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
         validateActiveParticipant(chatRoom.getId(), userId);
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         if (beforeMessageId != null && beforeMessageId <= 0) {
             throw new IllegalArgumentException(
@@ -263,6 +269,7 @@ public class ChatService {
                 .flatMap(java.util.Optional::stream)
                 .filter(chatRoom -> chatRoom.getType() == ChatRoom.Type.PERSONAL)
                 .filter(chatRoom -> chatRoom.getStatus() == ChatRoom.Status.ACTIVE)
+                .filter(chatRoom -> !chatBlockPolicy.isRoomBlocked(chatRoom, userId))
                 .map(chatRoom -> ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false))
                 .toList();
 
@@ -273,6 +280,7 @@ public class ChatService {
     public ChatRoomResponse getChatRoom(Long userId, Long chatRoomId) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
         validateActiveParticipant(chatRoom.getId(), userId);
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         return ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false);
     }
@@ -294,6 +302,7 @@ public class ChatService {
                         chatRoom.getId(),
                         userId
                 );
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("메시지를 찾을 수 없습니다."));
@@ -312,6 +321,7 @@ public class ChatService {
     public ChatRoomUnreadCountResponse getUnreadMessageCount(Long userId, Long chatRoomId) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
         ChatRoomMember participant = validateActiveParticipant(chatRoom.getId(), userId);
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         long unreadCount = participant.getLastReadMessageId() == null
                 ? chatMessageRepository.countByChatRoomIdAndStatusAndSenderIdNot(
@@ -330,6 +340,7 @@ public class ChatService {
     public void deleteMessage(Long userId, Long chatRoomId, Long messageId) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
         validateActiveParticipant(chatRoom.getId(), userId);
+        chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("메시지를 찾을 수 없습니다."));

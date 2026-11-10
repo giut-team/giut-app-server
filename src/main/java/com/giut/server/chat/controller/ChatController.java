@@ -80,6 +80,11 @@ public class ChatController {
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
             ),
             @ApiResponse(
+                    responseCode = "403",
+                    description = "두 사용자 사이에 차단 관계가 있어 채팅방을 생성할 수 없음",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"해당 사용자와 상호작용할 수 없습니다.\",\"code\":403}"))
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "사용자 또는 상대 사용자를 찾을 수 없음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 상대 사용자를 찾을 수 없습니다.\",\"code\":404}"))
@@ -118,7 +123,7 @@ public class ChatController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "채팅방 참여자가 아님",
+                    description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
@@ -154,7 +159,7 @@ public class ChatController {
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공"),
-            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
             @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
     })
     public ResponseEntity<ChatRoomResponse> getChatRoom(
@@ -193,7 +198,7 @@ public class ChatController {
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "읽음 처리 성공"),
-            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
             @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
     })
     public ResponseEntity<Void> markChatRoomAsRead(
@@ -214,7 +219,7 @@ public class ChatController {
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공"),
-            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
             @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
     })
     public ResponseEntity<ChatRoomUnreadCountResponse> getUnreadMessageCount(
@@ -253,7 +258,7 @@ public class ChatController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "채팅방 참여자가 아님",
+                    description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
@@ -295,7 +300,7 @@ public class ChatController {
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "메시지 삭제 성공"),
-            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 본인이 보낸 메시지가 아님"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나, 상대 사용자와 차단 관계이거나, 본인이 보낸 메시지가 아님"),
             @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
     })
     public ResponseEntity<Void> deleteMessage(
