@@ -21,6 +21,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class ChatSubscriptionInterceptorTest {
@@ -46,6 +47,34 @@ class ChatSubscriptionInterceptorTest {
     void rejectsNonParticipant() {
         when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom(12L, 13L)));
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+    }
+
+    @Test
+    void rejectsFormerParticipant() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        when(chatRoomRepository.findById(5L))
+                .thenReturn(Optional.of(ChatRoom.createPersonalRoom(12L, 13L)));
+        when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
+                .thenReturn(false);
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+
+        verify(chatRoomMemberRepository)
+                .existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L);
+    }
+
+    @Test
+    void rejectsSubscriptionToClosedRoom() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        ChatRoom closedRoom = ChatRoom.createPersonalRoom(12L, 13L);
+        closedRoom.close();
+        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(closedRoom));
+        when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
+                .thenReturn(true);
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));

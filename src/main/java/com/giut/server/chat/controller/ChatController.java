@@ -114,7 +114,12 @@ public class ChatController {
             @ApiResponse(
                     responseCode = "400",
                     description = "유효하지 않은 요청값",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"클라이언트 메시지 ID는 UUID 형식이어야 합니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "채팅방 참여자가 아님",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -147,7 +152,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 참여 중인 개인 채팅방의 상세 정보를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<ChatRoomResponse> getChatRoom(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -162,7 +171,11 @@ public class ChatController {
             description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않습니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "채팅방 나가기 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "채팅방 나가기 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 이미 나간 사용자"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<Void> leaveChatRoom(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -178,7 +191,11 @@ public class ChatController {
             description = "현재 로그인한 사용자의 마지막 읽은 메시지를 저장합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "읽음 처리 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "읽음 처리 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
+    })
     public ResponseEntity<Void> markChatRoomAsRead(
             Authentication authentication,
             @PathVariable Long chatRoomId,
@@ -195,7 +212,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 아직 읽지 않은 상대방의 메시지 수를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아님"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<ChatRoomUnreadCountResponse> getUnreadMessageCount(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -272,7 +293,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 보낸 메시지를 삭제합니다. 실제 데이터는 삭제하지 않고 삭제 상태로 변경합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "메시지 삭제 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "메시지 삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 본인이 보낸 메시지가 아님"),
+            @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
+    })
     public ResponseEntity<Void> deleteMessage(
             Authentication authentication,
             @PathVariable Long chatRoomId,
