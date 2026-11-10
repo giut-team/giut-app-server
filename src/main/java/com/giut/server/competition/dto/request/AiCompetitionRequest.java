@@ -49,12 +49,20 @@ public record AiCompetitionRequest(
         if (prizeInfo == null || prizeInfo.isBlank()) {
             prizeInfo = "상금 미정";
         }
-        // Only auto-pick a primary URL when every entry omitted the field entirely (the AI's actual
-        // payload shape); an explicit true/false anywhere means the caller meant it and must be respected.
-        if (urls != null && !urls.isEmpty() && urls.stream().allMatch(url -> url == null || url.primary() == null)) {
+        if (urls != null) {
+            // OFFICIAL/RECRUITMENT may arrive as {"type":..., "url": null} when the AI couldn't find
+            // one for that type; SOURCE_ORIGINAL is always present. Drop the empty ones instead of
+            // rejecting the whole request — @NotEmpty below still rejects if nothing real is left.
+            urls = urls.stream()
+                    .filter(url -> url != null && url.url() != null && !url.url().isBlank())
+                    .toList();
+        }
+        // Only auto-pick a primary URL when every remaining entry omitted the field entirely (the AI's
+        // actual payload shape); an explicit true/false anywhere means the caller meant it and must be respected.
+        if (urls != null && !urls.isEmpty() && urls.stream().allMatch(url -> url.primary() == null)) {
             List<CompetitionUrlRequest> original = urls;
             urls = IntStream.range(0, original.size())
-                    .mapToObj(i -> i == 0 && original.get(i) != null
+                    .mapToObj(i -> i == 0
                             ? new CompetitionUrlRequest(original.get(i).type(), original.get(i).url(), true)
                             : original.get(i))
                     .toList();

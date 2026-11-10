@@ -379,6 +379,25 @@ class AiCompetitionControllerTest {
     }
 
     @Test
+    void nullOfficialAndRecruitmentUrlsAreDroppedAndSourceOriginalBecomesPrimary() throws Exception {
+        String body = """
+                {"title":"AI 공모전 테스트 1", "hostOrganization":"OO기업", "targetParticipants":"ALL",
+                 "applicationStartAt":"2026-11-10", "applicationEndAt":"2026-12-10",
+                 "activityKind":"HACKATHON", "category":["AI_DATA"],
+                 "summary":"AI를 활용한 아이디어 공모전",
+                 "urls":[{"type":"OFFICIAL","url":null},{"type":"RECRUITMENT","url":null},
+                         {"type":"SOURCE_ORIGINAL","url":"https://example.com/source-only"}]}
+                """;
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        var saved = competitions.findAll().getFirst();
+        assertThat(urls.findAllByCompetition_Id(saved.getId())).singleElement().satisfies(url -> {
+            assertThat(url.getUrl()).isEqualTo("https://example.com/source-only");
+            assertThat(url.isPrimary()).isTrue();
+        });
+    }
+
+    @Test
     void batchAcceptsBareArrayMatchingActualAiPayload() throws Exception {
         String batch = """
                 [
