@@ -268,7 +268,7 @@ public class CompetitionService {
     public AdminCompetitionResponse createByAi(AiCompetitionRequest input) {
         Competition.ActivityType activityType = input.activityType().toActivityType();
         UpsertCompetitionRequest request = new UpsertCompetitionRequest(
-                input.title(), input.category(), input.hostOrganization(), input.targetParticipants().name(), input.summary(),
+                input.title(), input.primaryCategory(), input.hostOrganization(), input.targetParticipants().name(), input.summary(),
                 input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.PUBLISHED, input.urls());
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
@@ -281,6 +281,8 @@ public class CompetitionService {
         competition.changeActivityType(activityType);
         competition.changePrizeInfo(trimToNull(input.prizeInfo()));
         competition.changeTotalPrizeAmount(input.totalPrizeAmount());
+        competition.changeIsForEnrolledOnly(input.isForEnrolledOnly());
+        competition.changeIsTeam(input.isTeam());
         competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
@@ -546,7 +548,7 @@ public class CompetitionService {
             throw new IllegalArgumentException("모집 마감 일시는 시작 일시보다 늦어야 합니다.");
         }
         long primaryUrlCount = request.urls().stream()
-                .filter(CompetitionUrlRequest::primary)
+                .filter(url -> Boolean.TRUE.equals(url.primary()))
                 .count();
         if (primaryUrlCount != 1) {
             throw new IllegalArgumentException("대표 URL은 정확히 하나여야 합니다.");
@@ -566,7 +568,7 @@ public class CompetitionService {
                             request.url().trim(),
                             normalized.value(),
                             normalized.hash(),
-                            request.primary()
+                            Boolean.TRUE.equals(request.primary())
                     );
                 })
                 .toList();
