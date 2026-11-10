@@ -353,4 +353,57 @@ class AiCompetitionControllerTest {
         }
         assertThat(competitions.count()).isZero();
     }
+
+    @Test
+    void singleRequestAcceptsActualAiShapeWithCategoryArrayDateOnlyAndNoPrimary() throws Exception {
+        String body = """
+                {"title":"AI 공모전 테스트 1", "hostOrganization":"OO기업", "targetParticipants":"ALL",
+                 "isForEnrolledOnly":false, "applicationStartAt":"2026-11-10", "applicationEndAt":"2026-12-10",
+                 "totalPrizeAmount":5000000, "prizeInfo":"1등상: 200만원 / 2등상: 100만원 / 3등상: 50만원",
+                 "activityKind":"CONTEST", "category":["AI_DATA","IDEA"], "isTeam":true,
+                 "summary":"AI를 활용한 아이디어 공모전",
+                 "urls":[{"type":"OFFICIAL","url":"https://example.com/real-shape-1"}]}
+                """;
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.category").value("AI_DATA"))
+                .andExpect(jsonPath("$.activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$.isForEnrolledOnly").value(false))
+                .andExpect(jsonPath("$.isTeam").value(true));
+        var saved = competitions.findAll().getFirst();
+        assertThat(saved.getCategory()).isEqualTo(com.giut.server.competition.entity.Competition.Category.AI_DATA);
+        assertThat(saved.getIsForEnrolledOnly()).isFalse();
+        assertThat(saved.getIsTeam()).isTrue();
+        assertThat(urls.findAllByCompetition_Id(saved.getId())).singleElement()
+                .satisfies(url -> assertThat(url.isPrimary()).isTrue());
+    }
+
+    @Test
+    void batchAcceptsBareArrayMatchingActualAiPayload() throws Exception {
+        String batch = """
+                [
+                  {"title":"AI 공모전 테스트 1", "hostOrganization":"OO기업", "targetParticipants":"ALL",
+                   "isForEnrolledOnly":false, "applicationStartAt":"2026-11-10", "applicationEndAt":"2026-12-10",
+                   "totalPrizeAmount":5000000, "prizeInfo":"1등상: 200만원 / 2등상: 100만원 / 3등상: 50만원",
+                   "activityKind":"CONTEST", "category":["AI_DATA","IDEA"], "isTeam":true,
+                   "summary":"AI를 활용한 아이디어 공모전",
+                   "urls":[{"type":"OFFICIAL","url":"https://example.com/batch-shape-1"}]},
+                  {"title":"AI 공모전 테스트 2", "hostOrganization":"OO재단", "targetParticipants":"UNIV_ONLY",
+                   "isForEnrolledOnly":true, "applicationStartAt":"2026-11-10", "applicationEndAt":"2026-11-20",
+                   "totalPrizeAmount":5000000, "prizeInfo":"1등상: 200만원 / 2등상: 100만원 / 3등상: 50만원",
+                   "activityKind":"HACKATHON", "category":["IT_DEVELOP"], "isTeam":true,
+                   "summary":"대학생 대상 해커톤",
+                   "urls":[{"type":"OFFICIAL","url":"https://example.com/batch-shape-2"}]}
+                ]
+                """;
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].category").value("AI_DATA"))
+                .andExpect(jsonPath("$[0].activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$[1].category").value("WEB_MOBILE_IT"))
+                .andExpect(jsonPath("$[1].activityType").value("HACKATHON"));
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(2);
+    }
 }

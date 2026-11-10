@@ -21,7 +21,9 @@ public record AdminCompetitionResponse(
         Competition.PublicationStatus publicationStatus,
         Competition.VerificationStatus verificationStatus,
         Instant verifiedAt,
-        List<CompetitionUrlResponse> urls
+        List<CompetitionUrlResponse> urls,
+        Boolean isForEnrolledOnly,
+        Boolean isTeam
 ) {
 
     public static AdminCompetitionResponse from(Competition competition, List<CompetitionUrlResponse> urls) {
@@ -41,7 +43,9 @@ public record AdminCompetitionResponse(
                 competition.getPublicationStatus(),
                 competition.getVerificationStatus(),
                 competition.getVerifiedAt(),
-                urls
+                urls,
+                competition.getIsForEnrolledOnly(),
+                competition.getIsTeam()
         );
     }
 }

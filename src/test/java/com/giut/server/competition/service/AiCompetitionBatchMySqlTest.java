@@ -88,9 +88,9 @@ class AiCompetitionBatchMySqlTest {
     }
 
     private AiCompetitionRequest request(String url) {
-        return new AiCompetitionRequest("공고", Competition.Category.AI_DATA, null, AiTargetParticipants.UNIV_ONLY, null,
+        return new AiCompetitionRequest("공고", List.of(Competition.Category.AI_DATA), null, AiTargetParticipants.UNIV_ONLY, null,
                 Instant.parse("2026-11-01T00:00:00Z"), Instant.parse("2026-12-01T00:00:00Z"),
                 List.of(new CompetitionUrlRequest(CompetitionUrl.Type.OFFICIAL, url, true)),
-                AiActivityType.HACKATHON, "대상 500만 원", 10000000L);
+                AiActivityType.HACKATHON, "대상 500만 원", 10000000L, null, null);
     }
 }

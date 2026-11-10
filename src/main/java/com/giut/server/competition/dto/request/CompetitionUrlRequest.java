@@ -18,7 +18,7 @@ public record CompetitionUrlRequest(
         @URL(message = "올바른 URL 형식이 아닙니다.")
         String url,
 
-        @Schema(description = "대표 URL 여부", example = "true")
-        boolean primary
+        @Schema(description = "대표 URL 여부. 생략하면 false로 취급합니다(AI 요청은 예외: 하나도 없으면 첫 URL을 대표로 지정).", example = "true")
+        Boolean primary
 ) {
 }

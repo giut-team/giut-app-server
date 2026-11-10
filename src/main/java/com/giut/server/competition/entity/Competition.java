@@ -52,6 +52,12 @@ public class Competition extends BaseTimeEntity {
     @Column(name = "application_end_at")
     private Instant applicationEndAt;
 
+    @Column(name = "is_for_enrolled_only")
+    private Boolean isForEnrolledOnly;
+
+    @Column(name = "is_team")
+    private Boolean isTeam;
+
     @Enumerated(EnumType.STRING) @Column(name = "publication_status", nullable = false, length = 20)
     private PublicationStatus publicationStatus;
 
@@ -148,6 +154,14 @@ public class Competition extends BaseTimeEntity {
 
     public void changeTotalPrizeAmount(Long totalPrizeAmount) {
         this.totalPrizeAmount = totalPrizeAmount;
+    }
+
+    public void changeIsForEnrolledOnly(Boolean isForEnrolledOnly) {
+        this.isForEnrolledOnly = isForEnrolledOnly;
+    }
+
+    public void changeIsTeam(Boolean isTeam) {
+        this.isTeam = isTeam;
     }
 
     /** Preserves dependent teams, scraps and review history while removing public visibility. */
