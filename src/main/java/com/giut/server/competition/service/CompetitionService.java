@@ -5,6 +5,7 @@ import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.AiCompetitionRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
@@ -108,7 +109,7 @@ public class CompetitionService {
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<PublicCompetitionResponse> getClosingSoonCompetitions() {
+    public PublicCompetitionListResponse getClosingSoonCompetitions(CompetitionPageRequest request) {
         Instant now = Instant.now();
         Instant deadline = now.plus(7, ChronoUnit.DAYS);
         Specification<Competition> specification = publishedCompetition().and((root, query, criteriaBuilder) ->
@@ -123,11 +124,18 @@ public class CompetitionService {
         )
         );
 
-        List<Competition> competitions = competitionRepository.findAll(
+        if (request.category() != null) {
+            specification = specification.and(hasCategory(request.category()));
+        }
+
+        Page<Competition> competitions = competitionRepository.findAll(
                 specification,
-                Sort.by(Sort.Direction.ASC, "applicationEndAt").and(Sort.by(Sort.Direction.DESC, "id"))
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(),
+                        Sort.by(Sort.Direction.ASC, "applicationEndAt").and(Sort.by(Sort.Direction.DESC, "id")))
         );
-        return toPublicResponses(competitions, now);
+        return new PublicCompetitionListResponse(toPublicResponses(competitions.getContent(), now),
+                competitions.getNumber(), competitions.getSize(), competitions.getTotalElements(),
+                competitions.getTotalPages(), competitions.hasNext());
     }
 
     @Transactional

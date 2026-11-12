@@ -3,6 +3,7 @@ package com.giut.server.competition.controller;
 import com.giut.server.global.dto.ResultDto;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionDetailResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionListResponse;
@@ -78,15 +79,17 @@ public class CompetitionController {
     }
 
     @GetMapping("/closing-soon")
-    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 마감 임박 순으로 조회합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
+    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 페이지 단위로 마감 임박 순, 같은 시각이면 ID 내림차순으로 조회합니다. page는 0부터 시작하며 size는 기본 10, 최대 20입니다. 선택한 category는 페이지를 나누기 전에 적용됩니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
+            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionListResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_PAGE))),
+            @ApiResponse(responseCode = "400", description = "page 또는 size 오류"),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
-    public ResponseEntity<java.util.List<PublicCompetitionResponse>> getClosingSoonCompetitions() {
-        return ResponseEntity.ok(competitionService.getClosingSoonCompetitions());
+    public ResponseEntity<PublicCompetitionListResponse> getClosingSoonCompetitions(
+            @Valid @ParameterObject @ModelAttribute CompetitionPageRequest request) {
+        return ResponseEntity.ok(competitionService.getClosingSoonCompetitions(request));
     }
 
     @GetMapping("/{competitionId}")

@@ -2,6 +2,7 @@ package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
 import com.giut.server.user.entity.User;
@@ -46,6 +47,7 @@ class CompetitionListVisibilityPersistenceTest {
     @Autowired private UserRepository users;
     @Autowired private CompetitionRepository competitions;
     @Autowired private CompetitionTop5Cache top5Cache;
+    @Autowired private CompetitionService competitionService;
     @Autowired private CompetitionScrapRepository scraps;
     private MockMvc mvc;
     private User admin;
@@ -125,11 +127,12 @@ class CompetitionListVisibilityPersistenceTest {
                 .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.DRAFT).findFirst().orElseThrow();
         top5Cache.refresh();
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
+            String listPath = endpoint.endsWith("closing-soon") ? "$.competitions" : "$";
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].id").value(published.getId()))
-                    .andExpect(jsonPath("$[0].verified").isBoolean())
-                    .andExpect(jsonPath("$[0].verified").value(expected));
+                    .andExpect(jsonPath(listPath + ".length()").value(1))
+                    .andExpect(jsonPath(listPath + "[0].id").value(published.getId()))
+                    .andExpect(jsonPath(listPath + "[0].verified").isBoolean())
+                    .andExpect(jsonPath(listPath + "[0].verified").value(expected));
         }
         mvc.perform(as(unverified, get("/api/competitions/" + published.getId())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.verified").isBoolean())
@@ -221,6 +224,106 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @Test
+    void closingSoonKeepsTimeBoundariesAndDeadlineOrder() {
+        Instant now = Instant.parse("2030-01-01T00:00:00Z");
+        Competition later = save("7일 경계", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.minusSeconds(60), now.plusSeconds(7 * 86400));
+        Competition earlier = save("마감 임박", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now.plusSeconds(1));
+        save("현재 마감", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now);
+        save("7일 초과", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now.plusSeconds(7 * 86400 + 1));
+        try (var time = org.mockito.Mockito.mockStatic(Instant.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+            time.when(Instant::now).thenReturn(now);
+            var page = competitionService.getClosingSoonCompetitions(new CompetitionPageRequest(0, 1, null));
+            assertThat(page.totalElements()).isEqualTo(2);
+            assertThat(page.hasNext()).isTrue();
+            assertThat(page.competitions()).extracting("id").containsExactly(earlier.getId());
+            var next = competitionService.getClosingSoonCompetitions(new CompetitionPageRequest(1, 1, null));
+            assertThat(next.competitions()).extracting("id").containsExactly(later.getId());
+        }
+    }
+
+    @Test
+    void closingSoonReturnsEmptyPageWhenNothingMatches() throws Exception {
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.competitions").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0))
+                .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void closingSoonPaginatesEligibleCompetitionsInDeadlineAndIdOrder() throws Exception {
+        Instant now = Instant.now();
+        List<Competition> eligible = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            eligible.add(save("마감 임박", "주최", Competition.Category.ETC,
+                    Competition.PublicationStatus.PUBLISHED, now.minusSeconds(60), now.plusSeconds(3600)));
+        }
+        Collections.reverse(eligible);
+        save("늦은 마감", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.minusSeconds(60), now.plusSeconds(86400 * 8));
+        save("모집 예정", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.plusSeconds(3600), now.plusSeconds(7200));
+        save("마감됨", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.minusSeconds(7200), now.minusSeconds(60));
+        save("마감일 없음", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.minusSeconds(60), null);
+        save("초안", "주최", Competition.Category.ETC, Competition.PublicationStatus.DRAFT,
+                now.minusSeconds(60), now.plusSeconds(3600));
+
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(10)).andExpect(jsonPath("$.totalElements").value(12))
+                .andExpect(jsonPath("$.totalPages").value(2)).andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.competitions.length()").value(10))
+                .andExpect(jsonPath("$.competitions[0].id").value(eligible.get(0).getId()))
+                .andExpect(jsonPath("$.competitions[9].id").value(eligible.get(9).getId()));
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalElements").value(12)).andExpect(jsonPath("$.hasNext").value(false))
+                .andExpect(jsonPath("$.competitions.length()").value(2))
+                .andExpect(jsonPath("$.competitions[0].id").value(eligible.get(10).getId()));
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon").param("page", "2")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.competitions").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(12));
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon").param("size", "3")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.size").value(3))
+                .andExpect(jsonPath("$.competitions.length()").value(3));
+    }
+
+    @Test
+    void closingSoonFiltersCategoryBeforePaginationAndCounting() throws Exception {
+        Instant now = Instant.now();
+        Competition first = save("개발 1", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(60), now.plusSeconds(7200));
+        save("기타", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                now.minusSeconds(60), now.plusSeconds(3600));
+        Competition second = save("개발 2", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(60), now.plusSeconds(10800));
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon").param("category", "WEB_MOBILE_IT").param("size", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2)).andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.competitions[0].id").value(first.getId()));
+        mvc.perform(as(unverified, get("/api/competitions/closing-soon").param("category", "WEB_MOBILE_IT").param("size", "1").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.hasNext").value(false))
+                .andExpect(jsonPath("$.competitions[0].id").value(second.getId()));
+    }
+
+    @Test
+    void closingSoonRejectsInvalidPagination() throws Exception {
+        for (String[] param : List.of(new String[]{"page", "-1"}, new String[]{"page", "abc"},
+                new String[]{"size", "0"}, new String[]{"size", "21"}, new String[]{"size", "abc"},
+                new String[]{"page", "2147483647"}, new String[]{"category", "INVALID"})) {
+            mvc.perform(as(unverified, get("/api/competitions/closing-soon").param(param[0], param[1])))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void top5FillsArchivedAndExpiredSpotsFromTenRankedCandidates() throws Exception {
         List<Competition> ranked = new ArrayList<>();
         for (int i = 0; i < 11; i++) ranked.add(competition(Competition.PublicationStatus.PUBLISHED));
@@ -298,10 +401,11 @@ class CompetitionListVisibilityPersistenceTest {
         competition(Competition.PublicationStatus.ARCHIVED);
         top5Cache.refresh();
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
+            String listPath = endpoint.endsWith("closing-soon") ? "$.competitions" : "$";
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].id").value(published.getId()))
-                    .andExpect(jsonPath("$[0].verified").value(false));
+                    .andExpect(jsonPath(listPath + ".length()").value(1))
+                    .andExpect(jsonPath(listPath + "[0].id").value(published.getId()))
+                    .andExpect(jsonPath(listPath + "[0].verified").value(false));
         }
         mvc.perform(as(unverified, get("/api/competitions/" + draft.getId())))
                 .andExpect(status().isNotFound());
