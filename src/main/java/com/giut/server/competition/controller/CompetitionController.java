@@ -66,7 +66,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/top5")
-    @Operation(summary = "인기 공모전 Top 5 조회", description = "마감 일시가 현재보다 미래인 게시 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 순위와 집계 정보는 5분 간격으로 갱신되며 게시 취소와 마감된 항목은 다음 요청부터 제외하며 다음 갱신 전까지 5개 미만일 수 있습니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
+    @Operation(summary = "인기 공모전 Top 5 조회", description = "마감 일시가 현재보다 미래인 게시 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 순위와 집계 정보는 1시간 간격으로 갱신되며 게시 취소와 마감된 항목은 다음 요청부터 제외하며 다음 갱신 전까지 5개 미만일 수 있습니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),

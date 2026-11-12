@@ -32,7 +32,7 @@ public class CompetitionTop5Cache {
         if (snapshot.get() == null) refresh();
     }
 
-    @Scheduled(initialDelay = 300_000, fixedRate = 300_000)
+    @Scheduled(initialDelay = 3_600_000, fixedRate = 3_600_000)
     public void refresh() {
         // tryLock: 이미 갱신 중이면(겹친 스케줄 실행, 또는 기동 시 warmUp과 첫 요청이 동시에 탐) 대기하지 않고 그냥 건너뛴다.
         if (!refreshLock.tryLock()) return;
