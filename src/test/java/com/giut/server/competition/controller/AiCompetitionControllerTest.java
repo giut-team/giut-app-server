@@ -27,6 +27,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import java.util.List;
+
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:giut_ai_ingestion;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
@@ -60,6 +62,20 @@ class AiCompetitionControllerTest {
         urls.deleteAll();
         competitions.deleteAll();
         users.deleteAll();
+    }
+
+    @Test
+    void singleAndBatchRejectMissingOrNullDeadline() throws Exception {
+        for (String body : List.of(
+                BODY.replace("\"applicationEndAt\":\"2026-12-01T00:00:00Z\",", ""),
+                BODY.replace("\"applicationEndAt\":\"2026-12-01T00:00:00Z\"", "\"applicationEndAt\":null"))) {
+            mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"competitions\":[" + BODY + "," + body + "]}"))
+                    .andExpect(status().isBadRequest());
+            assertThat(competitions.count()).isZero();
+        }
     }
 
     @Test

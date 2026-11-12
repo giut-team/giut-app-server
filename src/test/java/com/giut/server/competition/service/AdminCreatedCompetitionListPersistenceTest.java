@@ -31,6 +31,7 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
@@ -90,7 +91,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     void prizeInformationIsRetainedOnLegacyUpdateAndCanBeCleared() throws Exception {
         String body = """
                 {"title":"상금", "category":"WEB_MOBILE_IT", "summary":"소개",
-                 "publicationStatus":"PUBLISHED",
+                 "publicationStatus":"PUBLISHED", "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/prize","primary":true}]}
                 """;
         String withPrize = body.replace("\"title\":\"상금\",", "\"prizeInfo\":\"대상 500만 원\",\"title\":\"상금\",");
@@ -108,7 +109,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     void adminCanCreateAndUpdateTotalPrizeWhileLegacyUpdatesKeepIt() throws Exception {
         String body = """
                 {"title":"총상금", "category":"WEB_MOBILE_IT", "summary":"소개",
-                 "publicationStatus":"PUBLISHED",
+                 "publicationStatus":"PUBLISHED", "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/total-prize","primary":true}]}
                 """;
         String create = body.replace("\"title\":\"총상금\",", "\"totalPrizeAmount\":10000000,\"title\":\"총상금\",");
@@ -128,7 +129,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     void activityTypeCanBeSetFilteredAndLegacyUpdatePreservesIt() throws Exception {
         String body = """
                 {"title":"행사", "category":"WEB_MOBILE_IT", "summary":"소개",
-                 "publicationStatus":"PUBLISHED",
+                 "publicationStatus":"PUBLISHED", "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/activity","primary":true}]}
                 """;
         String withType = body.replace("\"title\":\"행사\",", "\"title\":\"행사\",\"activityType\":\"EDUCATION_PROGRAM\",");
@@ -147,7 +148,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     void creationPostIsImmediatelyListedWithAdminFieldsAndUrlsWithoutIncrementingViews() throws Exception {
         mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content("""
                 {"title":"관리자 생성", "category":"WEB_MOBILE_IT", "summary":"소개",
-                 "targetParticipants":"대학생", "publicationStatus":"DRAFT",
+                 "targetParticipants":"대학생", "publicationStatus":"DRAFT", "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/created-post","primary":true}]}
                 """))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("COMPETITION"))
@@ -226,6 +227,27 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void creationAndUpdateRequireDeadlineWithoutChangingStoredDataOnFailure() throws Exception {
+        String valid = creationBody("DRAFT", "null");
+        String missing = valid.replace("\"applicationEndAt\":\"2099-01-01T00:00:00Z\",", "");
+        String nullDeadline = valid.replace("\"applicationEndAt\":\"2099-01-01T00:00:00Z\"", "\"applicationEndAt\":null");
+        for (String invalid : List.of(missing, nullDeadline)) {
+            mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(invalid))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(competitions.count()).isZero();
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(valid))
+                .andExpect(status().isCreated());
+        Competition saved = competitions.findAll().getFirst();
+        for (String invalid : List.of(missing, nullDeadline)) {
+            mvc.perform(as(admin, put(PATH + "/" + saved.getId())).contentType(MediaType.APPLICATION_JSON).content(invalid))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(competitions.findById(saved.getId()).orElseThrow().getApplicationEndAt())
+                .isEqualTo(Instant.parse("2099-01-01T00:00:00Z"));
+    }
+
+    @Test
     void existingFieldValidationStillRejectsWithoutPartialWrites() throws Exception {
         String valid = creationBody("DRAFT", "\"UNVERIFIED\"");
         for (String body : List.of(
@@ -235,7 +257,7 @@ class AdminCreatedCompetitionListPersistenceTest {
                 valid.replace("https://example.com/verification-create", "not-a-url"),
                 valid.replace("\"primary\":true", "\"primary\":false"),
                 valid.replace("\"publicationStatus\":\"DRAFT\"", "\"publicationStatus\":null"),
-                valid.replace("\"summary\":\"소개\"", "\"summary\":\"소개\",\"applicationStartAt\":\"2026-10-24T12:00:00Z\",\"applicationEndAt\":\"2026-10-23T12:00:00Z\""))) {
+                valid.replace("2099-01-01T00:00:00Z", "2026-10-23T12:00:00Z").replace("\"summary\":\"소개\"", "\"summary\":\"소개\",\"applicationStartAt\":\"2026-10-24T12:00:00Z\""))) {
             mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
             assertThat(competitions.count()).isZero();
@@ -472,7 +494,7 @@ class AdminCreatedCompetitionListPersistenceTest {
 
     private String creationBody(String publicationStatus, String verificationJson) {
         return "{\"title\":\"상태 선택\",\"category\":\"WEB_MOBILE_IT\",\"summary\":\"소개\","
-                + "\"publicationStatus\":\"" + publicationStatus + "\",\"verificationStatus\":" + verificationJson + ","
+                + "\"applicationEndAt\":\"2099-01-01T00:00:00Z\",\"publicationStatus\":\"" + publicationStatus + "\",\"verificationStatus\":" + verificationJson + ","
                 + "\"urls\":[{\"type\":\"RECRUITMENT\",\"url\":\"https://example.com/verification-create\",\"primary\":true}]}";
     }
 
@@ -481,7 +503,7 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     private UpsertCompetitionRequest request(String title, Competition.Category category, Competition.PublicationStatus state) {
-        return new UpsertCompetitionRequest(title, category, "검색주최", "대학생", "소개", null, null, state,
+        return new UpsertCompetitionRequest(title, category, "검색주최", "대학생", "소개", null, Instant.parse("2099-01-01T00:00:00Z"), state,
                 List.of(new CompetitionUrlRequest(CompetitionUrl.Type.RECRUITMENT,
                         "https://example.com/created/" + (++urlSequence), true)));
     }

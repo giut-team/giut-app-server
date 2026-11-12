@@ -67,7 +67,8 @@ public class CompetitionService {
     @Transactional(Transactional.TxType.SUPPORTS)
     public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = listedCompetition();
+        Specification<Competition> specification = listedCompetition().and(
+                (root, query, builder) -> builder.greaterThan(root.get("applicationEndAt"), now));
 
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
@@ -102,7 +103,7 @@ public class CompetitionService {
     public List<PublicCompetitionResponse> getTop5Competitions() {
         Instant now = Instant.now();
         List<Competition> competitions = competitionRepository
-                .findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name());
+                .findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), now);
         return toPublicResponses(competitions, now);
     }
 
@@ -546,6 +547,9 @@ public class CompetitionService {
     }
 
     private void validateRequest(UpsertCompetitionRequest request) {
+        if (request.applicationEndAt() == null) {
+            throw new IllegalArgumentException("모집 마감 일시는 필수입니다.");
+        }
         if (request.applicationStartAt() != null
                 && request.applicationEndAt() != null
                 && !request.applicationEndAt().isAfter(request.applicationStartAt())) {

@@ -64,24 +64,15 @@ class CompetitionRecruitmentDeadlineTest {
         assertDetailIncludesTeam(publishedCompetition(null), "OPEN");
     }
 
-    @ParameterizedTest
-    @ValueSource(longs = {-1, 0})
-    void listCountsRecruitingTeamsRegardlessOfCompetitionDeadline(long offsetSeconds) {
+    @Test
+    void listCountsRecruitingTeamsForReturnedCompetitions() {
         when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(
-                        competition(1L, NOW.plusNanos(1)),
-                        competition(2L, NOW.plusSeconds(offsetSeconds)),
-                        competition(3L, null))));
-        var counts = List.of(teamCount(1L, 2L), teamCount(2L, 3L), teamCount(3L, 1L));
-        when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L, 2L, 3L), Team.Status.RECRUITING))
-                .thenReturn(counts);
-
+                .thenReturn(new PageImpl<>(List.of(competition(1L, NOW.plusSeconds(1)))));
+        var count = teamCount(1L, 2L);
+        when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L), Team.Status.RECRUITING))
+                .thenReturn(List.of(count));
         var response = atFixedNow(() -> competitionService.getCompetitions(searchRequest()));
-
-        assertThat(response.competitions()).extracting("id").containsExactly(1L, 2L, 3L);
-        assertThat(response.competitions()).extracting("teamCount").containsExactly(2L, 3L, 1L);
-        verify(competitionTeamRepository)
-                .countByCompetitionIdsAndStatus(List.of(1L, 2L, 3L), Team.Status.RECRUITING);
+        assertThat(response.competitions()).extracting("teamCount").containsExactly(2L);
     }
 
     @Test
@@ -96,9 +87,9 @@ class CompetitionRecruitmentDeadlineTest {
     }
 
     @Test
-    void top5CountsRecruitingTeamsRegardlessOfCompetitionDeadline() {
-        when(competitionRepository.findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name()))
-                .thenReturn(List.of(competition(1L, NOW.plusSeconds(1)), competition(2L, NOW)));
+    void top5CountsRecruitingTeamsForReturnedCompetitions() {
+        when(competitionRepository.findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), NOW))
+                .thenReturn(List.of(competition(1L, NOW.plusSeconds(1)), competition(2L, NOW.plusSeconds(2))));
         var counts = List.of(teamCount(1L, 2L), teamCount(2L, 1L));
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L, 2L), Team.Status.RECRUITING))
                 .thenReturn(counts);

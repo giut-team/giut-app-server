@@ -33,6 +33,7 @@ public record CreateCompetitionRequest(
         String summary,
 
         Instant applicationStartAt,
+        @NotNull(message = "모집 마감 일시는 필수입니다.")
         Instant applicationEndAt,
 
         @Schema(description = "게시 상태", example = "DRAFT")

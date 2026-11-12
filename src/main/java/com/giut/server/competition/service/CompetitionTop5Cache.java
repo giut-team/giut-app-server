@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Set;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -53,7 +54,7 @@ public class CompetitionTop5Cache {
         // Query current DB state: do not expose unpublished/deleted entries from a stale snapshot.
         Set<Long> published = Set.copyOf(competitionRepository.findPublishedIds(
                 cached.stream().map(PublicCompetitionResponse::id).toList(),
-                Competition.PublicationStatus.PUBLISHED));
+                Competition.PublicationStatus.PUBLISHED, Instant.now()));
         return cached.stream().filter(item -> published.contains(item.id())).toList();
     }
 

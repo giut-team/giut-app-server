@@ -42,7 +42,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "DRAFT와 PUBLISHED 상태의 공모전을 페이지 단위로 조회합니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
+            description = "마감 일시가 현재보다 미래인 DRAFT와 PUBLISHED 공모전을 페이지 단위로 조회합니다. 마감 일시가 없거나 마감된 공모전은 제외합니다. CLOSED 필터 결과는 현재 비어 있습니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -66,7 +66,7 @@ public class CompetitionController {
     }
 
     @GetMapping("/top5")
-    @Operation(summary = "인기 공모전 Top 5 조회", description = "게시된 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 순위와 집계 정보는 5분 간격으로 갱신되며 게시 취소는 다음 요청부터 제외합니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
+    @Operation(summary = "인기 공모전 Top 5 조회", description = "마감 일시가 현재보다 미래인 게시 공모전 중 0.3 × LOG(1 + 조회수) + 0.7 × LOG(1 + 스크랩 수) 점수가 높은 상위 5개를 조회합니다. 순위와 집계 정보는 5분 간격으로 갱신되며 게시 취소와 마감된 항목은 다음 요청부터 제외하며 다음 갱신 전까지 5개 미만일 수 있습니다. 점수가 같으면 조회수가 높은 공모전을 우선합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "인기 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),

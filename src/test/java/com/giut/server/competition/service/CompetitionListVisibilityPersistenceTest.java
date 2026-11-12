@@ -144,11 +144,11 @@ class CompetitionListVisibilityPersistenceTest {
     void keywordTreatsLikeMetacharactersAsLiteralInTitleAndHost() throws Exception {
         for (String keyword : List.of("100%", "A_B", "느낌!", "경로\\파일")) {
             Competition title = save("제목 " + keyword, "주최", Competition.Category.ETC,
-                    Competition.PublicationStatus.DRAFT, null, null);
+                    Competition.PublicationStatus.DRAFT, null, Instant.now().plusSeconds(3600));
             Competition host = save("일반 제목", "기관 " + keyword, Competition.Category.ETC,
-                    Competition.PublicationStatus.PUBLISHED, null, null);
+                    Competition.PublicationStatus.PUBLISHED, null, Instant.now().plusSeconds(3600));
             save("제목 1000 A0B 느낌표 경로파일", "일반 기관", Competition.Category.ETC,
-                    Competition.PublicationStatus.PUBLISHED, null, null);
+                    Competition.PublicationStatus.PUBLISHED, null, Instant.now().plusSeconds(3600));
 
             mvc.perform(as(verified, get("/api/competitions").param("keyword", keyword)))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
@@ -187,7 +187,7 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"UPCOMING", "OPEN", "CLOSED"})
+    @ValueSource(strings = {"UPCOMING", "OPEN"})
     void keywordCategoryAndRecruitmentFiltersRemainAndConditionsForBothStates(String status) throws Exception {
         Instant now = Instant.now();
         Instant start = "UPCOMING".equals(status) ? now.plusSeconds(3600) : now.minusSeconds(7200);
@@ -218,6 +218,50 @@ class CompetitionListVisibilityPersistenceTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.hasNext").value(false))
                 .andExpect(jsonPath("$.competitions[0].id").value(draft.getId()));
+    }
+
+    @Test
+    void top5DeadlineBoundaryUsesStrictlyLaterThanNow() {
+        Instant now = Instant.parse("2090-01-01T00:00:00Z");
+        Competition before = save("이전", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now.minusSeconds(1));
+        Competition at = save("동일", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now);
+        Competition after = save("이후", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, now.plusSeconds(1));
+        Competition noDeadline = save("없음", "주최", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED,
+                null, null);
+        assertThat(competitions.findPublishedIds(List.of(before.getId(), at.getId(), after.getId(), noDeadline.getId()),
+                Competition.PublicationStatus.PUBLISHED, now)).containsExactly(after.getId());
+        assertThat(competitions.findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), now))
+                .extracting(Competition::getId).containsExactly(after.getId());
+    }
+
+    @Test
+    void hidesExpiredAndMissingDeadlinesFromListsButKeepsPublishedDetails() throws Exception {
+        Instant now = Instant.now();
+        Competition active = save("진행", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(7200));
+        Competition expired = save("종료", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(7200), now.minusSeconds(3600));
+        Competition missing = save("마감 미정", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(7200), null);
+        top5Cache.refresh();
+        mvc.perform(as(verified, get("/api/competitions"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(active.getId()));
+        mvc.perform(as(verified, get("/api/competitions").param("status", "CLOSED")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(as(verified, get("/api/competitions/top5"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(active.getId()));
+        mvc.perform(as(verified, get("/api/competitions/" + expired.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.recruitmentStatus").value("CLOSED"));
+        mvc.perform(as(verified, get("/api/competitions/" + missing.getId()))).andExpect(status().isOk());
+
+        org.springframework.test.util.ReflectionTestUtils.setField(active, "applicationEndAt", now.minusSeconds(1));
+        competitions.saveAndFlush(active);
+        mvc.perform(as(verified, get("/api/competitions/top5")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test

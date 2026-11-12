@@ -293,7 +293,7 @@ class AdminCompetitionDeletePersistenceTest {
 
     private String updateBody() {
         return "{\"title\":\"수정 제목\",\"category\":\"WEB_MOBILE_IT\",\"summary\":\"수정 소개\","
-                + "\"publicationStatus\":\"PUBLISHED\",\"urls\":[{\"type\":\"RECRUITMENT\","
+                + "\"applicationEndAt\":\"2099-01-01T00:00:00Z\",\"publicationStatus\":\"PUBLISHED\",\"urls\":[{\"type\":\"RECRUITMENT\","
                 + "\"url\":\"https://example.com/updated\",\"primary\":true}]}";
     }
 

@@ -27,7 +27,7 @@ class CompetitionTop5CacheTest {
         var first = item(1L);
         var second = item(2L);
         when(loader.getTop5Competitions()).thenReturn(List.of(first, second));
-        when(repository.findPublishedIds(List.of(1L, 2L), Competition.PublicationStatus.PUBLISHED))
+        when(repository.findPublishedIds(eq(List.of(1L, 2L)), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenReturn(List.of(1L, 2L), List.of(2L));
         cache.warmUp();
         assertThat(cache.getPublishedTop5()).containsExactly(first, second);
@@ -41,7 +41,7 @@ class CompetitionTop5CacheTest {
         var second = item(2L);
         when(loader.getTop5Competitions()).thenReturn(List.of(first))
                 .thenThrow(new IllegalStateException("db failure")).thenReturn(List.of(second));
-        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED)))
+        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenAnswer(call -> call.getArgument(0));
         cache.refresh();
         cache.refresh();
@@ -55,7 +55,7 @@ class CompetitionTop5CacheTest {
         var first = item(1L);
         when(loader.getTop5Competitions()).thenThrow(new IllegalStateException("startup"))
                 .thenReturn(List.of(first));
-        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED)))
+        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenThrow(new IllegalStateException("status unavailable"));
         cache.warmUp();
         assertThatThrownBy(cache::getPublishedTop5).hasMessage("status unavailable");
@@ -81,7 +81,7 @@ class CompetitionTop5CacheTest {
             if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("timeout");
             return List.of(first);
         });
-        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED)))
+        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenReturn(List.of(1L));
         try (var pool = Executors.newFixedThreadPool(2)) {
             var one = pool.submit(cache::getPublishedTop5);
