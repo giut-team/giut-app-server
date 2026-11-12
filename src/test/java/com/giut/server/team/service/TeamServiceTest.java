@@ -31,9 +31,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -42,7 +39,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,8 +49,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
-import static org.mockito.Mockito.mockStatic;
 
 @ExtendWith(MockitoExtension.class)
 class TeamServiceTest {
@@ -77,8 +71,6 @@ class TeamServiceTest {
         User leader = mock(User.class);
         Competition competition = mock(Competition.class);
         when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
-        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.PUBLISHED);
-        when(competition.getApplicationEndAt()).thenReturn(Instant.now().plusSeconds(3600));
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
         when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
@@ -91,12 +83,9 @@ class TeamServiceTest {
 
     @Test
     void createsTeamWhenNoRecruitingTeamExists() {
-        Instant now = Instant.parse("2026-11-12T12:00:00Z");
         User leader = mock(User.class);
         Competition competition = mock(Competition.class);
         when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
-        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.PUBLISHED);
-        when(competition.getApplicationEndAt()).thenReturn(now.plusNanos(1));
         when(leader.getId()).thenReturn(12L);
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
@@ -107,10 +96,7 @@ class TeamServiceTest {
             return team;
         });
 
-        try (var time = mockStatic(Instant.class, CALLS_REAL_METHODS)) {
-            time.when(Instant::now).thenReturn(now);
-            assertEquals(10L, teamService.createTeam(12L, createRequest(1L)).teamId());
-        }
+        assertEquals(10L, teamService.createTeam(12L, createRequest(1L)).teamId());
         verify(teamRepository).existsByCompetition_IdAndLeader_IdAndStatus(
                 1L, 12L, Team.Status.RECRUITING);
         verify(teamMemberRepository).save(any(TeamMember.class));
@@ -126,52 +112,6 @@ class TeamServiceTest {
         when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.ARCHIVED);
 
         assertThrows(ResourceNotFoundException.class, () -> teamService.createTeam(12L, createRequest(1L)));
-        verify(teamRepository, never()).save(any(Team.class));
-        verify(teamMemberRepository, never()).save(any(TeamMember.class));
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = Competition.PublicationStatus.class, names = {"DRAFT", "REJECTED", "ARCHIVED"})
-    void cannotCreateTeamForNonPublishedCompetition(Competition.PublicationStatus state) {
-        User leader = mock(User.class);
-        Competition competition = mock(Competition.class);
-        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
-        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
-        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
-        when(competition.getPublicationStatus()).thenReturn(state);
-        assertThrows(ResourceNotFoundException.class, () -> teamService.createTeam(12L, createRequest(1L)));
-        verify(teamRepository, never()).save(any(Team.class));
-        verify(teamMemberRepository, never()).save(any(TeamMember.class));
-    }
-
-    @ParameterizedTest
-    @ValueSource(longs = {-1, 0})
-    void rejectsAtOrAfterDeadline(long offsetSeconds) {
-        Instant now = Instant.parse("2026-11-12T12:00:00Z");
-        User leader = mock(User.class);
-        Competition competition = mock(Competition.class);
-        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
-        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
-        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
-        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.PUBLISHED);
-        when(competition.getApplicationEndAt()).thenReturn(now.plusSeconds(offsetSeconds));
-        try (var time = mockStatic(Instant.class, CALLS_REAL_METHODS)) {
-            time.when(Instant::now).thenReturn(now);
-            assertThrows(ConflictException.class, () -> teamService.createTeam(12L, createRequest(1L)));
-        }
-        verify(teamRepository, never()).save(any(Team.class));
-        verify(teamMemberRepository, never()).save(any(TeamMember.class));
-    }
-
-    @Test
-    void rejectsLegacyCompetitionWithoutDeadline() {
-        User leader = mock(User.class);
-        Competition competition = mock(Competition.class);
-        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
-        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
-        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
-        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.PUBLISHED);
-        assertThrows(ConflictException.class, () -> teamService.createTeam(12L, createRequest(1L)));
         verify(teamRepository, never()).save(any(Team.class));
         verify(teamMemberRepository, never()).save(any(TeamMember.class));
     }

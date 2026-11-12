@@ -229,30 +229,6 @@ class AdminCompetitionDeletePersistenceTest {
     }
 
     @Test
-    void teamCreationStopsAfterDeadlineWhileExistingTeamAndChatRemainAvailable() throws Exception {
-        Competition competition = competition(Competition.PublicationStatus.PUBLISHED);
-        String request = "{\"competitionId\":" + competition.getId() + ",\"name\":\"기존 팀\","
-                + "\"activityMode\":\"ONLINE\",\"maxMemberCount\":4,\"weeklyMeetingCount\":1,"
-                + "\"meetingPlace\":\"ANYWHERE\",\"recruitments\":[],\"applicationQuestions\":[]}";
-        mvc.perform(as(student, post("/api/teams")).contentType(MediaType.APPLICATION_JSON).content(request))
-                .andExpect(status().isCreated());
-        Team existing = teams.findAll().getFirst();
-        ChatRoom room = rooms.saveAndFlush(ChatRoom.createTeamRoom(existing.getId()));
-
-        ReflectionTestUtils.setField(competition, "applicationEndAt", Instant.now().minusSeconds(10));
-        competitions.saveAndFlush(competition);
-        mvc.perform(as(student, post("/api/teams")).contentType(MediaType.APPLICATION_JSON).content(request))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("마감")));
-        mvc.perform(as(student, get("/api/teams/" + existing.getId())))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.teamId").value(existing.getId()))
-                .andExpect(jsonPath("$.status").value("RECRUITING"));
-        assertThat(teams.count()).isEqualTo(1);
-        assertThat(members.count()).isEqualTo(1);
-        assertThat(rooms.findById(room.getId()).orElseThrow().getStatus()).isEqualTo(ChatRoom.Status.ACTIVE);
-    }
-
-    @Test
     void creatingNewTeamAfterDeletionIsRejectedWithoutPartialWrites() throws Exception {
         Competition target = competition(Competition.PublicationStatus.PUBLISHED);
         mvc.perform(as(admin, delete(path(target)))).andExpect(status().isNoContent());

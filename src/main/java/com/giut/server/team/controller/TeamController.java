@@ -86,7 +86,7 @@ public class TeamController {
     @PostMapping
     @Operation(
             summary = "팀 생성",
-            description = "공개 상태이고 모집 마감 시각이 지나지 않은 공모전에 팀을 생성합니다. 마감 시각이 없거나 현재 시각과 같으면 생성할 수 없습니다. 기존 팀은 유지됩니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다."
+            description = "대회에 참여할 팀을 생성합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -116,7 +116,7 @@ public class TeamController {
             ),
             @ApiResponse(
                     responseCode = "409",
-                    description = "모집 마감일이 없거나 마감됐거나 같은 공모전에 이미 모집 중인 팀이 있음",
+                    description = "같은 공모전에 이미 모집 중인 팀이 있음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"이 공모전에 이미 모집 중인 팀이 있습니다.\",\"code\":409}"))
             ),
             @ApiResponse(
