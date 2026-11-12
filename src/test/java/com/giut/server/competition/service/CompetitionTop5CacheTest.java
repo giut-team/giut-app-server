@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,23 +24,41 @@ class CompetitionTop5CacheTest {
     private final CompetitionTop5Cache cache = new CompetitionTop5Cache(loader, repository);
 
     @Test
+    void replacesUnavailableTopFiveFromCachedCandidatesWithoutRecalculating() {
+        var candidates = LongStream.rangeClosed(1, 10).mapToObj(CompetitionTop5CacheTest::item).toList();
+        when(loader.getTop10Candidates()).thenReturn(candidates);
+        when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
+                .thenReturn(List.of(10L, 9L, 8L, 7L, 6L, 5L, 4L, 3L, 2L, 1L),
+                        List.of(10L, 9L, 8L, 7L, 6L, 5L, 4L, 3L),
+                        List.of(10L, 9L, 8L, 7L));
+
+        assertThat(cache.getPublishedTop5()).extracting(PublicCompetitionResponse::id)
+                .containsExactly(1L, 2L, 3L, 4L, 5L);
+        assertThat(cache.getPublishedTop5()).extracting(PublicCompetitionResponse::id)
+                .containsExactly(3L, 4L, 5L, 6L, 7L);
+        assertThat(cache.getPublishedTop5()).extracting(PublicCompetitionResponse::id)
+                .containsExactly(7L, 8L, 9L, 10L);
+        verify(loader, times(1)).getTop10Candidates();
+    }
+
+    @Test
     void cacheIsReusedAndUnpublishedEntriesAreFilteredImmediately() {
         var first = item(1L);
         var second = item(2L);
-        when(loader.getTop5Competitions()).thenReturn(List.of(first, second));
+        when(loader.getTop10Candidates()).thenReturn(List.of(first, second));
         when(repository.findPublishedIds(eq(List.of(1L, 2L)), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenReturn(List.of(1L, 2L), List.of(2L));
         cache.warmUp();
         assertThat(cache.getPublishedTop5()).containsExactly(first, second);
         assertThat(cache.getPublishedTop5()).containsExactly(second);
-        verify(loader, times(1)).getTop5Competitions();
+        verify(loader, times(1)).getTop10Candidates();
     }
 
     @Test
     void failedRefreshKeepsPreviousSnapshotAndNextRefreshCanUpdateIt() {
         var first = item(1L);
         var second = item(2L);
-        when(loader.getTop5Competitions()).thenReturn(List.of(first))
+        when(loader.getTop10Candidates()).thenReturn(List.of(first))
                 .thenThrow(new IllegalStateException("db failure")).thenReturn(List.of(second));
         when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenAnswer(call -> call.getArgument(0));
@@ -53,22 +72,22 @@ class CompetitionTop5CacheTest {
     @Test
     void initialFailureIsRetriedAndVisibilityFailureDoesNotReturnStaleData() {
         var first = item(1L);
-        when(loader.getTop5Competitions()).thenThrow(new IllegalStateException("startup"))
+        when(loader.getTop10Candidates()).thenThrow(new IllegalStateException("startup"))
                 .thenReturn(List.of(first));
         when(repository.findPublishedIds(any(), eq(Competition.PublicationStatus.PUBLISHED), any()))
                 .thenThrow(new IllegalStateException("status unavailable"));
         cache.warmUp();
         assertThatThrownBy(cache::getPublishedTop5).hasMessage("status unavailable");
-        verify(loader, times(2)).getTop5Competitions();
+        verify(loader, times(2)).getTop10Candidates();
     }
 
     @Test
     void emptyResultIsAValidSnapshot() {
-        when(loader.getTop5Competitions()).thenReturn(List.of());
+        when(loader.getTop10Candidates()).thenReturn(List.of());
         cache.warmUp();
         assertThat(cache.getPublishedTop5()).isEmpty();
         verifyNoInteractions(repository);
-        verify(loader, times(1)).getTop5Competitions();
+        verify(loader, times(1)).getTop10Candidates();
     }
 
     @Test
@@ -76,7 +95,7 @@ class CompetitionTop5CacheTest {
         var first = item(1L);
         var entered = new CountDownLatch(1);
         var release = new CountDownLatch(1);
-        when(loader.getTop5Competitions()).thenAnswer(call -> {
+        when(loader.getTop10Candidates()).thenAnswer(call -> {
             entered.countDown();
             if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("timeout");
             return List.of(first);
@@ -91,7 +110,7 @@ class CompetitionTop5CacheTest {
             assertThat(one.get(5, TimeUnit.SECONDS)).containsExactly(first);
             assertThat(two.get(5, TimeUnit.SECONDS)).containsExactly(first);
         }
-        verify(loader, times(1)).getTop5Competitions();
+        verify(loader, times(1)).getTop10Candidates();
     }
 
     private static PublicCompetitionResponse item(long id) {

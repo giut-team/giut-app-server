@@ -88,13 +88,13 @@ class CompetitionRecruitmentDeadlineTest {
 
     @Test
     void top5CountsRecruitingTeamsForReturnedCompetitions() {
-        when(competitionRepository.findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), NOW))
+        when(competitionRepository.findTop10ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), NOW))
                 .thenReturn(List.of(competition(1L, NOW.plusSeconds(1)), competition(2L, NOW.plusSeconds(2))));
         var counts = List.of(teamCount(1L, 2L), teamCount(2L, 1L));
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L, 2L), Team.Status.RECRUITING))
                 .thenReturn(counts);
 
-        var response = atFixedNow(competitionService::getTop5Competitions);
+        var response = atFixedNow(competitionService::getTop10Candidates);
 
         assertThat(response).extracting("teamCount").containsExactly(2L, 1L);
     }

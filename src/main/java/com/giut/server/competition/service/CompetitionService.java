@@ -100,10 +100,10 @@ public class CompetitionService {
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<PublicCompetitionResponse> getTop5Competitions() {
+    public List<PublicCompetitionResponse> getTop10Candidates() {
         Instant now = Instant.now();
         List<Competition> competitions = competitionRepository
-                .findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), now);
+                .findTop10ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), now);
         return toPublicResponses(competitions, now);
     }
 

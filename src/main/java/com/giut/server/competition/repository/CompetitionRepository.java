@@ -36,9 +36,9 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long>,
                      competition.view_count DESC,
                      COUNT(scrap.id) DESC,
                      competition.id DESC
-            LIMIT 5
+            LIMIT 10
             """, nativeQuery = true)
-    List<Competition> findTop5ByPopularity(@Param("publicationStatus") String publicationStatus, @Param("now") Instant now);
+    List<Competition> findTop10ByPopularity(@Param("publicationStatus") String publicationStatus, @Param("now") Instant now);
 
     @Query("select c.id from Competition c where c.id in :ids and c.publicationStatus = :status and c.applicationEndAt > :now")
     List<Long> findPublishedIds(@Param("ids") List<Long> ids,

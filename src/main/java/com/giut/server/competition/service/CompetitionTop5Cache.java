@@ -37,7 +37,7 @@ public class CompetitionTop5Cache {
         // tryLock: 이미 갱신 중이면(겹친 스케줄 실행, 또는 기동 시 warmUp과 첫 요청이 동시에 탐) 대기하지 않고 그냥 건너뛴다.
         if (!refreshLock.tryLock()) return;
         try {
-            snapshot.set(List.copyOf(competitionService.getTop5Competitions()));
+            snapshot.set(List.copyOf(competitionService.getTop10Candidates()));
         } catch (RuntimeException e) {
             // 집계 쿼리 실패 시 캐시를 비우지 않고 직전 성공 스냅샷을 그대로 유지한다.
             log.warn("인기 공모전 캐시 갱신 실패: 기존 결과를 유지합니다.", e);
@@ -55,7 +55,7 @@ public class CompetitionTop5Cache {
         Set<Long> published = Set.copyOf(competitionRepository.findPublishedIds(
                 cached.stream().map(PublicCompetitionResponse::id).toList(),
                 Competition.PublicationStatus.PUBLISHED, Instant.now()));
-        return cached.stream().filter(item -> published.contains(item.id())).toList();
+        return cached.stream().filter(item -> published.contains(item.id())).limit(5).toList();
     }
 
     private List<PublicCompetitionResponse> loadInitialSnapshot() {
@@ -65,7 +65,7 @@ public class CompetitionTop5Cache {
         try {
             List<PublicCompetitionResponse> cached = snapshot.get();
             if (cached == null) {
-                cached = List.copyOf(competitionService.getTop5Competitions());
+                cached = List.copyOf(competitionService.getTop10Candidates());
                 snapshot.set(cached);
             }
             return cached;
