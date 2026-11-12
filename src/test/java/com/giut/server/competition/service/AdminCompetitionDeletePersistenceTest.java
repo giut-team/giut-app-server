@@ -106,6 +106,31 @@ class AdminCompetitionDeletePersistenceTest {
     }
 
     @Test
+    void profileCountsOnlyPublishedCompetitionScrapsAndKeepsArchivedRecords() throws Exception {
+        Competition target = competition(Competition.PublicationStatus.PUBLISHED);
+        Competition draft = competition(Competition.PublicationStatus.DRAFT);
+        Competition rejected = competition(Competition.PublicationStatus.REJECTED);
+        Competition expired = competitions.saveAndFlush(Competition.create("모집 종료", Competition.Category.WEB_MOBILE_IT,
+                "주최", "대학생", "소개", Instant.now().minusSeconds(7200),
+                Instant.now().minusSeconds(3600), Competition.PublicationStatus.PUBLISHED,
+                Competition.VerificationStatus.UNVERIFIED, null));
+        CompetitionScrap saved = scraps.saveAndFlush(CompetitionScrap.create(student, target));
+        scraps.saveAndFlush(CompetitionScrap.create(student, draft));
+        scraps.saveAndFlush(CompetitionScrap.create(student, rejected));
+        scraps.saveAndFlush(CompetitionScrap.create(student, expired));
+        scraps.saveAndFlush(CompetitionScrap.create(admin, target));
+
+        mvc.perform(as(student, get("/api/userprofile/me/profile"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.competitionScrapCount").value(2))
+                .andExpect(jsonPath("$.summary.scrapCount").value(2));
+        mvc.perform(as(admin, delete(path(target)))).andExpect(status().isNoContent());
+        mvc.perform(as(student, get("/api/userprofile/me/profile"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.competitionScrapCount").value(1))
+                .andExpect(jsonPath("$.summary.scrapCount").value(1));
+        assertThat(scraps.findById(saved.getId())).isPresent();
+    }
+
+    @Test
     void removesPublicVisibilityButPreservesAllRelatedFixturesAndOtherCompetitions() throws Exception {
         Competition target = competition(Competition.PublicationStatus.PUBLISHED);
         Competition other = competition(Competition.PublicationStatus.PUBLISHED);
@@ -268,7 +293,7 @@ class AdminCompetitionDeletePersistenceTest {
 
     private String updateBody() {
         return "{\"title\":\"수정 제목\",\"category\":\"WEB_MOBILE_IT\",\"summary\":\"수정 소개\","
-                + "\"publicationStatus\":\"PUBLISHED\",\"urls\":[{\"type\":\"RECRUITMENT\","
+                + "\"applicationEndAt\":\"2099-01-01T00:00:00Z\",\"publicationStatus\":\"PUBLISHED\",\"urls\":[{\"type\":\"RECRUITMENT\","
                 + "\"url\":\"https://example.com/updated\",\"primary\":true}]}";
     }
 

@@ -38,6 +38,7 @@ public record UpsertCompetitionRequest(
         Instant applicationStartAt,
 
         @Schema(description = "모집 마감 일시", example = "2026-10-15T14:59:59Z")
+        @NotNull(message = "모집 마감 일시는 필수입니다.")
         Instant applicationEndAt,
 
         @Schema(description = "게시 상태", example = "PUBLISHED")

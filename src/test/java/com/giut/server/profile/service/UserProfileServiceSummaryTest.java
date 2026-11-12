@@ -13,6 +13,7 @@ import com.giut.server.profile.repository.ProfileRecommendationRepository;
 import com.giut.server.profile.repository.ProfileCollaborationRepository;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.entity.Competition;
 import com.giut.server.profile.repository.PortfolioCountProjection;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
@@ -68,7 +69,8 @@ class UserProfileServiceSummaryTest {
         when(portfolioCounts.getShowcased()).thenReturn(3L);
         when(portfolioItemRepository.countSummaryByUserId(12L)).thenReturn(portfolioCounts);
         when(teamMemberRepository.countByUserIdAndStatus(12L, TeamMember.Status.ACTIVE)).thenReturn(2L);
-        when(competitionScrapRepository.countByUser_Id(12L)).thenReturn(5L);
+        when(competitionScrapRepository.countByUser_IdAndCompetition_PublicationStatus(
+                12L, Competition.PublicationStatus.PUBLISHED)).thenReturn(5L);
         when(teamScrapRepository.countByUser_Id(12L)).thenReturn(3L);
         when(profileRecommendationRepository.countByRecommendedUser_Id(12L)).thenReturn(7L);
         when(profileCollaborationRepository.countParticipatedTeams(12L)).thenReturn(4L);

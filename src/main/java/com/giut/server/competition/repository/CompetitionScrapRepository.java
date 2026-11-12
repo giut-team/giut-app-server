@@ -1,6 +1,7 @@
 package com.giut.server.competition.repository;
 
 import com.giut.server.competition.entity.CompetitionScrap;
+import com.giut.server.competition.entity.Competition;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,8 @@ public interface CompetitionScrapRepository extends JpaRepository<CompetitionScr
     long countByCompetition_Id(Long competitionId);
 
     long countByUser_Id(Long userId);
+
+    long countByUser_IdAndCompetition_PublicationStatus(Long userId, Competition.PublicationStatus status);
 
     void deleteByUser_IdAndCompetition_Id(Long userId, Long competitionId);
 

@@ -6,8 +6,8 @@ public record MyProfileSummaryResponse(
         long portfolioCount,
         long showcaseCount,
         long myTeamCount,
-        long scrapCount,
-        long competitionScrapCount,
+        @Schema(description = "공개 중인 공모전 스크랩 수와 팀 스크랩 수의 합") long scrapCount,
+        @Schema(description = "PUBLISHED 상태인 공모전의 스크랩 수. 모집 마감 여부와 무관") long competitionScrapCount,
         long teamScrapCount,
         @Schema(description = "현재 수락 또는 거절을 기다리는 팀 합류 제안 수", example = "2")
         long receivedProposalCount,

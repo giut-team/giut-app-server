@@ -67,7 +67,8 @@ public class CompetitionService {
     @Transactional(Transactional.TxType.SUPPORTS)
     public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = listedCompetition();
+        Specification<Competition> specification = listedCompetition().and(
+                (root, query, builder) -> builder.greaterThan(root.get("applicationEndAt"), now));
 
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
@@ -99,10 +100,10 @@ public class CompetitionService {
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<PublicCompetitionResponse> getTop5Competitions() {
+    public List<PublicCompetitionResponse> getTop10Candidates() {
         Instant now = Instant.now();
         List<Competition> competitions = competitionRepository
-                .findTop5ByPopularity(Competition.PublicationStatus.PUBLISHED.name());
+                .findTop10ByPopularity(Competition.PublicationStatus.PUBLISHED.name(), now);
         return toPublicResponses(competitions, now);
     }
 
@@ -429,10 +430,14 @@ public class CompetitionService {
         // LOWER() 적용 + 선행 와일드카드(%...)라 인덱스를 못 타는 전체 테이블 스캔이다.
         // 데이터가 늘수록 느려짐이 측정으로 확인된 지점(실측: 5만건 28ms → 20만건 101ms).
         return (root, query, criteriaBuilder) -> {
-            String searchKeyword = "%" + keyword.toLowerCase() + "%";
+            String escapedKeyword = keyword.toLowerCase(java.util.Locale.ROOT)
+                    .replace("!", "!!")
+                    .replace("%", "!%")
+                    .replace("_", "!_");
+            String searchKeyword = "%" + escapedKeyword + "%";
             return criteriaBuilder.or(
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("title")), searchKeyword),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("hostOrganization")), searchKeyword)
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("title")), searchKeyword, '!'),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("hostOrganization")), searchKeyword, '!')
             );
         };
     }
@@ -542,6 +547,9 @@ public class CompetitionService {
     }
 
     private void validateRequest(UpsertCompetitionRequest request) {
+        if (request.applicationEndAt() == null) {
+            throw new IllegalArgumentException("모집 마감 일시는 필수입니다.");
+        }
         if (request.applicationStartAt() != null
                 && request.applicationEndAt() != null
                 && !request.applicationEndAt().isAfter(request.applicationStartAt())) {

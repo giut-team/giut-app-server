@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface CompetitionRepository extends JpaRepository<Competition, Long>, JpaSpecificationExecutor<Competition> {
 
@@ -28,19 +29,20 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long>,
             FROM competitions competition
             LEFT JOIN competition_scraps scrap ON scrap.competition_id = competition.id
             WHERE competition.publication_status = :publicationStatus
+              AND competition.application_end_at > :now
             GROUP BY competition.id
             ORDER BY (0.3 * LOG(1 + competition.view_count)
                      + 0.7 * LOG(1 + COUNT(scrap.id))) DESC,
                      competition.view_count DESC,
                      COUNT(scrap.id) DESC,
                      competition.id DESC
-            LIMIT 5
+            LIMIT 10
             """, nativeQuery = true)
-    List<Competition> findTop5ByPopularity(@Param("publicationStatus") String publicationStatus);
+    List<Competition> findTop10ByPopularity(@Param("publicationStatus") String publicationStatus, @Param("now") Instant now);
 
-    @Query("select c.id from Competition c where c.id in :ids and c.publicationStatus = :status")
+    @Query("select c.id from Competition c where c.id in :ids and c.publicationStatus = :status and c.applicationEndAt > :now")
     List<Long> findPublishedIds(@Param("ids") List<Long> ids,
-                                @Param("status") Competition.PublicationStatus status);
+                                @Param("status") Competition.PublicationStatus status, @Param("now") Instant now);
 
     // 벌크 UPDATE는 영속성 컨텍스트를 거치지 않아 이미 로딩된 Competition이 있으면 값이 안 맞게(stale)
     // 보일 수 있다. clearAutomatically로 컨텍스트를 비워 이후 조회가 DB의 최신 값을 다시 읽게 한다.

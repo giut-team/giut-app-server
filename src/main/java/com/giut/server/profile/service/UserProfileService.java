@@ -37,6 +37,7 @@ import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.profile.repository.ActivityHistoryRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
+import com.giut.server.competition.entity.Competition;
 import com.giut.server.profile.repository.ProfileRoleSkillTagRepository;
 import com.giut.server.profile.repository.ProfileTagRepository;
 import com.giut.server.profile.repository.PortfolioCountProjection;
@@ -394,7 +395,8 @@ public class UserProfileService {
     }
 
     private MyProfileSummaryResponse toMyProfileSummary(Long userId) {
-        long competitionScrapCount = competitionScrapRepository.countByUser_Id(userId);
+        long competitionScrapCount = competitionScrapRepository.countByUser_IdAndCompetition_PublicationStatus(
+                userId, Competition.PublicationStatus.PUBLISHED);
         long teamScrapCount = teamScrapRepository.countByUser_Id(userId);
         // total·showcased 개수를 따로 두 번 세지 않고 집계 쿼리 하나로 합쳐 쿼리 수를 줄인다.
         PortfolioCountProjection portfolioCounts = portfolioItemRepository.countSummaryByUserId(userId);
