@@ -25,9 +25,9 @@ public record AiCompetitionRequest(
         @Schema(description = "대학생만 UNIV_ONLY, 대학생 및 일반인 ALL, 대학생 참여 불가 NONE", example = "ALL")
         @NotNull AiTargetParticipants targetParticipants,
         @Size(max = 10000) String summary,
-        @Schema(description = "모집 시작일. 전체 ISO-8601 일시 또는 날짜만(yyyy-MM-dd, Asia/Seoul 자정으로 저장)", example = "2026-11-10")
+        @Schema(description = "모집 시작일. null 또는 생략 가능. 전체 ISO-8601 일시 또는 날짜만(yyyy-MM-dd, Asia/Seoul 자정으로 저장)", example = "2026-11-10", nullable = true)
         @JsonDeserialize(using = AiFlexibleInstantDeserializer.Start.class)
-        @NotNull Instant applicationStartAt,
+        Instant applicationStartAt,
         @Schema(description = "모집 마감일. 전체 ISO-8601 일시 또는 날짜만(yyyy-MM-dd, Asia/Seoul 23:59:59로 저장)", example = "2026-12-10")
         @JsonDeserialize(using = AiFlexibleInstantDeserializer.End.class)
         @NotNull Instant applicationEndAt,

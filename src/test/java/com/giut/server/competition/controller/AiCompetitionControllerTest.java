@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -72,6 +73,24 @@ class AiCompetitionControllerTest {
         urls.deleteAll();
         competitions.deleteAll();
         users.deleteAll();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"applicationStartAt\":null,", ""})
+    void singleAndBatchAcceptMissingOrNullStartDate(String startDateField) throws Exception {
+        String body = BODY.replace("\"applicationStartAt\":\"2026-11-01T00:00:00Z\",", startDateField);
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + body.replace("ai-contest", "batch-no-start-date") + "]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        assertThat(competitions.findAll()).hasSize(2).allSatisfy(competition -> {
+            assertThat(competition.getApplicationStartAt()).isNull();
+            assertThat(competition.getApplicationEndAt()).isEqualTo(Instant.parse("2026-12-01T00:00:00Z"));
+        });
+        assertThat(failures.count()).isZero();
     }
 
     @Test
@@ -434,8 +453,7 @@ class AiCompetitionControllerTest {
                 BODY.replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z"),
                 BODY.replace("\"primary\":true", "\"primary\":false"),
                 BODY.replace("\"activityType\":\"HACKATHON\",", ""),
-                BODY.replace("HACKATHON", "INVALID"),
-                BODY.replace("\"applicationStartAt\":\"2026-11-01T00:00:00Z\",", "")
+                BODY.replace("HACKATHON", "INVALID")
         }) {
             mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
