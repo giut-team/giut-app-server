@@ -1,10 +1,14 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.competition.dto.request.AiActivityType;
+import com.giut.server.competition.dto.request.AiCompetitionRequest;
+import com.giut.server.competition.dto.request.AiTargetParticipants;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.dto.response.CompetitionRegistrationSource;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.entity.CompetitionVerificationLog;
@@ -41,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** Requests use real security and service transactions; cleanup targets this disposable H2 DB only. */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:h2:mem:giut_admin_created_list;MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.url=jdbc:h2:mem:giut_admin_competition_list;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
@@ -50,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "DISCORD_ALERT_WEBHOOK_URL=", "DISCORD_SLOW_API_WEBHOOK_URL=",
         "logging.level.org.hibernate.SQL=OFF", "logging.level.org.hibernate.orm.jdbc.bind=OFF"
 })
-class AdminCreatedCompetitionListPersistenceTest {
+class AdminCompetitionListPersistenceTest {
     private static final String PATH = "/api/admin/competitions";
     @Autowired private WebApplicationContext context;
     @Autowired private JwtProvider jwt;
@@ -152,7 +156,8 @@ class AdminCreatedCompetitionListPersistenceTest {
                  "urls":[{"type":"RECRUITMENT","url":"https://example.com/created-post","primary":true}]}
                 """))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("COMPETITION"))
-                .andExpect(jsonPath("$.activityTypeName").value("공모전"));
+                .andExpect(jsonPath("$.activityTypeName").value("공모전"))
+                .andExpect(jsonPath("$.registrationSource").value("ADMIN"));
         Competition created = competitions.findAll().getFirst();
         assertThat(created.getActivityType()).isEqualTo(Competition.ActivityType.COMPETITION);
         mvc.perform(as(admin, get(PATH)))
@@ -162,11 +167,12 @@ class AdminCreatedCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"))
                 .andExpect(jsonPath("$.competitions[0].verifiedAt").isNotEmpty())
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("ADMIN"))
                 .andExpect(jsonPath("$.competitions[0].targetParticipants").value("대학생"))
                 .andExpect(jsonPath("$.competitions[0].urls[0].url").value("https://example.com/created-post"));
         assertThat(competitions.findById(created.getId()).orElseThrow().getViewCount()).isZero();
         mvc.perform(as(verified, get("/api/competitions")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
         mvc.perform(as(verified, get("/api/competitions/" + created.getId()))).andExpect(status().isNotFound());
     }
 
@@ -193,7 +199,7 @@ class AdminCreatedCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.competitions[0].id").value(stored.getId()))
                 .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"));
         mvc.perform(as(unverified, get("/api/competitions")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.competitions[0].verified").value(true));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @ParameterizedTest
@@ -211,7 +217,7 @@ class AdminCreatedCompetitionListPersistenceTest {
                         .value(state == Competition.PublicationStatus.ARCHIVED ? 0 : 1));
         mvc.perform(as(verified, get("/api/competitions")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements")
-                        .value(state == Competition.PublicationStatus.DRAFT || state == Competition.PublicationStatus.PUBLISHED ? 1 : 0));
+                        .value(state == Competition.PublicationStatus.PUBLISHED ? 1 : 0));
         mvc.perform(as(verified, get("/api/competitions/" + created.getId())))
                 .andExpect(state == Competition.PublicationStatus.PUBLISHED ? status().isOk() : status().isNotFound());
     }
@@ -311,7 +317,8 @@ class AdminCreatedCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
                 .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"))
-                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()));
+                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("ADMIN"));
         assertThat(competitions.findById(created.getId()).orElseThrow().getVerifiedByUser()).isNull();
         assertThat(logs.count()).isEqualTo(1);
         assertThat(logs.findAll().getFirst().getActorUser().getId()).isEqualTo(admin.getId());
@@ -334,6 +341,10 @@ class AdminCreatedCompetitionListPersistenceTest {
             assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
             assertThat(log.getActorUser().getId()).isEqualTo(admin.getId());
         });
+        var listed = service.getAdminCompetitions(admin.getId(),
+                new com.giut.server.competition.dto.request.AdminCompetitionSearchRequest(0, 20, null, null, null, null));
+        assertThat(listed.competitions()).hasSize(seeded.createdCount())
+                .allSatisfy(item -> assertThat(item.registrationSource()).isEqualTo(CompetitionRegistrationSource.ADMIN));
     }
 
     @ParameterizedTest
@@ -353,7 +364,7 @@ class AdminCreatedCompetitionListPersistenceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"MISSING", "FROM", "METHOD", "ACTOR", "REASON"})
-    void manualVerificationOrIncompleteCreationEvidenceDoesNotCountAsAdminCreation(String missing) throws Exception {
+    void manualVerificationOrIncompleteAdminEvidenceIsListedAsUnknown(String missing) throws Exception {
         Competition target = competitions.saveAndFlush(Competition.create("출처 미확인", Competition.Category.ETC,
                 "주최", null, "소개", null, null, Competition.PublicationStatus.PUBLISHED,
                 Competition.VerificationStatus.MANUALLY_VERIFIED, admin));
@@ -369,7 +380,92 @@ class AdminCreatedCompetitionListPersistenceTest {
             logs.saveAndFlush(log);
         }
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(target.getId()))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("UNKNOWN"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"FROM", "METHOD", "ACTOR", "REASON"})
+    void incompleteAiEvidenceIsListedAsUnknown(String broken) throws Exception {
+        Competition target = competitions.saveAndFlush(Competition.create("AI 출처 미확인", Competition.Category.ETC,
+                "주최", null, "소개", null, null, Competition.PublicationStatus.PUBLISHED,
+                Competition.VerificationStatus.AUTO_VERIFIED, null));
+        CompetitionVerificationLog log = CompetitionVerificationLog.createAiVerificationLog(target);
+        switch (broken) {
+            case "FROM" -> ReflectionTestUtils.setField(log, "fromStatus", Competition.VerificationStatus.UNVERIFIED);
+            case "METHOD" -> ReflectionTestUtils.setField(log, "verificationMethod", CompetitionVerificationLog.Method.SOURCE_TRUST);
+            case "ACTOR" -> ReflectionTestUtils.setField(log, "actorUser", admin);
+            case "REASON" -> ReflectionTestUtils.setField(log, "reason", "AI 재검증");
+        }
+        logs.saveAndFlush(log);
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("UNKNOWN"));
+    }
+
+    @Test
+    void aiCreatedCompetitionIsListedAsAiAndStaysVisibleToAdminsAfterBecomingDraft() throws Exception {
+        AdminCompetitionResponse created = service.createByAi(aiRequest("https://example.com/ai/draft"));
+        assertThat(created.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        CompetitionVerificationLog log = logs.findAll().getFirst();
+        assertThat(log.getReason()).isEqualTo(CompetitionVerificationLog.AI_CREATION_REASON);
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(created.id()))
+                .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("AI"));
+        mvc.perform(as(verified, get("/api/competitions")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+
+        AdminCompetitionResponse drafted = service.updateByAdmin(admin.getId(), created.id(),
+                request("AI 수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
+        assertThat(drafted.publicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
+        assertThat(drafted.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        mvc.perform(as(admin, get(PATH).param("publicationStatus", "DRAFT"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(created.id()))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("AI"));
+        mvc.perform(as(verified, get("/api/competitions")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(as(verified, get("/api/competitions/" + created.id()))).andExpect(status().isNotFound());
+
+        AdminCompetitionResponse republished = service.publishByAdmin(admin.getId(), created.id());
+        assertThat(republished.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+    }
+
+    @Test
+    void conflictingAdminAndAiCreationEvidenceIsListedAsUnknown() throws Exception {
+        AdminCompetitionResponse created = create(admin, "상충 이력", Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
+        logs.saveAndFlush(CompetitionVerificationLog.createAiVerificationLog(competitions.findById(created.id()).orElseThrow()));
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("UNKNOWN"));
+        assertThat(service.publishByAdmin(admin.getId(), created.id()).registrationSource())
+                .isEqualTo(CompetitionRegistrationSource.UNKNOWN);
+    }
+
+    @Test
+    void mixedSourcesOnOnePageAreResolvedPerCompetition() throws Exception {
+        AdminCompetitionResponse byAdmin = create(admin, "관리자", Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
+        AdminCompetitionResponse byAi = service.createByAi(aiRequest("https://example.com/ai/mixed"));
+        Competition legacy = competitions.saveAndFlush(Competition.create("레거시", Competition.Category.ETC,
+                "주최", null, "소개", null, null, Competition.PublicationStatus.PUBLISHED,
+                Competition.VerificationStatus.UNVERIFIED, null));
+        AdminCompetitionResponse adminAfterLegacy = create(otherAdmin, "다른 관리자", Competition.Category.ETC,
+                Competition.PublicationStatus.PUBLISHED);
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.competitions[0].id").value(adminAfterLegacy.id()))
+                .andExpect(jsonPath("$.competitions[0].registrationSource").value("ADMIN"))
+                .andExpect(jsonPath("$.competitions[1].id").value(legacy.getId()))
+                .andExpect(jsonPath("$.competitions[1].registrationSource").value("UNKNOWN"))
+                .andExpect(jsonPath("$.competitions[2].id").value(byAi.id()))
+                .andExpect(jsonPath("$.competitions[2].registrationSource").value("AI"))
+                .andExpect(jsonPath("$.competitions[3].id").value(byAdmin.id()))
+                .andExpect(jsonPath("$.competitions[3].registrationSource").value("ADMIN"));
+        mvc.perform(as(verified, get("/api/competitions"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
     }
 
     @Test
@@ -402,6 +498,7 @@ class AdminCreatedCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.competitions.length()").value(10));
         for (int i = 0; i < 10; i++) {
             first.andExpect(jsonPath("$.competitions[" + i + "].id").value(ids.get(i)))
+                    .andExpect(jsonPath("$.competitions[" + i + "].registrationSource").value("ADMIN"))
                     .andExpect(jsonPath("$.competitions[" + i + "].urls.length()").value(1))
                     .andExpect(jsonPath("$.competitions[" + i + "].urls[0].url").value("https://example.com/created/" + (12 - i)));
         }
@@ -447,8 +544,11 @@ class AdminCreatedCompetitionListPersistenceTest {
     @Test
     void currentStateAndUrlsAreReturnedAfterUpdatesPublishingAndArchiving() throws Exception {
         var created = create(admin, "처음", Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
-        service.updateByAdmin(otherAdmin.getId(), created.id(), request("수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
-        service.publishByAdmin(otherAdmin.getId(), created.id());
+        assertThat(service.updateByAdmin(otherAdmin.getId(), created.id(),
+                request("수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT)).registrationSource())
+                .isEqualTo(CompetitionRegistrationSource.ADMIN);
+        assertThat(service.publishByAdmin(otherAdmin.getId(), created.id()).registrationSource())
+                .isEqualTo(CompetitionRegistrationSource.ADMIN);
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.competitions[0].title").value("수정"))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
@@ -506,6 +606,13 @@ class AdminCreatedCompetitionListPersistenceTest {
         return new UpsertCompetitionRequest(title, category, "검색주최", "대학생", "소개", null, Instant.parse("2099-01-01T00:00:00Z"), state,
                 List.of(new CompetitionUrlRequest(CompetitionUrl.Type.RECRUITMENT,
                         "https://example.com/created/" + (++urlSequence), true)));
+    }
+
+    private AiCompetitionRequest aiRequest(String url) {
+        return new AiCompetitionRequest("AI 공고", List.of(Competition.Category.AI_DATA), "주최", AiTargetParticipants.ALL,
+                "AI 소개", Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2099-01-01T00:00:00Z"),
+                List.of(new CompetitionUrlRequest(CompetitionUrl.Type.OFFICIAL, url, true)),
+                AiActivityType.HACKATHON, null, null, null, null);
     }
 
     private MockHttpServletRequestBuilder as(User actor, MockHttpServletRequestBuilder request) {

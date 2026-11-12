@@ -2,6 +2,7 @@ package com.giut.server.competition.service;
 
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.dto.response.CompetitionRegistrationSource;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.seed.SampleCompetitionCatalog;
@@ -123,7 +124,7 @@ class CompetitionSeedServiceTest {
             if (request.title().equals(catalog.competitions().get(2).title())) {
                 throw new IllegalStateException("DB 등록 실패");
             }
-            return AdminCompetitionResponse.from(competition(1L, request), List.of());
+            return AdminCompetitionResponse.from(competition(1L, request), CompetitionRegistrationSource.ADMIN, List.of());
         });
 
         assertThatThrownBy(() -> service.seedSamples(10L))
@@ -150,7 +151,7 @@ class CompetitionSeedServiceTest {
                     competition, source.type(), source.url(), normalized.value(), normalized.hash(), true
             );
             assertThat(saved.putIfAbsent(normalized.hash(), url)).as("URL hash must remain unique").isNull();
-            return AdminCompetitionResponse.from(competition, List.of());
+            return AdminCompetitionResponse.from(competition, CompetitionRegistrationSource.ADMIN, List.of());
         });
     }
 

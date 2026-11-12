@@ -42,19 +42,19 @@ public class AdminCompetitionController {
     private final CompetitionService competitionService;
 
     @GetMapping
-    @Operation(summary = "관리자 등록 공모전 목록 조회", description = "모든 관리자의 생성 이력이 확인된 공모전만 ID 내림차순으로 조회합니다. 관리자 직접 등록과 같은 생성 경로를 쓰는 샘플 등록도 포함합니다. 단순 수동 검증 완료 건이나 생성 이력이 없는 건은 제외합니다. 기본은 ARCHIVED 제외이며 publicationStatus를 명시하면 해당 게시 상태만 조회합니다. keyword, category는 AND 조건입니다. 조회수는 증가하지 않습니다.")
+    @Operation(summary = "관리자 공모전 목록 조회", description = "등록 출처와 관계없이 모든 공모전을 ID 내림차순으로 조회합니다. 각 항목의 registrationSource는 생성 이력으로 판별한 등록 출처이며, 관리자 직접 등록(샘플 포함)은 ADMIN, AI 수집 등록은 AI, 생성 이력이 없거나 상충해 판별할 수 없으면 UNKNOWN입니다. 기본은 ARCHIVED 제외이며 publicationStatus를 명시하면 해당 게시 상태만 조회합니다(예: AI 등록 후 DRAFT로 바뀐 공모전 확인). keyword, category, activityType은 AND 조건입니다. 조회수는 증가하지 않습니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "관리자 등록 공모전 목록", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionListResponse.class))),
+            @ApiResponse(responseCode = "200", description = "관리자 공모전 목록", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionListResponse.class))),
             @ApiResponse(responseCode = "400", description = "페이지 크기·번호 또는 필터 값 오류"),
             @ApiResponse(responseCode = "401", description = "로그인 필요"),
             @ApiResponse(responseCode = "403", description = "현재 활성 관리자 권한 없음")
     })
-    public ResponseEntity<AdminCompetitionListResponse> getAdminCreatedCompetitions(
+    public ResponseEntity<AdminCompetitionListResponse> getAdminCompetitions(
             @Valid @ParameterObject @ModelAttribute AdminCompetitionSearchRequest request,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(competitionService.getAdminCreatedCompetitions(Long.valueOf(authentication.getName()), request));
+        return ResponseEntity.ok(competitionService.getAdminCompetitions(Long.valueOf(authentication.getName()), request));
     }
 
     @DeleteMapping("/{competitionId}")
@@ -73,7 +73,7 @@ public class AdminCompetitionController {
     }
 
     @PostMapping
-    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않으며 항상 MANUALLY_VERIFIED로 등록합니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 게시 상태는 별도로 선택하며 관리자 등록 목록에 포함됩니다.")
+    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않으며 항상 MANUALLY_VERIFIED로 등록합니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 게시 상태는 별도로 선택하며 관리자 목록에 registrationSource=ADMIN으로 표시됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),

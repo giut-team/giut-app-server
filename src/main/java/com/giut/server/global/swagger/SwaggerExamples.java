@@ -89,11 +89,11 @@ public final class SwaggerExamples {
             """;
 
     public static final String ADMIN_COMPETITION = """
-            {"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","hostOrganization":"서울특별시","targetParticipants":"전국 대학생","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","publicationStatus":"DRAFT","verificationStatus":"MANUALLY_VERIFIED","verifiedAt":"2026-10-02T06:00:00Z","urls":[{"id":1,"type":"RECRUITMENT","url":"https://example.com/recruitment","primary":true}]}
+            {"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","hostOrganization":"서울특별시","targetParticipants":"전국 대학생","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","publicationStatus":"DRAFT","verificationStatus":"MANUALLY_VERIFIED","verifiedAt":"2026-10-02T06:00:00Z","registrationSource":"ADMIN","urls":[{"id":1,"type":"RECRUITMENT","url":"https://example.com/recruitment","primary":true}]}
             """;
 
     public static final String ADMIN_COMPETITION_PUBLISHED = """
-            {"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","hostOrganization":"서울특별시","targetParticipants":"전국 대학생","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","publicationStatus":"PUBLISHED","verificationStatus":"MANUALLY_VERIFIED","verifiedAt":"2026-10-02T06:00:00Z","urls":[{"id":1,"type":"RECRUITMENT","url":"https://example.com/recruitment","primary":true}]}
+            {"id":1,"title":"서울시 데이터 분석 공모전","category":"WEB_MOBILE_IT","hostOrganization":"서울특별시","targetParticipants":"전국 대학생","summary":"공공 데이터 활용 아이디어 공모전","applicationStartAt":"2026-09-15T00:00:00Z","applicationEndAt":"2026-10-06T14:59:59Z","publicationStatus":"PUBLISHED","verificationStatus":"MANUALLY_VERIFIED","verifiedAt":"2026-10-02T06:00:00Z","registrationSource":"ADMIN","urls":[{"id":1,"type":"RECRUITMENT","url":"https://example.com/recruitment","primary":true}]}
             """;
 
     public static final String PROFILE_REPORT_LIST = """

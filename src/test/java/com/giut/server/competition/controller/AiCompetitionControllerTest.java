@@ -84,6 +84,7 @@ class AiCompetitionControllerTest {
                 .replace("상금 미정", "총상금 1,000만 원");
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("HACKATHON"))
+                .andExpect(jsonPath("$.registrationSource").value("AI"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"))
                 .andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
                 .andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"));
@@ -212,7 +213,9 @@ class AiCompetitionControllerTest {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].activityType").value("HACKATHON"))
                 .andExpect(jsonPath("$[1].activityType").value("COMPETITION"))
-                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"));
+                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"))
+                .andExpect(jsonPath("$[0].registrationSource").value("AI"))
+                .andExpect(jsonPath("$[1].registrationSource").value("AI"));
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
         assertThat(logs.count()).isEqualTo(2);

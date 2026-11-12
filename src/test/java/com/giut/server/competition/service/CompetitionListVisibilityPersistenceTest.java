@@ -75,9 +75,9 @@ class CompetitionListVisibilityPersistenceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"ADMIN", "VERIFIED", "UNVERIFIED"})
-    void listsOnlyDraftAndPublishedForEveryAllowedCaller(String caller) throws Exception {
+    void listsOnlyPublishedForEveryAllowedCaller(String caller) throws Exception {
         Competition published = competition(Competition.PublicationStatus.PUBLISHED);
-        Competition draft = competition(Competition.PublicationStatus.DRAFT);
+        competition(Competition.PublicationStatus.DRAFT);
         competition(Competition.PublicationStatus.REJECTED);
         competition(Competition.PublicationStatus.ARCHIVED);
         User actor = switch (caller) {
@@ -88,17 +88,14 @@ class CompetitionListVisibilityPersistenceTest {
 
         mvc.perform(as(actor, get("/api/competitions").param("page", "0")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1))
                 .andExpect(jsonPath("$.size").value(10))
                 .andExpect(jsonPath("$.hasNext").value(false))
-                .andExpect(jsonPath("$.competitions.length()").value(2))
-                .andExpect(jsonPath("$.competitions[0].id").value(draft.getId()))
-                .andExpect(jsonPath("$.competitions[1].id").value(published.getId()))
+                .andExpect(jsonPath("$.competitions.length()").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(published.getId()))
                 .andExpect(jsonPath("$.competitions[0].verified").isBoolean())
                 .andExpect(jsonPath("$.competitions[0].verified").value(false))
-                .andExpect(jsonPath("$.competitions[1].verified").isBoolean())
-                .andExpect(jsonPath("$.competitions[1].verified").value(false))
                 .andExpect(jsonPath("$.competitions[0].summary").value("목록 소개"))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").doesNotExist())
                 .andExpect(jsonPath("$.competitions[0].verificationStatus").doesNotExist());
@@ -106,7 +103,7 @@ class CompetitionListVisibilityPersistenceTest {
 
     @ParameterizedTest
     @EnumSource(Competition.VerificationStatus.class)
-    void verificationStatusControlsFlagButDoesNotFilterEitherListedPublicationState(Competition.VerificationStatus verification) throws Exception {
+    void verificationStatusControlsFlagButDoesNotFilterPublishedList(Competition.VerificationStatus verification) throws Exception {
         boolean expected = verification == Competition.VerificationStatus.AUTO_VERIFIED
                 || verification == Competition.VerificationStatus.MANUALLY_VERIFIED;
         Instant now = Instant.now();
@@ -116,11 +113,9 @@ class CompetitionListVisibilityPersistenceTest {
                     "주최", "대학생", "목록 소개", now.minusSeconds(3600), now.plusSeconds(7200), state, verification, null));
         }
         mvc.perform(as(unverified, get("/api/competitions")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].verified").isBoolean())
-                .andExpect(jsonPath("$.competitions[0].verified").value(expected))
-                .andExpect(jsonPath("$.competitions[1].verified").isBoolean())
-                .andExpect(jsonPath("$.competitions[1].verified").value(expected));
+                .andExpect(jsonPath("$.competitions[0].verified").value(expected));
         Competition published = competitions.findAll().stream()
                 .filter(c -> c.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED).findFirst().orElseThrow();
         Competition draft = competitions.findAll().stream()
@@ -147,6 +142,8 @@ class CompetitionListVisibilityPersistenceTest {
     void keywordTreatsLikeMetacharactersAsLiteralInTitleAndHost() throws Exception {
         for (String keyword : List.of("100%", "A_B", "느낌!", "경로\\파일")) {
             Competition title = save("제목 " + keyword, "주최", Competition.Category.ETC,
+                    Competition.PublicationStatus.PUBLISHED, null, Instant.now().plusSeconds(3600));
+            save("숨김 " + keyword, "주최", Competition.Category.ETC,
                     Competition.PublicationStatus.DRAFT, null, Instant.now().plusSeconds(3600));
             Competition host = save("일반 제목", "기관 " + keyword, Competition.Category.ETC,
                     Competition.PublicationStatus.PUBLISHED, null, Instant.now().plusSeconds(3600));
@@ -162,11 +159,11 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @Test
-    void paginationAndCountUseBothStatesBeforePagingAndIgnoreNewerHiddenRows() throws Exception {
+    void paginationAndCountUsePublishedOnlyBeforePagingAndIgnoreNewerHiddenRows() throws Exception {
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < 12; i++) {
-            ids.add(competition(i % 2 == 0 ? Competition.PublicationStatus.DRAFT
-                    : Competition.PublicationStatus.PUBLISHED).getId());
+            ids.add(competition(Competition.PublicationStatus.PUBLISHED).getId());
+            competition(Competition.PublicationStatus.DRAFT);
             competition(Competition.PublicationStatus.ARCHIVED);
             competition(Competition.PublicationStatus.REJECTED);
         }
@@ -191,14 +188,15 @@ class CompetitionListVisibilityPersistenceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"UPCOMING", "OPEN"})
-    void keywordCategoryAndRecruitmentFiltersRemainAndConditionsForBothStates(String status) throws Exception {
+    void keywordCategoryAndRecruitmentFiltersRemainAndConditionsForPublishedList(String status) throws Exception {
         Instant now = Instant.now();
         Instant start = "UPCOMING".equals(status) ? now.plusSeconds(3600) : now.minusSeconds(7200);
         Instant end = "CLOSED".equals(status) ? now.minusSeconds(3600) : now.plusSeconds(7200);
-        Competition draft = save("개발 목록", "주최", Competition.Category.WEB_MOBILE_IT,
-                Competition.PublicationStatus.DRAFT, start, end);
+        Competition olderPublished = save("개발 목록", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, start, end);
         Competition published = save("목록", "개발 주최", Competition.Category.WEB_MOBILE_IT,
                 Competition.PublicationStatus.PUBLISHED, start, end);
+        save("개발 목록", "주최", Competition.Category.WEB_MOBILE_IT, Competition.PublicationStatus.DRAFT, start, end);
         for (Competition.PublicationStatus state : Competition.PublicationStatus.values()) {
             save("개발 목록", "주최", Competition.Category.ETC, state, start, end); // Wrong category
             save("다른 목록", "주최", Competition.Category.WEB_MOBILE_IT, state, start, end); // Wrong keyword
@@ -220,7 +218,7 @@ class CompetitionListVisibilityPersistenceTest {
                         .param("category", "WEB_MOBILE_IT").param("status", status).param("size", "1").param("page", "1")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.hasNext").value(false))
-                .andExpect(jsonPath("$.competitions[0].id").value(draft.getId()));
+                .andExpect(jsonPath("$.competitions[0].id").value(olderPublished.getId()));
     }
 
     @Test
@@ -394,12 +392,15 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @Test
-    void draftListingDoesNotExpandOtherEndpoints() throws Exception {
+    void draftIsHiddenFromEveryPublicEndpoint() throws Exception {
         Competition published = competition(Competition.PublicationStatus.PUBLISHED);
         Competition draft = competition(Competition.PublicationStatus.DRAFT);
         competition(Competition.PublicationStatus.REJECTED);
         competition(Competition.PublicationStatus.ARCHIVED);
         top5Cache.refresh();
+        mvc.perform(as(unverified, get("/api/competitions"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.competitions[0].id").value(published.getId()));
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
             String listPath = endpoint.endsWith("closing-soon") ? "$.competitions" : "$";
             mvc.perform(as(unverified, get(endpoint))).andExpect(status().isOk())
@@ -424,13 +425,15 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @Test
-    void archivingDraftRemovesItFromListWithoutDeletingRow() throws Exception {
-        Competition draft = competition(Competition.PublicationStatus.DRAFT);
-        mvc.perform(as(admin, delete("/api/admin/competitions/" + draft.getId()))).andExpect(status().isNoContent());
+    void archivingPublishedRemovesItFromListWithoutDeletingRow() throws Exception {
+        Competition published = competition(Competition.PublicationStatus.PUBLISHED);
+        mvc.perform(as(unverified, get("/api/competitions")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(as(admin, delete("/api/admin/competitions/" + published.getId()))).andExpect(status().isNoContent());
         mvc.perform(as(unverified, get("/api/competitions")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.competitions").isEmpty());
-        assertThat(competitions.findById(draft.getId()).orElseThrow().getPublicationStatus())
+        assertThat(competitions.findById(published.getId()).orElseThrow().getPublicationStatus())
                 .isEqualTo(Competition.PublicationStatus.ARCHIVED);
     }
 

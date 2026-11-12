@@ -12,6 +12,7 @@ import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
+import com.giut.server.competition.dto.response.CompetitionRegistrationSource;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.CompetitionTeamResponse;
 import com.giut.server.competition.dto.response.CompetitionUrlResponse;
@@ -28,6 +29,7 @@ import com.giut.server.user.entity.User;
 import com.giut.server.global.exception.ConflictException;
 import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ResourceNotFoundException;
+import com.giut.server.competition.repository.CompetitionCreationEvidenceProjection;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
 import com.giut.server.competition.repository.CompetitionScrapSummaryProjection;
@@ -68,7 +70,7 @@ public class CompetitionService {
     @Transactional(Transactional.TxType.SUPPORTS)
     public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = listedCompetition().and(
+        Specification<Competition> specification = publishedCompetition().and(
                 (root, query, builder) -> builder.greaterThan(root.get("applicationEndAt"), now));
 
         if (request.normalizedKeyword() != null) {
@@ -202,12 +204,13 @@ public class CompetitionService {
     }
 
     @Transactional
-    public AdminCompetitionListResponse getAdminCreatedCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
+    public AdminCompetitionListResponse getAdminCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
         findActiveAdmin(adminUserId);
-        Specification<Competition> specification = createdByAdmin().and((root, query, criteriaBuilder) ->
+        // 등록 출처(관리자/AI/미확인)와 무관하게 전체 공모전을 조회하고, 출처는 응답 필드로만 구분한다.
+        Specification<Competition> specification = (root, query, criteriaBuilder) ->
                 request.publicationStatus() == null
                         ? criteriaBuilder.notEqual(root.get("publicationStatus"), Competition.PublicationStatus.ARCHIVED)
-                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus()));
+                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus());
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
         }
@@ -219,13 +222,16 @@ public class CompetitionService {
         }
         Page<Competition> page = competitionRepository.findAll(specification,
                 PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
-        Map<Long, List<CompetitionUrlResponse>> urlsById = page.isEmpty() ? Map.of()
-                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(
-                        page.getContent().stream().map(Competition::getId).toList()).stream()
+        List<Long> ids = page.getContent().stream().map(Competition::getId).toList();
+        Map<Long, List<CompetitionUrlResponse>> urlsById = ids.isEmpty() ? Map.of()
+                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(ids).stream()
                 .collect(Collectors.groupingBy(url -> url.getCompetition().getId(),
                         Collectors.mapping(CompetitionUrlResponse::from, Collectors.toList())));
+        Map<Long, CompetitionRegistrationSource> sourcesById = resolveRegistrationSources(ids);
         List<AdminCompetitionResponse> responses = page.getContent().stream()
-                .map(competition -> AdminCompetitionResponse.from(competition, urlsById.getOrDefault(competition.getId(), List.of())))
+                .map(competition -> AdminCompetitionResponse.from(competition,
+                        sourcesById.get(competition.getId()),
+                        urlsById.getOrDefault(competition.getId(), List.of())))
                 .toList();
         return new AdminCompetitionListResponse(responses, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages(), page.hasNext());
@@ -270,7 +276,7 @@ public class CompetitionService {
                 CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
 
-        return toResponse(competition, savedUrls);
+        return toResponse(competition, CompetitionRegistrationSource.ADMIN, savedUrls);
     }
 
     @Transactional
@@ -295,7 +301,7 @@ public class CompetitionService {
         competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
-        return toResponse(competition, savedUrls);
+        return toResponse(competition, CompetitionRegistrationSource.AI, savedUrls);
     }
 
     @Transactional
@@ -402,29 +408,27 @@ public class CompetitionService {
                 .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
     }
 
-    private Specification<Competition> createdByAdmin() {
-        // Competition에는 "누가 만들었는지"를 저장하는 필드가 없어서, 생성 시 같이 남긴
-        // 검증 로그(관리자 리뷰·fromStatus 없음·등록 사유 고정값)로 생성 출처를 역으로 판별한다.
-        return (root, query, criteriaBuilder) -> {
-            var subquery = query.subquery(Long.class);
-            var log = subquery.from(CompetitionVerificationLog.class);
-            subquery.select(log.get("id")).where(
-                    criteriaBuilder.equal(log.get("competition"), root),
-                    criteriaBuilder.equal(log.get("verificationMethod"), CompetitionVerificationLog.Method.ADMIN_REVIEW),
-                    criteriaBuilder.isNull(log.get("fromStatus")),
-                    criteriaBuilder.isNotNull(log.get("actorUser")),
-                    criteriaBuilder.equal(log.get("reason"), CompetitionVerificationLog.ADMIN_CREATION_REASON)
-            );
-            return criteriaBuilder.exists(subquery);
-        };
-    }
-
-    private Specification<Competition> listedCompetition() {
-        // 일반 목록 조회는 DRAFT까지 포함한다(정책상 범위). ARCHIVED는 논리 삭제 상태라 항상 제외.
-        return (root, query, criteriaBuilder) -> root.get("publicationStatus").in(
-                Competition.PublicationStatus.DRAFT,
-                Competition.PublicationStatus.PUBLISHED
-        );
+    private Map<Long, CompetitionRegistrationSource> resolveRegistrationSources(List<Long> competitionIds) {
+        // Competition에는 생성 출처 컬럼이 없어, 생성 시 함께 남긴 최초 검증 로그로 역판별한다.
+        // 근거가 없거나(레거시·수동 삽입) 관리자/AI 근거가 동시에 있으면 추측하지 않고 UNKNOWN으로 둔다.
+        Map<Long, CompetitionRegistrationSource> sources = new HashMap<>();
+        competitionIds.forEach(id -> sources.put(id, CompetitionRegistrationSource.UNKNOWN));
+        if (competitionIds.isEmpty()) {
+            return sources;
+        }
+        Map<Long, Set<CompetitionVerificationLog.Method>> methodsById = competitionVerificationLogRepository
+                .findCreationEvidence(competitionIds).stream()
+                .collect(Collectors.groupingBy(CompetitionCreationEvidenceProjection::getCompetitionId,
+                        Collectors.mapping(CompetitionCreationEvidenceProjection::getMethod, Collectors.toSet())));
+        methodsById.forEach((id, methods) -> {
+            if (methods.size() != 1) {
+                return;
+            }
+            sources.put(id, methods.contains(CompetitionVerificationLog.Method.ADMIN_REVIEW)
+                    ? CompetitionRegistrationSource.ADMIN
+                    : CompetitionRegistrationSource.AI);
+        });
+        return sources;
     }
 
     private Specification<Competition> publishedCompetition() {
@@ -631,8 +635,15 @@ public class CompetitionService {
     }
 
     private AdminCompetitionResponse toResponse(Competition competition, List<CompetitionUrl> urls) {
+        return toResponse(competition,
+                resolveRegistrationSources(List.of(competition.getId())).get(competition.getId()), urls);
+    }
+
+    private AdminCompetitionResponse toResponse(Competition competition, CompetitionRegistrationSource registrationSource,
+                                                List<CompetitionUrl> urls) {
         return AdminCompetitionResponse.from(
                 competition,
+                registrationSource,
                 urls.stream().map(CompetitionUrlResponse::from).toList()
         );
     }
