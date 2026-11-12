@@ -393,6 +393,20 @@ class AdminCreatedCompetitionListPersistenceTest {
     }
 
     @Test
+    void adminKeywordTreatsLikeMetacharactersAsLiteral() throws Exception {
+        for (String keyword : List.of("100%", "A_B", "느낌!", "경로\\파일")) {
+            var match = create(admin, "제목 " + keyword, Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
+            create(admin, "제목 1000 A0B 느낌표 경로파일", Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
+            mvc.perform(as(admin, get(PATH).param("keyword", keyword)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                    .andExpect(jsonPath("$.competitions[0].id").value(match.id()));
+            logs.deleteAll();
+            urls.deleteAll();
+            competitions.deleteAll();
+        }
+    }
+
+    @Test
     void keywordCategoryAndPublicationStatusCombineAsAndConditions() throws Exception {
         var match = create(admin, " 데이터 공모전 ", Competition.Category.WEB_MOBILE_IT, Competition.PublicationStatus.DRAFT);
         create(admin, "다른 이름", Competition.Category.WEB_MOBILE_IT, Competition.PublicationStatus.DRAFT);

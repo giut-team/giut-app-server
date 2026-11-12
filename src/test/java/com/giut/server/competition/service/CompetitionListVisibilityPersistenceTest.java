@@ -141,6 +141,24 @@ class CompetitionListVisibilityPersistenceTest {
     }
 
     @Test
+    void keywordTreatsLikeMetacharactersAsLiteralInTitleAndHost() throws Exception {
+        for (String keyword : List.of("100%", "A_B", "느낌!", "경로\\파일")) {
+            Competition title = save("제목 " + keyword, "주최", Competition.Category.ETC,
+                    Competition.PublicationStatus.DRAFT, null, null);
+            Competition host = save("일반 제목", "기관 " + keyword, Competition.Category.ETC,
+                    Competition.PublicationStatus.PUBLISHED, null, null);
+            save("제목 1000 A0B 느낌표 경로파일", "일반 기관", Competition.Category.ETC,
+                    Competition.PublicationStatus.PUBLISHED, null, null);
+
+            mvc.perform(as(verified, get("/api/competitions").param("keyword", keyword)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                    .andExpect(jsonPath("$.competitions[0].id").value(host.getId()))
+                    .andExpect(jsonPath("$.competitions[1].id").value(title.getId()));
+            competitions.deleteAll();
+        }
+    }
+
+    @Test
     void paginationAndCountUseBothStatesBeforePagingAndIgnoreNewerHiddenRows() throws Exception {
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < 12; i++) {

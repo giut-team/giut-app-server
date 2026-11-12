@@ -429,10 +429,14 @@ public class CompetitionService {
         // LOWER() 적용 + 선행 와일드카드(%...)라 인덱스를 못 타는 전체 테이블 스캔이다.
         // 데이터가 늘수록 느려짐이 측정으로 확인된 지점(실측: 5만건 28ms → 20만건 101ms).
         return (root, query, criteriaBuilder) -> {
-            String searchKeyword = "%" + keyword.toLowerCase() + "%";
+            String escapedKeyword = keyword.toLowerCase(java.util.Locale.ROOT)
+                    .replace("!", "!!")
+                    .replace("%", "!%")
+                    .replace("_", "!_");
+            String searchKeyword = "%" + escapedKeyword + "%";
             return criteriaBuilder.or(
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("title")), searchKeyword),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("hostOrganization")), searchKeyword)
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("title")), searchKeyword, '!'),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("hostOrganization")), searchKeyword, '!')
             );
         };
     }
