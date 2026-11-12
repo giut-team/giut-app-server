@@ -52,6 +52,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 import java.util.Comparator;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -142,8 +143,12 @@ public class TeamService {
                 .orElseThrow(() -> new ResourceNotFoundException("팀장을 찾을 수 없습니다."));
 
         Competition competition = competitionRepository.findByIdForUpdate(request.competitionId())
-                .filter(found -> found.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
+                .filter(found -> found.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED)
                 .orElseThrow(() -> new ResourceNotFoundException("대회를 찾을 수 없습니다."));
+
+        if (competition.getApplicationEndAt() == null || !competition.getApplicationEndAt().isAfter(Instant.now())) {
+            throw new ConflictException("모집 마감일이 없거나 마감된 공모전에는 팀을 생성할 수 없습니다.");
+        }
 
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
