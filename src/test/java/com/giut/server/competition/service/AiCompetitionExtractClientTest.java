@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +48,55 @@ class AiCompetitionExtractClientTest {
         assertThatThrownBy(() -> new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest"))
                 .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class,
                         error -> assertThat(error.status()).isEqualTo(HttpStatus.BAD_GATEWAY));
+    }
+
+    @Test
+    void classifiesOnlyTransientUpstreamFailuresAsRetryable() {
+        assertThat(failure(HttpStatus.SERVICE_UNAVAILABLE).retryable()).isTrue();
+        assertThat(failure(HttpStatus.TOO_MANY_REQUESTS).retryable()).isTrue();
+        assertThat(failure(HttpStatus.UNPROCESSABLE_ENTITY).retryable()).isFalse();
+        assertThat(failure(HttpStatus.BAD_REQUEST).retryable()).isFalse();
+        assertThat(failure(HttpStatus.SERVICE_UNAVAILABLE).status()).isEqualTo(HttpStatus.BAD_GATEWAY);
+
+        WebClient malformed = WebClient.builder().exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header("Content-Type", "application/json").body("{not json").build())).build();
+        assertThatThrownBy(() -> new AiCompetitionExtractClient(malformed, ENDPOINT).extract("https://example.com/contest"))
+                .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class,
+                        error -> assertThat(error.retryable()).isFalse());
+    }
+
+    @Test
+    void appliesCallerTimeoutAsRetryableGatewayTimeout() {
+        WebClient slow = WebClient.builder().exchangeFunction(request -> Mono.never()).build();
+        assertThatThrownBy(() -> new AiCompetitionExtractClient(slow, ENDPOINT)
+                .extract("https://example.com/contest", Duration.ofMillis(50)))
+                .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class, error -> {
+                    assertThat(error.status()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+                    assertThat(error.retryable()).isTrue();
+                });
+        assertThat(AiCompetitionExtractClient.PREVIEW_TIMEOUT).isEqualTo(Duration.ofSeconds(20));
+    }
+
+    @Test
+    void unconfiguredEndpointIsNotRetryable() {
+        AiCompetitionExtractClient client = new AiCompetitionExtractClient(WebClient.builder().build(), "");
+        assertThat(client.isConfigured()).isFalse();
+        assertThatThrownBy(() -> client.extract("https://example.com/contest", Duration.ofSeconds(1)))
+                .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class, error -> {
+                    assertThat(error.status()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(error.retryable()).isFalse();
+                });
+    }
+
+    private AiCompetitionExtractClient.ExtractionUnavailable failure(HttpStatus upstream) {
+        WebClient client = WebClient.builder().exchangeFunction(request ->
+                Mono.just(ClientResponse.create(upstream).build())).build();
+        try {
+            new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest");
+        } catch (AiCompetitionExtractClient.ExtractionUnavailable error) {
+            return error;
+        }
+        throw new AssertionError("expected failure");
     }
 
     @Test

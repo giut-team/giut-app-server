@@ -3,8 +3,11 @@ package com.giut.server.competition.controller;
 import com.giut.server.competition.dto.request.CompetitionExtractPreviewRequest;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.response.CompetitionExtractPreviewResponse;
+import com.giut.server.competition.dto.response.CompetitionExtractionJobResponse;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
 import com.giut.server.competition.service.AiCompetitionExtractClient.ExtractionUnavailable;
+import com.giut.server.competition.service.CompetitionExtractionJobService;
+import com.giut.server.competition.service.CompetitionExtractionJobStore.ExtractionQueueSaturated;
 import com.giut.server.competition.service.CompetitionSubmissionService;
 import com.giut.server.global.dto.ResultDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,14 +16,19 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
 
 @Tag(name = "Competition Submission")
 @SecurityRequirement(name = "JWT")
@@ -28,13 +36,47 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/competitions")
 public class CompetitionSubmissionController {
-    private final CompetitionSubmissionService submissions;
+    private static final String EXTRACTIONS = "/api/competitions/extractions/";
 
+    private final CompetitionSubmissionService submissions;
+    private final CompetitionExtractionJobService extractions;
+
+    /** @deprecated 신규 링크는 AI 응답(약 1분)을 HTTP 요청 안에서 기다린다. {@code POST /extractions}로 전환한다. */
+    @Deprecated
     @PostMapping("/extract-preview")
-    @Operation(summary = "회원 제출 공모전 추출 미리보기",
-            description = "기존 링크는 AI 호출 없이 반환합니다. 신규 링크는 추출 후 입력이 필요한 항목을 반환합니다.")
+    @Operation(summary = "회원 제출 공모전 추출 미리보기(전환 예정)", deprecated = true,
+            description = "기존 링크는 AI 호출 없이 반환합니다. 신규 링크는 추출 후 입력이 필요한 항목을 반환합니다. "
+                    + "AI 응답을 최대 20초 동기로 기다리므로 POST /api/competitions/extractions 비동기 접수로 전환하세요.")
     public ResponseEntity<CompetitionExtractPreviewResponse> preview(@Valid @RequestBody CompetitionExtractPreviewRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(submissions.preview(request.url()));
+    }
+
+    @PostMapping("/extractions")
+    @Operation(summary = "회원 공모전 URL 추출 작업 접수",
+            description = "기존 링크면 200과 status=EXISTS(AI 호출 없음)를 반환합니다. 신규 링크는 작업을 저장·commit한 뒤 "
+                    + "202와 jobId·Location을 반환합니다. 같은 링크의 진행 중 작업이 있으면 그 작업을 202로, "
+                    + "보관 중인 성공 작업이 있으면 200으로 다시 돌려줍니다.")
+    public ResponseEntity<CompetitionExtractionJobResponse> requestExtraction(
+            @Valid @RequestBody CompetitionExtractPreviewRequest request, Authentication authentication) {
+        CompetitionExtractionJobService.Accepted accepted =
+                extractions.accept(Long.valueOf(authentication.getName()), request.url());
+        CompetitionExtractionJobResponse body = accepted.response();
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(body.inProgress() ? HttpStatus.ACCEPTED : HttpStatus.OK)
+                .cacheControl(CacheControl.noStore());
+        if (body.jobId() != null) {
+            response.location(URI.create(EXTRACTIONS + body.jobId()));
+        }
+        return response.body(body);
+    }
+
+    @GetMapping("/extractions/{jobId}")
+    @Operation(summary = "회원 공모전 URL 추출 작업 조회",
+            description = "본인 작업의 상태와 결과를 반환합니다. SUCCEEDED면 result에 기존 미리보기와 같은 형식의 초안이 있습니다. "
+                    + "다른 사용자의 작업이나 없는 작업은 404입니다.")
+    public ResponseEntity<CompetitionExtractionJobResponse> getExtraction(@PathVariable Long jobId,
+                                                                          Authentication authentication) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(extractions.get(Long.valueOf(authentication.getName()), jobId));
     }
 
     @PostMapping("/submissions")
@@ -48,6 +90,13 @@ public class CompetitionSubmissionController {
             case INVALID_INPUT -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(result);
+    }
+
+    @ExceptionHandler(ExtractionQueueSaturated.class)
+    public ResponseEntity<ResultDto> extractionQueueSaturated(ExtractionQueueSaturated exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .body(ResultDto.builder().success(false).code(503).message(exception.getMessage()).build());
     }
 
     @ExceptionHandler(ExtractionUnavailable.class)

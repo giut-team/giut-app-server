@@ -56,8 +56,16 @@ public class CompetitionSubmissionService {
         }
 
         publicSource.requirePublicAddress(source.value());
-        AiCompetitionExtractClient.Extraction extraction = extractor.extract(sourceUrl);
-        CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, source.hash());
+        return previewFromExtraction(sourceUrl, source.hash(), extractor.extract(sourceUrl));
+    }
+
+    /**
+     * AI 원본 응답을 회원 확인용 미리보기로 바꾼다. 동기 미리보기와 비동기 추출 작업 결과 조회가 같은 변환·필드 보완 규칙을 쓴다.
+     * 공식 URL 중복 같은 DB 기준 검증은 호출 시점의 데이터로 다시 계산된다.
+     */
+    public CompetitionExtractPreviewResponse previewFromExtraction(String sourceUrl, String sourceHash,
+                                                                   AiCompetitionExtractClient.Extraction extraction) {
+        CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, sourceHash);
         List<CompetitionSubmissionFieldIssue> issues = validate(form);
         CompetitionExtractPreviewResponse.Status status;
         if (AiActivityType.INVALID_ACTIVITY.name().equals(extraction.activityKind())) {
@@ -97,7 +105,8 @@ public class CompetitionSubmissionService {
         }
     }
 
-    private Optional<String> findExistingUrl(String hash) {
+    /** 정규화 hash로 이미 등록됐거나 제출된 공고 URL을 찾는다. */
+    public Optional<String> findExistingUrl(String hash) {
         return urlRepository.findFirstByNormalizedUrlHashOrderByIdAsc(hash).map(CompetitionUrl::getUrl)
                 .or(() -> competitionRepository.findBySubmissionSourceUrlHash(hash).map(Competition::getSubmissionSourceUrl));
     }

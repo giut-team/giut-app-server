@@ -117,3 +117,4 @@ temp/
 !/src/main/resources/db/manual/V20__create_user_blocks.sql
 !/src/main/resources/db/manual/V26__add_competition_enrollment_and_team_flags.sql
 !/src/main/resources/db/manual/V28__add_competition_member_submissions.sql
+!/src/main/resources/db/manual/V29__create_competition_extraction_jobs.sql
