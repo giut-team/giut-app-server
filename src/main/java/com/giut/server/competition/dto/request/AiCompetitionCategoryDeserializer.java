@@ -17,6 +17,15 @@ public class AiCompetitionCategoryDeserializer extends StdDeserializer<Competiti
             return (Competition.Category) context.handleUnexpectedToken(Competition.Category.class, parser);
         }
         String value = parser.getText();
+        try {
+            return resolveCategory(value);
+        } catch (IllegalArgumentException ex) {
+            return (Competition.Category) context.handleWeirdStringValue(Competition.Category.class, value,
+                    "지원하지 않는 카테고리입니다.");
+        }
+    }
+
+    public static Competition.Category resolveCategory(String value) {
         return switch (value) {
             case "IDEA" -> Competition.Category.PLANNING_IDEA;
             case "MARKETING" -> Competition.Category.ADVERTISING_MARKETING;
@@ -26,16 +35,7 @@ public class AiCompetitionCategoryDeserializer extends StdDeserializer<Competiti
             case "LITERATURE" -> Competition.Category.LITERATURE_WRITING_SCENARIO;
             case "RESEARCH" -> Competition.Category.PAPER_REPORT;
             case "CULTURE_ARTS" -> Competition.Category.ENTERTAINMENT_ART_MUSIC;
-            default -> existingCategory(value, context);
+            default -> Competition.Category.valueOf(value);
         };
-    }
-
-    private Competition.Category existingCategory(String value, DeserializationContext context) {
-        try {
-            return Competition.Category.valueOf(value);
-        } catch (IllegalArgumentException ex) {
-            return (Competition.Category) context.handleWeirdStringValue(Competition.Category.class, value,
-                    "지원하지 않는 카테고리입니다.");
-        }
     }
 }

@@ -1,11 +1,11 @@
 package com.giut.server.competition.dto.response;
 
 /**
- * 공모전이 어떤 경로로 처음 등록됐는지. Competition 테이블에는 출처 컬럼이 없으므로
- * 생성 시 함께 남는 검증 로그로 판별하고, 근거가 없거나 서로 상충하면 UNKNOWN으로 둔다.
+ * 공모전의 최초 등록 경로. 회원 제출은 제출 메타데이터로, 관리자와 AI 등록은 최초 검증 로그로 판별한다.
  */
 public enum CompetitionRegistrationSource {
     ADMIN,
+    USER,
     AI,
     UNKNOWN
 }

@@ -1,5 +1,6 @@
 package com.giut.server.competition.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.giut.server.competition.entity.Competition;
 
 import java.time.Instant;
@@ -22,6 +23,8 @@ public record AdminCompetitionResponse(
         Competition.VerificationStatus verificationStatus,
         Instant verifiedAt,
         CompetitionRegistrationSource registrationSource,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Long submittedByUserId,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String submissionSourceUrl,
         List<CompetitionUrlResponse> urls,
         Boolean isForEnrolledOnly,
         Boolean isTeam
@@ -45,7 +48,9 @@ public record AdminCompetitionResponse(
                 competition.getPublicationStatus(),
                 competition.getVerificationStatus(),
                 competition.getVerifiedAt(),
-                registrationSource,
+                competition.isMemberSubmission() ? CompetitionRegistrationSource.USER : registrationSource,
+                competition.getSubmittedByUser() == null ? null : competition.getSubmittedByUser().getId(),
+                competition.getSubmissionSourceUrl(),
                 urls,
                 competition.getIsForEnrolledOnly(),
                 competition.getIsTeam()

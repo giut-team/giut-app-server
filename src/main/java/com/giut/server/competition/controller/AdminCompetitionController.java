@@ -4,6 +4,7 @@ import com.giut.server.global.dto.ResultDto;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
+import com.giut.server.competition.dto.request.ReviewCompetitionSubmissionRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
@@ -42,7 +44,7 @@ public class AdminCompetitionController {
     private final CompetitionService competitionService;
 
     @GetMapping
-    @Operation(summary = "관리자 공모전 목록 조회", description = "등록 출처와 관계없이 모든 공모전을 ID 내림차순으로 조회합니다. 각 항목의 registrationSource는 생성 이력으로 판별한 등록 출처이며, 관리자 직접 등록(샘플 포함)은 ADMIN, AI 수집 등록은 AI, 생성 이력이 없거나 상충해 판별할 수 없으면 UNKNOWN입니다. 기본은 ARCHIVED 제외이며 publicationStatus를 명시하면 해당 게시 상태만 조회합니다(예: AI 등록 후 DRAFT로 바뀐 공모전 확인). keyword, category, activityType은 AND 조건입니다. 조회수는 증가하지 않습니다.")
+    @Operation(summary = "관리자 공모전 목록 조회", description = "등록 출처와 관계없이 모든 공모전을 ID 내림차순으로 조회합니다. 각 항목의 registrationSource는 생성 이력으로 판별한 등록 출처이며, 관리자 직접 등록(샘플 포함)은 ADMIN, AI 수집 등록은 AI, 회원 제출은 USER, 생성 이력이 없거나 상충해 판별할 수 없으면 UNKNOWN입니다. 기본은 ARCHIVED 제외이며 publicationStatus를 명시하면 해당 게시 상태만 조회합니다(예: AI 등록 후 DRAFT로 바뀐 공모전 확인). keyword, category, activityType, verificationStatus는 AND 조건입니다. 조회수는 증가하지 않습니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "관리자 공모전 목록", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionListResponse.class))),
@@ -101,7 +103,7 @@ public class AdminCompetitionController {
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
             @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "다른 공모전에 이미 등록된 URL"),
+            @ApiResponse(responseCode = "409", description = "공식 URL 중복 또는 검토 전 회원 제출의 게시 상태 변경 시도"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
     public ResponseEntity<AdminCompetitionResponse> updateCompetition(
@@ -111,6 +113,26 @@ public class AdminCompetitionController {
     ) {
         Long adminUserId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(competitionService.updateByAdmin(adminUserId, competitionId, request));
+    }
+
+    @PatchMapping("/{competitionId}/review")
+    @Operation(summary = "회원 제출 공모전 검토", description = "검토 대기 중인 회원 제출을 승인하고 공개하거나 반려합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "검토 완료"),
+            @ApiResponse(responseCode = "400", description = "잘못된 검토 요청 또는 반려 사유 누락"),
+            @ApiResponse(responseCode = "401", description = "로그인 필요"),
+            @ApiResponse(responseCode = "403", description = "활성 관리자 권한 필요"),
+            @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "이미 처리됐거나 검토 대기 상태가 아님")
+    })
+    public ResponseEntity<AdminCompetitionResponse> reviewSubmission(
+            @PathVariable @Positive Long competitionId,
+            @Valid @RequestBody ReviewCompetitionSubmissionRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(competitionService.reviewSubmission(
+                Long.valueOf(authentication.getName()), competitionId, request));
     }
 
     @PatchMapping("/{competitionId}/publish")
@@ -125,6 +147,7 @@ public class AdminCompetitionController {
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
             @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "회원 제출은 검토 API에서 승인해야 함"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
     public ResponseEntity<AdminCompetitionResponse> publishCompetition(

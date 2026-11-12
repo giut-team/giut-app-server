@@ -10,7 +10,9 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.Objects;
 
-@Entity @Table(name = "competitions", indexes = {
+@Entity @Table(name = "competitions", uniqueConstraints =
+        @UniqueConstraint(name = "uk_competitions_submission_url_hash", columnNames = "submission_source_url_hash"),
+        indexes = {
         @Index(name = "idx_competitions_status_id", columnList = "publication_status, id"),
         @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at")
 }) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -70,6 +72,17 @@ public class Competition extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "verified_by_user_id", foreignKey = @ForeignKey(name = "fk_competitions_verified_by_user"))
     private User verifiedByUser;
+
+    @Column(name = "submission_source_url", columnDefinition = "text", updatable = false)
+    private String submissionSourceUrl;
+
+    @Column(name = "submission_source_url_hash", length = 64, updatable = false)
+    private String submissionSourceUrlHash;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submitted_by_user_id", updatable = false,
+            foreignKey = @ForeignKey(name = "fk_competitions_submitted_by_user"))
+    private User submittedByUser;
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;
@@ -134,6 +147,36 @@ public class Competition extends BaseTimeEntity {
         } else {
             this.verifiedByUser = null;
             this.verifiedAt = null;
+        }
+    }
+
+    public void recordSubmission(User submitter, String sourceUrl, String sourceUrlHash) {
+        if (submissionSourceUrlHash != null || publicationStatus != PublicationStatus.DRAFT
+                || verificationStatus != VerificationStatus.MANUAL_REVIEW_PENDING) {
+            throw new IllegalStateException("검토 대기 공모전에만 제출 정보를 기록할 수 있습니다.");
+        }
+        submittedByUser = Objects.requireNonNull(submitter);
+        submissionSourceUrl = Objects.requireNonNull(sourceUrl);
+        submissionSourceUrlHash = Objects.requireNonNull(sourceUrlHash);
+    }
+
+    public boolean isMemberSubmission() {
+        return submissionSourceUrlHash != null;
+    }
+
+    public void reviewSubmission(boolean approved, User reviewer) {
+        if (!isMemberSubmission() || publicationStatus != PublicationStatus.DRAFT
+                || verificationStatus != VerificationStatus.MANUAL_REVIEW_PENDING) {
+            throw new IllegalStateException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        }
+        if (approved) {
+            verificationStatus = VerificationStatus.MANUALLY_VERIFIED;
+            verifiedAt = Instant.now();
+            verifiedByUser = Objects.requireNonNull(reviewer);
+            publish();
+        } else {
+            verificationStatus = VerificationStatus.REJECTED;
+            publicationStatus = PublicationStatus.REJECTED;
         }
     }
 

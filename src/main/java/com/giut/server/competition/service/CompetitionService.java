@@ -9,6 +9,7 @@ import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
+import com.giut.server.competition.dto.request.ReviewCompetitionSubmissionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
@@ -220,6 +221,10 @@ public class CompetitionService {
         if (request.activityType() != null) {
             specification = specification.and(hasActivityType(request.activityType()));
         }
+        if (request.verificationStatus() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("verificationStatus"), request.verificationStatus()));
+        }
         Page<Competition> page = competitionRepository.findAll(specification,
                 PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
         List<Long> ids = page.getContent().stream().map(Competition::getId).toList();
@@ -305,9 +310,64 @@ public class CompetitionService {
     }
 
     @Transactional
+    public Long createByMember(Long userId, String sourceUrl, CompetitionUrlNormalizer.NormalizedUrl source,
+                               CreateCompetitionRequest input, Boolean isForEnrolledOnly, Boolean isTeam) {
+        User submitter = userRepository.findById(userId)
+                .filter(user -> user.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ForbiddenException("활성 상태의 사용자만 공모전을 제출할 수 있습니다."));
+        UpsertCompetitionRequest request = input.toUpsertRequest();
+        validateRequest(request);
+        List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
+        validateUrlOwnership(urls, null);
+
+        Competition competition = Competition.create(request.title().trim(), request.category(),
+                trimToNull(request.hostOrganization()), trimToNull(request.targetParticipants()),
+                request.summary().trim(), request.applicationStartAt(), request.applicationEndAt(),
+                Competition.PublicationStatus.DRAFT, Competition.VerificationStatus.MANUAL_REVIEW_PENDING, null);
+        competition.recordSubmission(submitter, sourceUrl, source.hash());
+        if (request.activityType() != null) {
+            competition.changeActivityType(request.activityType());
+        }
+        competition.changePrizeInfo(trimToNull(request.prizeInfo()));
+        competition.changeTotalPrizeAmount(request.totalPrizeAmount());
+        competition.changeIsForEnrolledOnly(isForEnrolledOnly);
+        competition.changeIsTeam(isTeam);
+        competition = competitionRepository.saveAndFlush(competition);
+        saveUrls(competition, urls);
+        return competition.getId();
+    }
+
+    @Transactional
+    public AdminCompetitionResponse reviewSubmission(Long adminUserId, Long competitionId,
+                                                      ReviewCompetitionSubmissionRequest request) {
+        User admin = findActiveAdmin(adminUserId);
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
+        Competition.VerificationStatus previousStatus = competition.getVerificationStatus();
+        if (!competition.isMemberSubmission() || previousStatus != Competition.VerificationStatus.MANUAL_REVIEW_PENDING
+                || competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
+            throw new ConflictException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        }
+
+        boolean approved = request.decision() == ReviewCompetitionSubmissionRequest.Decision.APPROVE;
+        String reason = trimToNull(request.reason());
+        if (!approved && reason == null) {
+            throw new IllegalArgumentException("반려 사유는 필수입니다.");
+        }
+        competition.reviewSubmission(approved, admin);
+        competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
+                competition, previousStatus, competition.getVerificationStatus(), admin, reason));
+        return toResponse(competition, CompetitionRegistrationSource.USER,
+                competitionUrlRepository.findAllByCompetition_Id(competitionId));
+    }
+
+    @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
+        if (competition.isMemberSubmission() && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED
+                && competition.getPublicationStatus() != request.publicationStatus()) {
+            throw new ConflictException("회원 제출의 게시 상태는 검토 API에서 변경할 수 있습니다.");
+        }
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, competitionId);
@@ -349,6 +409,10 @@ public class CompetitionService {
         findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
 
+        if (competition.isMemberSubmission()
+                && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED) {
+            throw new ConflictException("회원 제출은 관리자 검토 후 공개할 수 있습니다.");
+        }
         competition.publish();
 
         List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);

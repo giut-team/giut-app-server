@@ -25,8 +25,15 @@ public record AdminCompetitionSearchRequest(
         @Schema(description = "게시 상태. 생략하면 ARCHIVED를 제외하며, ARCHIVED를 지정하면 보관된 건만 조회합니다.")
         Competition.PublicationStatus publicationStatus,
         @Schema(description = "활동 유형. 분야 category와 독립적으로 적용합니다.", example = "HACKATHON")
-        Competition.ActivityType activityType
+        Competition.ActivityType activityType,
+        Competition.VerificationStatus verificationStatus
 ) {
+    public AdminCompetitionSearchRequest(Integer page, Integer size, String keyword, Competition.Category category,
+                                         Competition.PublicationStatus publicationStatus,
+                                         Competition.ActivityType activityType) {
+        this(page, size, keyword, category, publicationStatus, activityType, null);
+    }
+
     public int pageOrDefault() { return page == null ? 0 : page; }
     public int sizeOrDefault() { return size == null ? 10 : size; }
     public String normalizedKeyword() { return keyword == null || keyword.isBlank() ? null : keyword.trim(); }
