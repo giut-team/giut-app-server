@@ -154,9 +154,10 @@ class AdminCompetitionDeletePersistenceTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].id").value(other.getId()));
         for (String endpoint : List.of("/api/competitions/top5", "/api/competitions/closing-soon")) {
+            String listPath = endpoint.endsWith("closing-soon") ? "$.competitions" : "$";
             mvc.perform(as(admin, get(endpoint))).andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].id").value(other.getId()));
+                    .andExpect(jsonPath(listPath + ".length()").value(1))
+                    .andExpect(jsonPath(listPath + "[0].id").value(other.getId()));
         }
         mvc.perform(as(admin, get("/api/competitions/" + target.getId())))
                 .andExpect(status().isNotFound());

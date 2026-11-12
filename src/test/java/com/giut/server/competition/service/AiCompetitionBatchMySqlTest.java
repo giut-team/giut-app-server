@@ -5,7 +5,9 @@ import com.giut.server.competition.dto.request.AiActivityType;
 import com.giut.server.competition.dto.request.AiTargetParticipants;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.entity.CompetitionIngestionFailure;
 import com.giut.server.competition.entity.CompetitionUrl;
+import com.giut.server.competition.repository.CompetitionIngestionFailureRepository;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,7 +26,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Opt-in only: this schema is disposable and must never point to a shared database. */
 @EnabledIfEnvironmentVariable(named = "GIUT_AI_BATCH_MYSQL_TEST", matches = "true")
@@ -40,9 +43,13 @@ class AiCompetitionBatchMySqlTest {
     @Autowired CompetitionRepository competitions;
     @Autowired CompetitionUrlRepository urls;
     @Autowired CompetitionVerificationLogRepository logs;
+    @Autowired CompetitionIngestionFailureRepository failures;
+    @Autowired AiCompetitionBatchService batchService;
+    @Autowired ObjectMapper objectMapper;
 
     @BeforeEach
     void clearDatabase() {
+        failures.deleteAll();
         logs.deleteAll();
         urls.deleteAll();
         competitions.deleteAll();
@@ -71,20 +78,29 @@ class AiCompetitionBatchMySqlTest {
     }
 
     @Test
-    void laterDuplicateRollsBackEarlierCompetitionUrlAndAuditLog() {
-        AiCompetitionRequest first = request("https://example.com/batch-one");
-        assertThatThrownBy(() -> service.createBatchByAi(List.of(first, first))).isInstanceOf(ConflictException.class);
-        assertThat(competitions.count()).isZero();
-        assertThat(urls.count()).isZero();
-        assertThat(logs.count()).isZero();
-        assertThat(service.createBatchByAi(List.of(first, request("https://example.com/batch-two")))).hasSize(2);
+    void laterDuplicateIsRecordedWhileEarlierAndOtherItemsStayCommitted() {
+        JsonNode first = item("https://example.com/batch-one");
+        assertThat(batchService.ingest(List.of(first, first, item("https://example.com/batch-two")))).hasSize(2);
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
         assertThat(logs.count()).isEqualTo(2);
+        assertThat(failures.findAll()).singleElement().satisfies(failure -> {
+            assertThat(failure.getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.DUPLICATE);
+            assertThat(failure.getItemIndex()).isEqualTo(1);
+        });
         assertThat(competitions.findAll()).allSatisfy(competition -> {
             assertThat(competition.getPrizeInfo()).isEqualTo("대상 500만 원");
             assertThat(competition.getTargetParticipants()).isEqualTo("UNIV_ONLY");
         });
+    }
+
+    private JsonNode item(String url) {
+        return objectMapper.readTree("""
+                {"title":"공고", "category":["AI_DATA"], "targetParticipants":"UNIV_ONLY", "activityKind":"HACKATHON",
+                 "applicationStartAt":"2026-11-01T00:00:00Z", "applicationEndAt":"2026-12-01T00:00:00Z",
+                 "prizeInfo":"대상 500만 원", "totalPrizeAmount":10000000,
+                 "urls":[{"type":"OFFICIAL","url":"%s","primary":true}]}
+                """.formatted(url));
     }
 
     private AiCompetitionRequest request(String url) {

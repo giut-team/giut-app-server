@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
 
-@Entity @Table(name = "competition_urls", uniqueConstraints = {
+@Entity @Table(name = "competition_urls",
+        indexes = @Index(name = "idx_competition_urls_normalized_hash", columnList = "normalized_url_hash"),
+        uniqueConstraints = {
         @UniqueConstraint(name = "uk_competition_urls_official_hash", columnNames = "official_url_hash"),
         @UniqueConstraint(name = "uk_competition_urls_competition_hash", columnNames = {"competition_id", "normalized_url_hash"})
 }) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)

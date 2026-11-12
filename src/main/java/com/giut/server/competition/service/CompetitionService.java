@@ -5,12 +5,15 @@ import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.AiCompetitionRequest;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.dto.request.AdminCompetitionSearchRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
+import com.giut.server.competition.dto.request.ReviewCompetitionSubmissionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.AdminCompetitionListResponse;
 import com.giut.server.competition.dto.response.CompetitionRecruitmentStatus;
+import com.giut.server.competition.dto.response.CompetitionRegistrationSource;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.CompetitionTeamResponse;
 import com.giut.server.competition.dto.response.CompetitionUrlResponse;
@@ -27,6 +30,7 @@ import com.giut.server.user.entity.User;
 import com.giut.server.global.exception.ConflictException;
 import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ResourceNotFoundException;
+import com.giut.server.competition.repository.CompetitionCreationEvidenceProjection;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
 import com.giut.server.competition.repository.CompetitionScrapSummaryProjection;
@@ -67,7 +71,7 @@ public class CompetitionService {
     @Transactional(Transactional.TxType.SUPPORTS)
     public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
         Instant now = Instant.now();
-        Specification<Competition> specification = listedCompetition().and(
+        Specification<Competition> specification = publishedCompetition().and(
                 (root, query, builder) -> builder.greaterThan(root.get("applicationEndAt"), now));
 
         if (request.normalizedKeyword() != null) {
@@ -108,7 +112,7 @@ public class CompetitionService {
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<PublicCompetitionResponse> getClosingSoonCompetitions() {
+    public PublicCompetitionListResponse getClosingSoonCompetitions(CompetitionPageRequest request) {
         Instant now = Instant.now();
         Instant deadline = now.plus(7, ChronoUnit.DAYS);
         Specification<Competition> specification = publishedCompetition().and((root, query, criteriaBuilder) ->
@@ -123,11 +127,18 @@ public class CompetitionService {
         )
         );
 
-        List<Competition> competitions = competitionRepository.findAll(
+        if (request.category() != null) {
+            specification = specification.and(hasCategory(request.category()));
+        }
+
+        Page<Competition> competitions = competitionRepository.findAll(
                 specification,
-                Sort.by(Sort.Direction.ASC, "applicationEndAt").and(Sort.by(Sort.Direction.DESC, "id"))
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(),
+                        Sort.by(Sort.Direction.ASC, "applicationEndAt").and(Sort.by(Sort.Direction.DESC, "id")))
         );
-        return toPublicResponses(competitions, now);
+        return new PublicCompetitionListResponse(toPublicResponses(competitions.getContent(), now),
+                competitions.getNumber(), competitions.getSize(), competitions.getTotalElements(),
+                competitions.getTotalPages(), competitions.hasNext());
     }
 
     @Transactional
@@ -194,12 +205,13 @@ public class CompetitionService {
     }
 
     @Transactional
-    public AdminCompetitionListResponse getAdminCreatedCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
+    public AdminCompetitionListResponse getAdminCompetitions(Long adminUserId, AdminCompetitionSearchRequest request) {
         findActiveAdmin(adminUserId);
-        Specification<Competition> specification = createdByAdmin().and((root, query, criteriaBuilder) ->
+        // 등록 출처(관리자/AI/미확인)와 무관하게 전체 공모전을 조회하고, 출처는 응답 필드로만 구분한다.
+        Specification<Competition> specification = (root, query, criteriaBuilder) ->
                 request.publicationStatus() == null
                         ? criteriaBuilder.notEqual(root.get("publicationStatus"), Competition.PublicationStatus.ARCHIVED)
-                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus()));
+                        : criteriaBuilder.equal(root.get("publicationStatus"), request.publicationStatus());
         if (request.normalizedKeyword() != null) {
             specification = specification.and(keywordContains(request.normalizedKeyword()));
         }
@@ -209,15 +221,22 @@ public class CompetitionService {
         if (request.activityType() != null) {
             specification = specification.and(hasActivityType(request.activityType()));
         }
+        if (request.verificationStatus() != null) {
+            specification = specification.and((root, query, builder) ->
+                    builder.equal(root.get("verificationStatus"), request.verificationStatus()));
+        }
         Page<Competition> page = competitionRepository.findAll(specification,
                 PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id")));
-        Map<Long, List<CompetitionUrlResponse>> urlsById = page.isEmpty() ? Map.of()
-                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(
-                        page.getContent().stream().map(Competition::getId).toList()).stream()
+        List<Long> ids = page.getContent().stream().map(Competition::getId).toList();
+        Map<Long, List<CompetitionUrlResponse>> urlsById = ids.isEmpty() ? Map.of()
+                : competitionUrlRepository.findAllByCompetition_IdInOrderByIdAsc(ids).stream()
                 .collect(Collectors.groupingBy(url -> url.getCompetition().getId(),
                         Collectors.mapping(CompetitionUrlResponse::from, Collectors.toList())));
+        Map<Long, CompetitionRegistrationSource> sourcesById = resolveRegistrationSources(ids);
         List<AdminCompetitionResponse> responses = page.getContent().stream()
-                .map(competition -> AdminCompetitionResponse.from(competition, urlsById.getOrDefault(competition.getId(), List.of())))
+                .map(competition -> AdminCompetitionResponse.from(competition,
+                        sourcesById.get(competition.getId()),
+                        urlsById.getOrDefault(competition.getId(), List.of())))
                 .toList();
         return new AdminCompetitionListResponse(responses, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages(), page.hasNext());
@@ -262,7 +281,7 @@ public class CompetitionService {
                 CompetitionVerificationLog.ADMIN_CREATION_REASON
         ));
 
-        return toResponse(competition, savedUrls);
+        return toResponse(competition, CompetitionRegistrationSource.ADMIN, savedUrls);
     }
 
     @Transactional
@@ -287,20 +306,68 @@ public class CompetitionService {
         competition = competitionRepository.save(competition);
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAiVerificationLog(competition));
-        return toResponse(competition, savedUrls);
+        return toResponse(competition, CompetitionRegistrationSource.AI, savedUrls);
     }
 
     @Transactional
-    public List<AdminCompetitionResponse> createBatchByAi(List<AiCompetitionRequest> inputs) {
-        // 단순 반복 저장처럼 보이지만 메서드 전체가 하나의 트랜잭션이라, 중간에 하나라도
-        // 예외가 나면(검증 실패·URL 중복 등) 이미 저장된 항목까지 전부 롤백된다(all-or-nothing).
-        return inputs.stream().map(this::createByAi).toList();
+    public Long createByMember(Long userId, String sourceUrl, CompetitionUrlNormalizer.NormalizedUrl source,
+                               CreateCompetitionRequest input, Boolean isForEnrolledOnly, Boolean isTeam) {
+        User submitter = userRepository.findById(userId)
+                .filter(user -> user.getStatus() == User.Status.ACTIVE)
+                .orElseThrow(() -> new ForbiddenException("활성 상태의 사용자만 공모전을 제출할 수 있습니다."));
+        UpsertCompetitionRequest request = input.toUpsertRequest();
+        validateRequest(request);
+        List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
+        validateUrlOwnership(urls, null);
+
+        Competition competition = Competition.create(request.title().trim(), request.category(),
+                trimToNull(request.hostOrganization()), trimToNull(request.targetParticipants()),
+                request.summary().trim(), request.applicationStartAt(), request.applicationEndAt(),
+                Competition.PublicationStatus.DRAFT, Competition.VerificationStatus.MANUAL_REVIEW_PENDING, null);
+        competition.recordSubmission(submitter, sourceUrl, source.hash());
+        if (request.activityType() != null) {
+            competition.changeActivityType(request.activityType());
+        }
+        competition.changePrizeInfo(trimToNull(request.prizeInfo()));
+        competition.changeTotalPrizeAmount(request.totalPrizeAmount());
+        competition.changeIsForEnrolledOnly(isForEnrolledOnly);
+        competition.changeIsTeam(isTeam);
+        competition = competitionRepository.saveAndFlush(competition);
+        saveUrls(competition, urls);
+        return competition.getId();
+    }
+
+    @Transactional
+    public AdminCompetitionResponse reviewSubmission(Long adminUserId, Long competitionId,
+                                                      ReviewCompetitionSubmissionRequest request) {
+        User admin = findActiveAdmin(adminUserId);
+        Competition competition = findEditableCompetitionForUpdate(competitionId);
+        Competition.VerificationStatus previousStatus = competition.getVerificationStatus();
+        if (!competition.isMemberSubmission() || previousStatus != Competition.VerificationStatus.MANUAL_REVIEW_PENDING
+                || competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
+            throw new ConflictException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        }
+
+        boolean approved = request.decision() == ReviewCompetitionSubmissionRequest.Decision.APPROVE;
+        String reason = trimToNull(request.reason());
+        if (!approved && reason == null) {
+            throw new IllegalArgumentException("반려 사유는 필수입니다.");
+        }
+        competition.reviewSubmission(approved, admin);
+        competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
+                competition, previousStatus, competition.getVerificationStatus(), admin, reason));
+        return toResponse(competition, CompetitionRegistrationSource.USER,
+                competitionUrlRepository.findAllByCompetition_Id(competitionId));
     }
 
     @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
+        if (competition.isMemberSubmission() && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED
+                && competition.getPublicationStatus() != request.publicationStatus()) {
+            throw new ConflictException("회원 제출의 게시 상태는 검토 API에서 변경할 수 있습니다.");
+        }
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, competitionId);
@@ -342,6 +409,10 @@ public class CompetitionService {
         findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
 
+        if (competition.isMemberSubmission()
+                && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED) {
+            throw new ConflictException("회원 제출은 관리자 검토 후 공개할 수 있습니다.");
+        }
         competition.publish();
 
         List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
@@ -394,29 +465,27 @@ public class CompetitionService {
                 .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
     }
 
-    private Specification<Competition> createdByAdmin() {
-        // Competition에는 "누가 만들었는지"를 저장하는 필드가 없어서, 생성 시 같이 남긴
-        // 검증 로그(관리자 리뷰·fromStatus 없음·등록 사유 고정값)로 생성 출처를 역으로 판별한다.
-        return (root, query, criteriaBuilder) -> {
-            var subquery = query.subquery(Long.class);
-            var log = subquery.from(CompetitionVerificationLog.class);
-            subquery.select(log.get("id")).where(
-                    criteriaBuilder.equal(log.get("competition"), root),
-                    criteriaBuilder.equal(log.get("verificationMethod"), CompetitionVerificationLog.Method.ADMIN_REVIEW),
-                    criteriaBuilder.isNull(log.get("fromStatus")),
-                    criteriaBuilder.isNotNull(log.get("actorUser")),
-                    criteriaBuilder.equal(log.get("reason"), CompetitionVerificationLog.ADMIN_CREATION_REASON)
-            );
-            return criteriaBuilder.exists(subquery);
-        };
-    }
-
-    private Specification<Competition> listedCompetition() {
-        // 일반 목록 조회는 DRAFT까지 포함한다(정책상 범위). ARCHIVED는 논리 삭제 상태라 항상 제외.
-        return (root, query, criteriaBuilder) -> root.get("publicationStatus").in(
-                Competition.PublicationStatus.DRAFT,
-                Competition.PublicationStatus.PUBLISHED
-        );
+    private Map<Long, CompetitionRegistrationSource> resolveRegistrationSources(List<Long> competitionIds) {
+        // Competition에는 생성 출처 컬럼이 없어, 생성 시 함께 남긴 최초 검증 로그로 역판별한다.
+        // 근거가 없거나(레거시·수동 삽입) 관리자/AI 근거가 동시에 있으면 추측하지 않고 UNKNOWN으로 둔다.
+        Map<Long, CompetitionRegistrationSource> sources = new HashMap<>();
+        competitionIds.forEach(id -> sources.put(id, CompetitionRegistrationSource.UNKNOWN));
+        if (competitionIds.isEmpty()) {
+            return sources;
+        }
+        Map<Long, Set<CompetitionVerificationLog.Method>> methodsById = competitionVerificationLogRepository
+                .findCreationEvidence(competitionIds).stream()
+                .collect(Collectors.groupingBy(CompetitionCreationEvidenceProjection::getCompetitionId,
+                        Collectors.mapping(CompetitionCreationEvidenceProjection::getMethod, Collectors.toSet())));
+        methodsById.forEach((id, methods) -> {
+            if (methods.size() != 1) {
+                return;
+            }
+            sources.put(id, methods.contains(CompetitionVerificationLog.Method.ADMIN_REVIEW)
+                    ? CompetitionRegistrationSource.ADMIN
+                    : CompetitionRegistrationSource.AI);
+        });
+        return sources;
     }
 
     private Specification<Competition> publishedCompetition() {
@@ -623,8 +692,15 @@ public class CompetitionService {
     }
 
     private AdminCompetitionResponse toResponse(Competition competition, List<CompetitionUrl> urls) {
+        return toResponse(competition,
+                resolveRegistrationSources(List.of(competition.getId())).get(competition.getId()), urls);
+    }
+
+    private AdminCompetitionResponse toResponse(Competition competition, CompetitionRegistrationSource registrationSource,
+                                                List<CompetitionUrl> urls) {
         return AdminCompetitionResponse.from(
                 competition,
+                registrationSource,
                 urls.stream().map(CompetitionUrlResponse::from).toList()
         );
     }

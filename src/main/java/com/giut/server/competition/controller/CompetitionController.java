@@ -3,6 +3,7 @@ package com.giut.server.competition.controller;
 import com.giut.server.global.dto.ResultDto;
 import com.giut.server.global.swagger.SwaggerExamples;
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.dto.response.CompetitionScrapResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionDetailResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionListResponse;
@@ -42,7 +43,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "마감 일시가 현재보다 미래인 DRAFT와 PUBLISHED 공모전을 페이지 단위로 조회합니다. 마감 일시가 없거나 마감된 공모전은 제외합니다. CLOSED 필터 결과는 현재 비어 있습니다. 관리자와 일반 사용자에게 동일하게 적용하며 REJECTED와 ARCHIVED는 제외합니다. DRAFT는 목록에만 포함되고 상세 조회와 스크랩은 PUBLISHED만 허용합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
+            description = "마감 일시가 현재보다 미래인 PUBLISHED 공모전을 페이지 단위로 조회합니다. 마감 일시가 없거나 마감된 공모전은 제외합니다. CLOSED 필터 결과는 현재 비어 있습니다. 관리자와 일반 사용자에게 동일하게 적용하며 DRAFT, REJECTED, ARCHIVED는 제외합니다. 관리자는 DRAFT를 관리자 공모전 목록에서 확인합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -78,15 +79,17 @@ public class CompetitionController {
     }
 
     @GetMapping("/closing-soon")
-    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 마감 임박 순으로 조회합니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
+    @Operation(summary = "마감 임박 공모전 조회", description = "현재 모집 중이며 마감 시각이 조회 시점부터 7일 이내인 게시 공모전을 페이지 단위로 마감 임박 순, 같은 시각이면 ID 내림차순으로 조회합니다. page는 0부터 시작하며 size는 기본 10, 최대 20입니다. 선택한 category는 페이지를 나누기 전에 적용됩니다. verified는 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = PublicCompetitionResponse.class)), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_LIST))),
+            @ApiResponse(responseCode = "200", description = "마감 임박 공모전 조회 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicCompetitionListResponse.class), examples = @ExampleObject(value = SwaggerExamples.COMPETITION_PAGE))),
+            @ApiResponse(responseCode = "400", description = "page 또는 size 오류"),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류")
     })
-    public ResponseEntity<java.util.List<PublicCompetitionResponse>> getClosingSoonCompetitions() {
-        return ResponseEntity.ok(competitionService.getClosingSoonCompetitions());
+    public ResponseEntity<PublicCompetitionListResponse> getClosingSoonCompetitions(
+            @Valid @ParameterObject @ModelAttribute CompetitionPageRequest request) {
+        return ResponseEntity.ok(competitionService.getClosingSoonCompetitions(request));
     }
 
     @GetMapping("/{competitionId}")

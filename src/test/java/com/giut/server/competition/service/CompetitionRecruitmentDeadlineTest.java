@@ -1,6 +1,7 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.competition.dto.request.CompetitionSearchRequest;
+import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
@@ -101,15 +102,15 @@ class CompetitionRecruitmentDeadlineTest {
 
     @Test
     void closingSoonCountsOnlyRecruitingTeams() {
-        when(competitionRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(competition(1L, NOW.plusSeconds(1))));
+        when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(competition(1L, NOW.plusSeconds(1)))));
         var count = teamCount(1L, 2L);
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L), Team.Status.RECRUITING))
                 .thenReturn(List.of(count));
 
-        var response = atFixedNow(competitionService::getClosingSoonCompetitions);
+        var response = atFixedNow(() -> competitionService.getClosingSoonCompetitions(new CompetitionPageRequest(null, null, null)));
 
-        assertThat(response).extracting("teamCount").containsExactly(2L);
+        assertThat(response.competitions()).extracting("teamCount").containsExactly(2L);
     }
 
     private void assertDetailIncludesTeam(Competition competition, String competitionRecruitmentStatus) {

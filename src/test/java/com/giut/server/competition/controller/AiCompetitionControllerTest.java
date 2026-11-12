@@ -1,5 +1,8 @@
 package com.giut.server.competition.controller;
 
+import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.entity.CompetitionIngestionFailure;
+import com.giut.server.competition.repository.CompetitionIngestionFailureRepository;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
@@ -9,11 +12,15 @@ import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -27,8 +34,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import java.time.Instant;
 import java.util.List;
 
+@ExtendWith(OutputCaptureExtension.class)
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:giut_ai_ingestion;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
@@ -51,6 +60,7 @@ class AiCompetitionControllerTest {
     @Autowired CompetitionRepository competitions;
     @Autowired CompetitionUrlRepository urls;
     @Autowired CompetitionVerificationLogRepository logs;
+    @Autowired CompetitionIngestionFailureRepository failures;
     @Autowired UserRepository users;
     @Autowired JwtProvider jwt;
     MockMvc mvc;
@@ -58,10 +68,29 @@ class AiCompetitionControllerTest {
     @BeforeEach
     void setup() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+        failures.deleteAll();
         logs.deleteAll();
         urls.deleteAll();
         competitions.deleteAll();
         users.deleteAll();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"applicationStartAt\":null,", ""})
+    void singleAndBatchAcceptMissingOrNullStartDate(String startDateField) throws Exception {
+        String body = BODY.replace("\"applicationStartAt\":\"2026-11-01T00:00:00Z\",", startDateField);
+        mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"competitions\":[" + body.replace("ai-contest", "batch-no-start-date") + "]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        assertThat(competitions.findAll()).hasSize(2).allSatisfy(competition -> {
+            assertThat(competition.getApplicationStartAt()).isNull();
+            assertThat(competition.getApplicationEndAt()).isEqualTo(Instant.parse("2026-12-01T00:00:00Z"));
+        });
+        assertThat(failures.count()).isZero();
     }
 
     @Test
@@ -71,10 +100,20 @@ class AiCompetitionControllerTest {
                 BODY.replace("\"applicationEndAt\":\"2026-12-01T00:00:00Z\"", "\"applicationEndAt\":null"))) {
             mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
-            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"competitions\":[" + BODY + "," + body + "]}"))
-                    .andExpect(status().isBadRequest());
             assertThat(competitions.count()).isZero();
+            mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"competitions\":[" + BODY + "," + body.replace("ai-contest", "no-deadline") + "]}"))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(1));
+            assertThat(competitions.count()).isEqualTo(1);
+            assertThat(failures.findAll()).singleElement().satisfies(failure -> {
+                assertThat(failure.getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.INVALID_FIELD);
+                assertThat(failure.getItemIndex()).isEqualTo(1);
+                assertThat(failure.getErrorMessage()).contains("applicationEndAt");
+            });
+            failures.deleteAll();
+            logs.deleteAll();
+            urls.deleteAll();
+            competitions.deleteAll();
         }
     }
 
@@ -84,6 +123,7 @@ class AiCompetitionControllerTest {
                 .replace("상금 미정", "총상금 1,000만 원");
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.activityType").value("HACKATHON"))
+                .andExpect(jsonPath("$.registrationSource").value("AI"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"))
                 .andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
                 .andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"));
@@ -162,13 +202,47 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void invalidActivityInBatchRollsBackEverything() throws Exception {
-        String batch = "{\"competitions\":[" + BODY + "," + BODY.replace("HACKATHON", "INVALID_ACTIVITY").replace("ai-contest", "invalid-contest") + "]}";
+    void invalidActivityInBatchIsRecordedWhileOthersAreSaved(CapturedOutput output) throws Exception {
+        String invalid = BODY.replace("HACKATHON", "INVALID_ACTIVITY").replace("ai-contest", "invalid-contest");
+        String batch = "{\"competitions\":[" + BODY + "," + invalid + "," + BODY.replace("ai-contest", "third") + "]}";
+        Instant before = Instant.now();
         mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
-                .andExpect(status().isBadRequest());
-        assertThat(competitions.count()).isZero();
-        assertThat(urls.count()).isZero();
-        assertThat(logs.count()).isZero();
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].urls[0].url").value("https://example.com/ai-contest"))
+                .andExpect(jsonPath("$[1].urls[0].url").value("https://example.com/third"));
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(2);
+        assertThat(logs.count()).isEqualTo(2);
+        CompetitionIngestionFailure failure = failures.findAll().getFirst();
+        assertThat(failures.count()).isEqualTo(1);
+        assertThat(failure.getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.REJECTED);
+        assertThat(failure.getItemIndex()).isEqualTo(1);
+        assertThat(failure.getTitle()).isEqualTo("AI 공모전");
+        assertThat(failure.getPrimaryUrl()).isEqualTo("https://example.com/invalid-contest");
+        assertThat(failure.getRawPayload()).contains("INVALID_ACTIVITY");
+        assertThat(failure.getErrorMessage()).contains("부적합 활동");
+        assertThat(failure.getReceivedAt()).isBetween(before, Instant.now());
+        assertThat(failure.getBatchId()).hasSize(36);
+        assertThat(output).contains("AI_INGESTION_FAILURE batchId=" + failure.getBatchId() + " index=1 type=REJECTED")
+                .contains("AI_INGESTION_BATCH batchId=" + failure.getBatchId() + " total=3 created=2 failed=1");
+    }
+
+    @Test
+    void unknownCategoryOrNullItemInBatchIsRecordedAsInvalidFormat() throws Exception {
+        String unknown = BODY.replace("WEB_MOBILE_IT", "UNKNOWN").replace("ai-contest", "unknown-category");
+        mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("[" + unknown + ", null, " + BODY + ", \"text\"]"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(1));
+        assertThat(competitions.count()).isEqualTo(1);
+        List<CompetitionIngestionFailure> recorded = failures.findAll().stream()
+                .sorted(java.util.Comparator.comparingInt(CompetitionIngestionFailure::getItemIndex)).toList();
+        assertThat(recorded).extracting(CompetitionIngestionFailure::getItemIndex).containsExactly(0, 1, 3);
+        assertThat(recorded).allSatisfy(failure ->
+                assertThat(failure.getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.INVALID_FORMAT));
+        assertThat(recorded.get(0).getPrimaryUrl()).isEqualTo("https://example.com/unknown-category");
+        assertThat(recorded.get(1).getRawPayload()).isEqualTo("null");
+        assertThat(recorded).extracting(CompetitionIngestionFailure::getBatchId).containsOnly(recorded.get(0).getBatchId());
+        assertThat(recorded).extracting(CompetitionIngestionFailure::getReceivedAt).containsOnly(recorded.get(0).getReceivedAt());
     }
 
     @Test
@@ -212,7 +286,9 @@ class AiCompetitionControllerTest {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].activityType").value("HACKATHON"))
                 .andExpect(jsonPath("$[1].activityType").value("COMPETITION"))
-                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"));
+                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"))
+                .andExpect(jsonPath("$[0].registrationSource").value("AI"))
+                .andExpect(jsonPath("$[1].registrationSource").value("AI"));
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
         assertThat(logs.count()).isEqualTo(2);
@@ -253,15 +329,22 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void batchRollsBackOnDuplicateOrLaterInvalidDates() throws Exception {
+    void duplicateOrInvalidDatesInBatchAreRecordedWithoutRollingBackEarlierItems() throws Exception {
         for (String second : new String[] {BODY, BODY.replace("ai-contest", "second")
                 .replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z")}) {
             String batch = "{\"competitions\":[" + BODY + "," + second + "]}";
             mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
-                    .andExpect(second.equals(BODY) ? status().isConflict() : status().isBadRequest());
-            assertThat(competitions.count()).isZero();
-            assertThat(urls.count()).isZero();
-            assertThat(logs.count()).isZero();
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(1));
+            assertThat(competitions.count()).isEqualTo(1);
+            assertThat(urls.count()).isEqualTo(1);
+            assertThat(logs.count()).isEqualTo(1);
+            assertThat(failures.findAll()).singleElement().extracting(CompetitionIngestionFailure::getFailureType)
+                    .isEqualTo(second.equals(BODY) ? CompetitionIngestionFailure.FailureType.DUPLICATE
+                            : CompetitionIngestionFailure.FailureType.REJECTED);
+            failures.deleteAll();
+            logs.deleteAll();
+            urls.deleteAll();
+            competitions.deleteAll();
         }
     }
 
@@ -269,12 +352,20 @@ class AiCompetitionControllerTest {
     void batchConflictWithExistingCompetitionLeavesExistingDataUntouched() throws Exception {
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isCreated());
-        String batch = "{\"competitions\":[" + BODY.replace("ai-contest", "new-contest") + "," + BODY + "]}";
+        Competition existing = competitions.findAll().getFirst();
+        String batch = "{\"competitions\":[" + BODY.replace("ai-contest", "new-contest").replace("AI 공모전", "새 공모전") + ","
+                + BODY.replace("AI 공모전", "덮어쓰기 시도") + "]}";
         mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
-                .andExpect(status().isConflict());
-        assertThat(competitions.count()).isEqualTo(1);
-        assertThat(urls.count()).isEqualTo(1);
-        assertThat(logs.count()).isEqualTo(1);
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].title").value("새 공모전"));
+        assertThat(competitions.count()).isEqualTo(2);
+        assertThat(urls.count()).isEqualTo(2);
+        assertThat(logs.count()).isEqualTo(2);
+        assertThat(competitions.findById(existing.getId()).orElseThrow().getTitle()).isEqualTo("AI 공모전");
+        assertThat(failures.findAll()).singleElement().satisfies(failure -> {
+            assertThat(failure.getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.DUPLICATE);
+            assertThat(failure.getTitle()).isEqualTo("덮어쓰기 시도");
+        });
     }
 
     @Test
@@ -293,12 +384,13 @@ class AiCompetitionControllerTest {
     void batchRejectsEmptyNullAndOverLimit() throws Exception {
         String many = IntStream.range(0, 21).mapToObj(i -> BODY.replace("ai-contest", "contest-" + i))
                 .collect(Collectors.joining(","));
-        for (String batch : new String[] {"{\"competitions\":[]}", "{\"competitions\":[null]}",
-                "{\"competitions\":[" + many + "]}"}) {
+        for (String batch : new String[] {"{\"competitions\":[]}", "[]", "{\"competitions\":{}}", "{}", "null",
+                "{\"competitions\":[" + many + "]}", "[" + many + "]", "[{\"title\":"}) {
             mvc.perform(post(PATH + "/batch").header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(batch))
                     .andExpect(status().isBadRequest());
         }
         assertThat(competitions.count()).isZero();
+        assertThat(failures.count()).isZero();
     }
 
     @Test
@@ -361,8 +453,7 @@ class AiCompetitionControllerTest {
                 BODY.replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z"),
                 BODY.replace("\"primary\":true", "\"primary\":false"),
                 BODY.replace("\"activityType\":\"HACKATHON\",", ""),
-                BODY.replace("HACKATHON", "INVALID"),
-                BODY.replace("\"applicationStartAt\":\"2026-11-01T00:00:00Z\",", "")
+                BODY.replace("HACKATHON", "INVALID")
         }) {
             mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());

@@ -10,6 +10,7 @@ import java.time.Instant;
 @Entity @Table(name = "competition_verification_logs") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompetitionVerificationLog {
     public static final String ADMIN_CREATION_REASON = "관리자 직접 등록";
+    public static final String AI_CREATION_REASON = "AI 서버 검증 후 등록";
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -61,7 +62,7 @@ public class CompetitionVerificationLog {
         log.competition = competition;
         log.toStatus = Competition.VerificationStatus.AUTO_VERIFIED;
         log.verificationMethod = Method.AUTO_EXTRACTION;
-        log.reason = "AI 서버 검증 후 등록";
+        log.reason = AI_CREATION_REASON;
         return log;
     }
 

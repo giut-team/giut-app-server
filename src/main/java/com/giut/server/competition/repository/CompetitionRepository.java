@@ -15,6 +15,8 @@ import java.time.Instant;
 
 public interface CompetitionRepository extends JpaRepository<Competition, Long>, JpaSpecificationExecutor<Competition> {
 
+    Optional<Competition> findBySubmissionSourceUrlHash(String submissionSourceUrlHash);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select competition from Competition competition where competition.id = :id")
     Optional<Competition> findByIdForUpdate(@Param("id") Long id);
