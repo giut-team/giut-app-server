@@ -305,13 +305,6 @@ public class CompetitionService {
     }
 
     @Transactional
-    public List<AdminCompetitionResponse> createBatchByAi(List<AiCompetitionRequest> inputs) {
-        // 단순 반복 저장처럼 보이지만 메서드 전체가 하나의 트랜잭션이라, 중간에 하나라도
-        // 예외가 나면(검증 실패·URL 중복 등) 이미 저장된 항목까지 전부 롤백된다(all-or-nothing).
-        return inputs.stream().map(this::createByAi).toList();
-    }
-
-    @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);

@@ -3,6 +3,7 @@ package com.giut.server.competition.controller;
 import com.giut.server.competition.dto.request.AiCompetitionRequest;
 import com.giut.server.competition.dto.request.AiCompetitionBatchRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
+import com.giut.server.competition.service.AiCompetitionBatchService;
 import com.giut.server.competition.service.CompetitionService;
 import com.giut.server.global.dto.ResultDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +34,7 @@ public class AiCompetitionController {
     private static final Logger logger = LoggerFactory.getLogger(AiCompetitionController.class);
 
     private final CompetitionService competitionService;
+    private final AiCompetitionBatchService aiCompetitionBatchService;
 
     @PostMapping
     @Operation(summary = "AI 검증 공모전 등록", description = "X-AI-API-Key 인증. 수신 즉시 PUBLISHED, AUTO_VERIFIED로 등록합니다.",
@@ -43,11 +45,11 @@ public class AiCompetitionController {
     }
 
     @PostMapping("/batch")
-    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~20건. 한 건이라도 실패하면 전체 저장을 취소합니다.",
+    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~20건. 공고마다 따로 저장하므로 일부가 실패해도 나머지는 저장됩니다. 실패한 공고는 원본·사유·수신 시각과 함께 실패 기록에 남고 서버 로그에 AI_INGESTION_FAILURE로 기록됩니다. 응답은 201이며 저장에 성공한 공고만 담습니다. 본문 형식 오류·0건·21건 이상은 400, DB 연결 장애처럼 처리를 이어갈 수 없으면 500입니다.",
             parameters = @Parameter(name = "X-AI-API-Key", in = ParameterIn.HEADER, required = true,
                     description = "AI 서버 전용 비밀키"))
     public ResponseEntity<List<AdminCompetitionResponse>> createBatch(@Valid @RequestBody AiCompetitionBatchRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(competitionService.createBatchByAi(request.competitions()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(aiCompetitionBatchService.ingest(request.competitions()));
     }
 
     // AI 수집 서버 디버깅용: GlobalExceptionHandler는 400을 조용히 반환하지만,
