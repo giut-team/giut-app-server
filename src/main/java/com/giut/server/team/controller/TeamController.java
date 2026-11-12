@@ -86,7 +86,7 @@ public class TeamController {
     @PostMapping
     @Operation(
             summary = "팀 생성",
-            description = "대회에 참여할 팀을 생성합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다."
+            description = "대회에 참여할 팀을 생성합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다. 공모전 모집 마감 시각과 같거나 지난 뒤에는 새 팀을 만들 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -116,8 +116,23 @@ public class TeamController {
             ),
             @ApiResponse(
                     responseCode = "409",
-                    description = "같은 공모전에 이미 모집 중인 팀이 있음",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"이 공모전에 이미 모집 중인 팀이 있습니다.\",\"code\":409}"))
+                    description = "공모전 모집이 마감됐거나 같은 공모전에 이미 모집 중인 팀이 있음",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ResultDto.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "competitionClosed",
+                                            summary = "공모전 모집 마감",
+                                            value = "{\"success\":false,\"message\":\"모집이 마감된 공모전에는 팀을 생성할 수 없습니다.\",\"code\":409}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "duplicateRecruitingTeam",
+                                            summary = "동일 공모전의 모집 중인 팀 중복",
+                                            value = "{\"success\":false,\"message\":\"이 공모전에 이미 모집 중인 팀이 있습니다.\",\"code\":409}"
+                                    )
+                            }
+                    )
             ),
             @ApiResponse(
                     responseCode = "500",
