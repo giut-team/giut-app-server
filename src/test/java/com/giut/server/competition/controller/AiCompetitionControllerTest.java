@@ -224,7 +224,7 @@ class AiCompetitionControllerTest {
         assertThat(failure.getReceivedAt()).isBetween(before, Instant.now());
         assertThat(failure.getBatchId()).hasSize(36);
         assertThat(output).contains("AI_INGESTION_FAILURE batchId=" + failure.getBatchId() + " index=1 type=REJECTED")
-                .contains("AI_INGESTION_BATCH batchId=" + failure.getBatchId() + " total=3 created=2 failed=1");
+                .contains("AI_INGESTION_BATCH batchId=" + failure.getBatchId() + " total=3 created=2 failed=1 duplicate=0");
     }
 
     @Test
@@ -329,7 +329,7 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void duplicateOrInvalidDatesInBatchAreRecordedWithoutRollingBackEarlierItems() throws Exception {
+    void duplicateOrInvalidDatesInBatchAreRecordedWithoutRollingBackEarlierItems(CapturedOutput output) throws Exception {
         for (String second : new String[] {BODY, BODY.replace("ai-contest", "second")
                 .replace("2026-12-01T00:00:00Z", "2026-10-01T00:00:00Z")}) {
             String batch = "{\"competitions\":[" + BODY + "," + second + "]}";
@@ -341,6 +341,9 @@ class AiCompetitionControllerTest {
             assertThat(failures.findAll()).singleElement().extracting(CompetitionIngestionFailure::getFailureType)
                     .isEqualTo(second.equals(BODY) ? CompetitionIngestionFailure.FailureType.DUPLICATE
                             : CompetitionIngestionFailure.FailureType.REJECTED);
+            // 중복은 실패 기록과 함께 배치 로그의 duplicate 건수로도 센다(failed는 생성되지 않은 전체).
+            assertThat(output.getAll()).contains(second.equals(BODY)
+                    ? "total=2 created=1 failed=1 duplicate=1" : "total=2 created=1 failed=1 duplicate=0");
             failures.deleteAll();
             logs.deleteAll();
             urls.deleteAll();

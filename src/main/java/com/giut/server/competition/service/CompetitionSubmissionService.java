@@ -5,20 +5,21 @@ import com.giut.server.competition.dto.request.AiCompetitionCategoryDeserializer
 import com.giut.server.competition.dto.request.CompetitionSubmissionForm;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
-import com.giut.server.competition.dto.response.CompetitionExtractPreviewResponse;
+import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.dto.response.CompetitionSubmissionFieldIssue;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
+import com.giut.server.competition.repository.CompetitionUrlRepository.LinkedCompetition;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
-import com.giut.server.competition.util.PublicCompetitionSource;
 import com.giut.server.global.exception.ConflictException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalTime;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,45 +44,51 @@ public class CompetitionSubmissionService {
     private final CompetitionRepository competitionRepository;
     private final CompetitionUrlRepository urlRepository;
     private final CompetitionUrlNormalizer urlNormalizer;
-    private final PublicCompetitionSource publicSource;
-    private final AiCompetitionExtractClient extractor;
     private final CompetitionService competitionService;
     private final Validator validator;
 
-    public CompetitionExtractPreviewResponse preview(String rawUrl) {
-        String sourceUrl = rawUrl.trim();
-        CompetitionUrlNormalizer.NormalizedUrl source = urlNormalizer.normalize(sourceUrl);
-        Optional<String> existing = findExistingUrl(source.hash());
-        if (existing.isPresent()) {
-            return CompetitionExtractPreviewResponse.existing(existing.get());
+    /**
+     * AI 원본 응답을 회원 확인용 추출 결과(초안과 보완이 필요한 필드)로 바꾼다. 비동기 추출 작업의 결과 조회가 이 변환·필드 보완 규칙을 쓴다.
+     * 공식 URL 중복 같은 DB 기준 검증은 호출 시점의 데이터로 다시 계산된다.
+     * 추출된 공식(OFFICIAL) 링크가 이미 등록된 공모전의 것이면 초안 대신 그 공모전을 가리키는 EXISTS를 돌려준다.
+     */
+    public CompetitionExtractionResult toExtractionResult(String sourceUrl, String sourceHash,
+                                                                   AiCompetitionExtractClient.Extraction extraction) {
+        CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, sourceHash);
+        boolean invalidActivity = AiActivityType.INVALID_ACTIVITY.name().equals(extraction.activityKind());
+        if (!invalidActivity) {
+            Optional<ExistingCompetition> owner = findOfficialOwner(form);
+            if (owner.isPresent()) {
+                return CompetitionExtractionResult.existing(owner.get().url(), owner.get().competitionId());
+            }
         }
-
-        publicSource.requirePublicAddress(source.value());
-        AiCompetitionExtractClient.Extraction extraction = extractor.extract(sourceUrl);
-        CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, source.hash());
         List<CompetitionSubmissionFieldIssue> issues = validate(form);
-        CompetitionExtractPreviewResponse.Status status;
-        if (AiActivityType.INVALID_ACTIVITY.name().equals(extraction.activityKind())) {
-            status = CompetitionExtractPreviewResponse.Status.INVALID_ACTIVITY;
+        CompetitionExtractionResult.Status status;
+        if (invalidActivity) {
+            status = CompetitionExtractionResult.Status.INVALID_ACTIVITY;
         } else {
             status = issues.isEmpty()
-                    ? CompetitionExtractPreviewResponse.Status.READY : CompetitionExtractPreviewResponse.Status.NEEDS_REVIEW;
+                    ? CompetitionExtractionResult.Status.READY : CompetitionExtractionResult.Status.NEEDS_REVIEW;
         }
-        return new CompetitionExtractPreviewResponse(status, null, sourceUrl, form, issues, validImages(extraction.images()));
+        return new CompetitionExtractionResult(status, null, null, sourceUrl, form, issues, validImages(extraction.images()));
     }
 
     public CompetitionSubmissionResponse submit(Long userId, CompetitionSubmissionRequest request) {
         String sourceUrl = request.sourceUrl().trim();
         CompetitionUrlNormalizer.NormalizedUrl source = urlNormalizer.normalize(sourceUrl);
-        Optional<String> existing = findExistingUrl(source.hash());
+        Optional<ExistingCompetition> existing = findExisting(source.hash());
         if (existing.isPresent()) {
-            return CompetitionSubmissionResponse.existing(existing.get());
+            return CompetitionSubmissionResponse.existing(existing.get().url(), existing.get().competitionId());
         }
         if (request.draft() == null) {
             return CompetitionSubmissionResponse.invalid(List.of(issue("draft", "REQUIRED", "공모전 등록 정보를 입력해 주세요.")));
         }
 
         CompetitionSubmissionForm form = prepareForm(request.draft(), sourceUrl, source.hash());
+        Optional<ExistingCompetition> officialOwner = findOfficialOwner(form);
+        if (officialOwner.isPresent()) {
+            return CompetitionSubmissionResponse.existing(officialOwner.get().url(), officialOwner.get().competitionId());
+        }
         List<CompetitionSubmissionFieldIssue> issues = validate(form);
         if (!issues.isEmpty()) {
             return CompetitionSubmissionResponse.invalid(issues);
@@ -91,15 +99,58 @@ public class CompetitionSubmissionService {
                     form.isForEnrolledOnly(), form.isTeam());
             return CompetitionSubmissionResponse.submitted(id);
         } catch (DataIntegrityViolationException | ConflictException exception) {
-            // The transactional write has rolled back. Read again to resolve a concurrent submission of this source.
-            return findExistingUrl(source.hash()).map(CompetitionSubmissionResponse::existing)
+            // The transactional write has rolled back. Read again to resolve a concurrent submission of this source
+            // or a concurrent registration of the same official link.
+            return findExisting(source.hash()).or(() -> findOfficialOwner(form))
+                    .map(found -> CompetitionSubmissionResponse.existing(found.url(), found.competitionId()))
                     .orElseThrow(() -> exception);
         }
     }
 
-    private Optional<String> findExistingUrl(String hash) {
-        return urlRepository.findFirstByNormalizedUrlHashOrderByIdAsc(hash).map(CompetitionUrl::getUrl)
-                .or(() -> competitionRepository.findBySubmissionSourceUrlHash(hash).map(Competition::getSubmissionSourceUrl));
+    /**
+     * 이미 있는 공모전의 링크와 ID.
+     *
+     * @param competitionId 공개 중(PUBLISHED)인 공모전일 때만 채운다. 상세 조회가 공개 건만 보여 주므로,
+     *                      검토 대기·반려·보관 중인 공모전의 ID는 노출하지 않고 존재만 알린다.
+     */
+    public record ExistingCompetition(String url, Long competitionId) {
+    }
+
+    /** 정규화 hash로 이미 등록됐거나 제출된 공고 URL을 찾는다. 링크 종류는 가리지 않는다. */
+    public Optional<ExistingCompetition> findExisting(String hash) {
+        return urlRepository.findLinkedByNormalizedUrlHash(hash, Limit.of(1)).stream().findFirst()
+                .map(CompetitionSubmissionService::toExisting)
+                .or(() -> competitionRepository.findBySubmissionSourceUrlHash(hash).map(competition ->
+                        new ExistingCompetition(competition.getSubmissionSourceUrl(),
+                                visibleId(competition.getId(), competition.getPublicationStatus()))));
+    }
+
+    /**
+     * 양식의 공식(OFFICIAL) 링크가 이미 다른 공모전에 등록돼 있으면 그 공모전을 찾는다. 공식 링크는 공모전 하나에만 등록할 수 있다.
+     * 여럿이 걸리면 공개 중인 공모전을 우선한다.
+     */
+    private Optional<ExistingCompetition> findOfficialOwner(CompetitionSubmissionForm form) {
+        Set<String> officialHashes = new LinkedHashSet<>();
+        for (CompetitionUrlRequest link : form.urls()) {
+            if (link != null && link.type() == CompetitionUrl.Type.OFFICIAL) {
+                String hash = validHash(link.url());
+                if (hash != null) officialHashes.add(hash);
+            }
+        }
+        if (officialHashes.isEmpty()) {
+            return Optional.empty();
+        }
+        List<LinkedCompetition> owners = urlRepository.findLinkedByOfficialUrlHashIn(officialHashes);
+        return owners.stream().filter(owner -> owner.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED)
+                .findFirst().or(() -> owners.stream().findFirst()).map(CompetitionSubmissionService::toExisting);
+    }
+
+    private static ExistingCompetition toExisting(LinkedCompetition link) {
+        return new ExistingCompetition(link.getUrl(), visibleId(link.getCompetitionId(), link.getPublicationStatus()));
+    }
+
+    private static Long visibleId(Long competitionId, Competition.PublicationStatus status) {
+        return status == Competition.PublicationStatus.PUBLISHED ? competitionId : null;
     }
 
     private CompetitionSubmissionForm toForm(AiCompetitionExtractClient.Extraction extraction) {
