@@ -3,7 +3,9 @@ package com.giut.server.competition.service;
 import com.giut.server.competition.config.CompetitionExtractionProperties;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
+import com.giut.server.competition.entity.CompetitionExtractionJobSubscription;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
+import com.giut.server.competition.repository.CompetitionExtractionJobSubscriptionRepository;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.global.exception.TooManyRequestsException;
 import com.giut.server.user.entity.User;
@@ -35,6 +37,7 @@ public class CompetitionExtractionJobStore {
     private static final int MAX_CANDIDATES = 64;
 
     private final CompetitionExtractionJobRepository jobs;
+    private final CompetitionExtractionJobSubscriptionRepository subscriptions;
     private final UserRepository users;
     private final CompetitionExtractionProperties properties;
 
@@ -45,16 +48,16 @@ public class CompetitionExtractionJobStore {
     }
 
     /**
-     * 사용자 행을 잠가 같은 사용자의 접수를 직렬화한 뒤, 재사용 가능한 작업이 있으면 그것을 돌려주고 없으면 한도 검사 후 새 작업을 저장한다.
-     * 메서드가 끝나며 commit되므로 호출자가 응답할 때는 작업이 이미 DB에 있다.
+     * 사용자 행을 잠가 같은 사용자의 접수를 직렬화한 뒤, 같은 URL의 재사용 가능한 작업이 있으면 그 작업에 합류하고(누가 만들었든),
+     * 없으면 한도 검사 후 새 작업을 저장한다. 한도는 새 AI 작업을 만들 때만 적용한다. 이미 있는 작업에 합류하는 일은 AI 작업을 늘리지 않는다.
+     * 메서드가 끝나며 commit되므로 호출자가 응답할 때는 작업과 구독이 이미 DB에 있다.
      */
     @Transactional
     public Enqueued enqueue(Long userId, String sourceUrl, String sourceUrlHash, Instant now) {
-        User requester = users.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
-        Optional<CompetitionExtractionJob> reusable = findReusable(userId, sourceUrlHash, now);
+        User requester = lockUser(userId);
+        Optional<CompetitionExtractionJob> reusable = findReusable(sourceUrlHash, now);
         if (reusable.isPresent()) {
-            return new Enqueued(reusable.get(), false);
+            return subscribe(requester, reusable.get(), now);
         }
         if (jobs.countByRequesterIdAndStatusIn(userId, ACTIVE) >= properties.maxActivePerUser()) {
             throw new TooManyRequestsException("진행 중인 공모전 추출 작업이 너무 많습니다. 기존 작업이 끝난 뒤 다시 요청해 주세요.", 30);
@@ -69,12 +72,36 @@ public class CompetitionExtractionJobStore {
         }
         CompetitionExtractionJob job = jobs.saveAndFlush(
                 CompetitionExtractionJob.pending(requester, sourceUrl, sourceUrlHash, now));
+        subscriptions.saveAndFlush(CompetitionExtractionJobSubscription.of(job, requester, now));
         return new Enqueued(job, true);
     }
 
+    /**
+     * 다른 접수와 동시에 같은 URL의 작업을 만들려다 active_key UNIQUE에 걸린 호출자가, 먼저 commit된 작업에 합류한다.
+     * 재사용할 작업이 없으면(그 사이 실패로 끝난 경우) 비어 있다.
+     */
+    @Transactional
+    public Optional<Enqueued> join(Long userId, String sourceUrlHash, Instant now) {
+        User requester = lockUser(userId);
+        return findReusable(sourceUrlHash, now).map(job -> subscribe(requester, job, now));
+    }
+
+    private User lockUser(Long userId) {
+        return users.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+    }
+
+    /** 같은 사용자의 접수는 사용자 행 잠금으로 직렬화돼 있으므로 존재 확인 뒤 저장해도 중복 구독이 생기지 않는다. */
+    private Enqueued subscribe(User requester, CompetitionExtractionJob job, Instant now) {
+        if (!subscriptions.existsByJob_IdAndUser_Id(job.getId(), requester.getId())) {
+            subscriptions.saveAndFlush(CompetitionExtractionJobSubscription.of(job, requester, now));
+        }
+        return new Enqueued(job, false);
+    }
+
     @Transactional(readOnly = true)
-    public Optional<CompetitionExtractionJob> findReusable(Long userId, String sourceUrlHash, Instant now) {
-        return jobs.findReusable(userId, sourceUrlHash, now, Limit.of(1)).stream().findFirst();
+    public Optional<CompetitionExtractionJob> findReusable(String sourceUrlHash, Instant now) {
+        return jobs.findReusable(sourceUrlHash, now, Limit.of(1)).stream().findFirst();
     }
 
     /**

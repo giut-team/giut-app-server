@@ -4,6 +4,7 @@ import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
+import com.giut.server.competition.repository.CompetitionExtractionJobSubscriptionRepository;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
@@ -86,6 +87,7 @@ class CompetitionExtractionJobPersistenceTest {
     @Autowired private CompetitionUrlRepository urls;
     @Autowired private CompetitionVerificationLogRepository logs;
     @Autowired private CompetitionExtractionJobRepository jobs;
+    @Autowired private CompetitionExtractionJobSubscriptionRepository subscriptions;
     @Autowired private CompetitionExtractionJobStore store;
     @Autowired private CompetitionExtractionWorker worker;
     @Autowired private ObjectMapper objectMapper;
@@ -98,6 +100,7 @@ class CompetitionExtractionJobPersistenceTest {
     private User admin;
     private User member;
     private User other;
+    private User third;
     private User unverified;
 
     @BeforeEach
@@ -106,6 +109,7 @@ class CompetitionExtractionJobPersistenceTest {
         admin = users.saveAndFlush(User.createAdmin("extract-admin@example.com", "hash", "관리자"));
         member = verified("extract-member", "extract-member@uos.ac.kr");
         other = verified("extract-other", "extract-other@uos.ac.kr");
+        third = verified("extract-third", "extract-third@uos.ac.kr");
         unverified = users.saveAndFlush(User.createOAuthUser("extract-unverified@example.com", "미인증",
                 User.OAuthProvider.KAKAO, "extract-unverified"));
         when(extractor.isConfigured()).thenReturn(true);
@@ -189,11 +193,70 @@ class CompetitionExtractionJobPersistenceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.jobId").value(jobId))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"));
-        // 다른 사용자는 결과를 공유받지 않고 자기 작업을 만든다.
+        // 다른 사용자도 같은 작업과 결과를 공유한다(새 작업·AI 호출 없음). 접수한 뒤부터 본인도 조회할 수 있다.
         mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.jobId").value(org.hamcrest.Matchers.not((int) jobId)));
-        assertThat(jobs.count()).isEqualTo(2);
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.jobId").value(jobId))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        mvc.perform(as(get(EXTRACTIONS + "/" + jobId), other))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("READY"));
+        assertThat(jobs.count()).isEqualTo(1);
+        assertThat(subscriptions.count()).isEqualTo(2);
+        verify(extractor, times(1)).extract(anyString(), any(Duration.class));
+    }
+
+    @Test
+    void sameUrlFromAnotherUserJoinsTheInFlightJobAndAiRunsOnce() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        long jobId = acceptedJobId(member, SOURCE);
+
+        // 진행 중인 다른 사용자의 작업에 합류한다. 서로 다른 URL 표기여도 정규화가 같으면 같은 작업이다.
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"https://EXAMPLE.com/contest/\"}"))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(jobId));
+        // 한 번 합류한 사용자의 재요청은 구독을 늘리지 않는다.
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(jobId));
+        assertThat(jobs.count()).isEqualTo(1);
+        assertThat(subscriptions.count()).isEqualTo(2);
+
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(jobId);
+        verify(extractor, times(1)).extract(anyString(), any(Duration.class));
+        for (User actor : List.of(member, other)) {
+            mvc.perform(as(get(EXTRACTIONS + "/" + jobId), actor))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        }
+        // 접수하지 않은 사용자는 작업 존재를 알 수 없다.
+        mvc.perform(as(get(EXTRACTIONS + "/" + jobId), third)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void joiningAnExistingJobIsNotRejectedByTheLimitsThatGuardNewAiWork() throws Exception {
+        // 사용자당 진행 중 2건, 전체 3건이 상한이다. 전체가 가득 차도 이미 있는 작업에 합류하는 것은 AI 작업을 늘리지 않는다.
+        long first = acceptedJobId(member, SOURCE);
+        acceptedJobId(member, "https://example.com/second");
+        acceptedJobId(other, "https://example.com/other-one");
+        mvc.perform(json(post(EXTRACTIONS), third, "{\"url\":\"https://example.com/brand-new\"}"))
+                .andExpect(status().isServiceUnavailable());
+
+        mvc.perform(json(post(EXTRACTIONS), third, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(first));
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"https://example.com/second\"}"))
+                .andExpect(status().isAccepted());
+        assertThat(jobs.count()).isEqualTo(3);
+    }
+
+    @Test
+    void failedJobIsNotSharedSoTheNextRequesterGetsAFreshAttempt() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenThrow(
+                new AiCompetitionExtractClient.ExtractionUnavailable(HttpStatus.BAD_GATEWAY, "x", false));
+        long failed = acceptedJobId(member, SOURCE);
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(failed);
+        assertThat(jobs.findById(failed).orElseThrow().getStatus()).isEqualTo(Status.FAILED);
+
+        long fresh = acceptedJobId(other, SOURCE);
+        assertThat(fresh).isNotEqualTo(failed);
     }
 
     @Test

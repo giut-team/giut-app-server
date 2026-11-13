@@ -50,16 +50,15 @@ public class CompetitionExtractionJobService {
         try {
             enqueued = store.enqueue(userId, sourceUrl, source.hash(), now);
         } catch (DataIntegrityViolationException exception) {
-            // 같은 사용자·URL의 진행 중 작업이 동시에 만들어진 경우(active_key UNIQUE). 커밋된 작업을 다시 읽어 돌려준다.
-            CompetitionExtractionJob job = store.findReusable(userId, source.hash(), now).orElseThrow(() -> exception);
-            enqueued = new CompetitionExtractionJobStore.Enqueued(job, false);
+            // 같은 URL의 진행 중 작업이 동시에 만들어진 경우(active_key UNIQUE). 먼저 commit된 작업에 합류한다.
+            enqueued = store.join(userId, source.hash(), now).orElseThrow(() -> exception);
         }
         return new Accepted(toResponse(enqueued.job()), enqueued.created());
     }
 
-    /** 본인 작업만 조회한다. 다른 사용자의 작업 ID는 존재 여부를 드러내지 않도록 404로 같게 처리한다. */
+    /** 접수했거나 같은 URL로 합류한 작업만 조회한다. 그 밖의 작업 ID는 존재 여부를 드러내지 않도록 404로 같게 처리한다. */
     public CompetitionExtractionJobResponse get(Long userId, Long jobId) {
-        return jobs.findByIdAndRequesterId(jobId, userId).map(this::toResponse)
+        return jobs.findAccessible(jobId, userId).map(this::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("추출 작업을 찾을 수 없습니다."));
     }
 

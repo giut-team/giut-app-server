@@ -366,6 +366,45 @@ class CompetitionExtractionJobMySqlTest {
     }
 
     @Test
+    void concurrentDifferentUsersSameUrlShareOneJobAndEveryoneCanReadIt() throws Exception {
+        List<User> requesters = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            User user = User.createOAuthUser("mysql-shared-" + i + "@example.com", "공유" + i,
+                    User.OAuthProvider.KAKAO, "mysql-shared-" + i);
+            user.verifyUniversityEmail("mysql-shared-" + i + "@uos.ac.kr");
+            requesters.add(users.saveAndFlush(user));
+        }
+        for (int round = 0; round < 10; round++) {
+            String url = "https://example.com/shared-" + round;
+            var start = new CountDownLatch(1);
+            try (var executor = Executors.newFixedThreadPool(requesters.size())) {
+                List<Future<Long>> ids = new ArrayList<>();
+                for (User requester : requesters) {
+                    ids.add(executor.submit(() -> {
+                        start.await();
+                        // active_key UNIQUE에 걸린 쪽은 예외 없이 먼저 commit된 작업에 합류해야 한다.
+                        return service.accept(requester.getId(), url).response().jobId();
+                    }));
+                }
+                start.countDown();
+                Set<Long> distinct = new HashSet<>();
+                for (Future<Long> id : ids) distinct.add(id.get(20, TimeUnit.SECONDS));
+                assertThat(distinct).hasSize(1);
+                Long jobId = distinct.iterator().next();
+                for (User requester : requesters) {
+                    assertThat(service.get(requester.getId(), jobId).jobId()).isEqualTo(jobId);
+                }
+            }
+        }
+        assertThat(jobs.count()).isEqualTo(10);
+        assertThat(jdbc.queryForObject("select count(*) from competition_extraction_job_subscriptions", Long.class))
+                .isEqualTo(40L);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from competition_extraction_jobs where status in ('PENDING','RUNNING')
+                """, Long.class)).isEqualTo(10L);
+    }
+
+    @Test
     void workerHoldsNoDatabaseConnectionWhileAiCallIsInFlight() throws Exception {
         HikariDataSource hikari = dataSource.unwrap(HikariDataSource.class);
         var inAi = new CountDownLatch(1);

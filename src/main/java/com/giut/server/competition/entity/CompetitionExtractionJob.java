@@ -20,7 +20,7 @@ import java.time.Instant;
         @Index(name = "idx_extraction_jobs_status_next", columnList = "status, next_attempt_at"),
         @Index(name = "idx_extraction_jobs_status_lease", columnList = "status, lease_expires_at"),
         @Index(name = "idx_extraction_jobs_requester_created", columnList = "requester_user_id, created_at"),
-        @Index(name = "idx_extraction_jobs_requester_hash", columnList = "requester_user_id, source_url_hash"),
+        @Index(name = "idx_extraction_jobs_hash_status", columnList = "source_url_hash, status"),
         @Index(name = "idx_extraction_jobs_expires", columnList = "expires_at")
 }, uniqueConstraints = @UniqueConstraint(name = "uk_extraction_jobs_active_key", columnNames = "active_key"))
 @Getter
@@ -34,6 +34,10 @@ public class CompetitionExtractionJob {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * 이 작업을 처음 접수한 회원. 신규 AI 작업을 만든 비용(시간당 생성 한도·진행 중 한도)은 이 회원에게 센다.
+     * 같은 URL에 나중에 합류한 회원은 {@link CompetitionExtractionJobSubscription}으로만 기록하며 조회 권한도 거기서 판단한다.
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "requester_user_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_extraction_jobs_requester"))
@@ -52,8 +56,8 @@ public class CompetitionExtractionJob {
     private Status status;
 
     /**
-     * PENDING/RUNNING 동안만 "사용자ID:URL hash" 값을 가지고, 종료되면 NULL이 된다.
-     * MySQL UNIQUE는 NULL을 여러 개 허용하므로 같은 사용자·같은 URL의 진행 중 작업을 DB에서 하나로 제한한다.
+     * PENDING/RUNNING 동안만 URL hash 값을 가지고, 종료되면 NULL이 된다.
+     * MySQL UNIQUE는 NULL을 여러 개 허용하므로 같은 URL의 진행 중 작업을 사용자와 무관하게 DB에서 하나로 제한한다.
      */
     @Column(name = "active_key", length = 90)
     private String activeKey;
@@ -104,16 +108,12 @@ public class CompetitionExtractionJob {
         job.sourceUrl = sourceUrl;
         job.sourceUrlHash = sourceUrlHash;
         job.status = Status.PENDING;
-        job.activeKey = activeKey(requester.getId(), sourceUrlHash);
+        job.activeKey = sourceUrlHash;
         job.attemptCount = 0;
         job.nextAttemptAt = now;
         job.createdAt = now;
         job.updatedAt = now;
         return job;
-    }
-
-    public static String activeKey(Long userId, String sourceUrlHash) {
-        return userId + ":" + sourceUrlHash;
     }
 
     public boolean isTerminal() {

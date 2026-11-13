@@ -94,20 +94,26 @@ public interface CompetitionExtractionJobRepository extends JpaRepository<Compet
                   @Param("message") String message, @Param("nextAttemptAt") Instant nextAttemptAt,
                   @Param("now") Instant now);
 
-    /** 같은 사용자·같은 URL의 진행 중 작업 또는 아직 보관 중인 성공 작업(재요청 시 재사용). */
+    /** 같은 URL의 진행 중 작업 또는 아직 보관 중인 성공 작업. 누가 접수했든 재사용한다(실패 작업은 재사용하지 않는다). */
     @Query("""
             select j from CompetitionExtractionJob j
-            where j.requester.id = :userId and j.sourceUrlHash = :hash
+            where j.sourceUrlHash = :hash
               and (j.status in (com.giut.server.competition.entity.CompetitionExtractionJob.Status.PENDING,
                                 com.giut.server.competition.entity.CompetitionExtractionJob.Status.RUNNING)
                    or (j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.SUCCEEDED
                        and j.expiresAt > :now))
             order by j.id desc
             """)
-    List<CompetitionExtractionJob> findReusable(@Param("userId") Long userId, @Param("hash") String hash,
-                                                @Param("now") Instant now, Limit limit);
+    List<CompetitionExtractionJob> findReusable(@Param("hash") String hash, @Param("now") Instant now, Limit limit);
 
-    Optional<CompetitionExtractionJob> findByIdAndRequesterId(Long id, Long requesterId);
+    /** 구독한(접수했거나 같은 URL로 합류한) 회원에게만 작업을 돌려준다. 그 밖의 회원에게는 존재 여부도 드러내지 않는다. */
+    @Query("""
+            select j from CompetitionExtractionJob j
+            where j.id = :id
+              and exists (select 1 from CompetitionExtractionJobSubscription s
+                          where s.job = j and s.user.id = :userId)
+            """)
+    Optional<CompetitionExtractionJob> findAccessible(@Param("id") Long id, @Param("userId") Long userId);
 
     long countByRequesterIdAndStatusIn(Long requesterId, Collection<Status> statuses);
 
