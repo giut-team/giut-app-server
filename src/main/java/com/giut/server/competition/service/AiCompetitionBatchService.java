@@ -51,6 +51,7 @@ public class AiCompetitionBatchService {
         Instant receivedAt = Instant.now();
         List<AdminCompetitionResponse> created = new ArrayList<>();
         int failed = 0;
+        int duplicates = 0;
         for (int index = 0; index < items.size(); index++) {
             JsonNode item = items.get(index);
             try {
@@ -60,6 +61,7 @@ public class AiCompetitionBatchService {
                 recordFailure(batchId, index, failure.type, failure.getMessage(), item, receivedAt);
             } catch (ConflictException e) {
                 failed++;
+                duplicates++;
                 recordFailure(batchId, index, FailureType.DUPLICATE, e.getMessage(), item, receivedAt);
             } catch (IllegalArgumentException e) {
                 failed++;
@@ -79,10 +81,11 @@ public class AiCompetitionBatchService {
         }
         long durationMs = java.time.Duration.between(receivedAt, Instant.now()).toMillis();
         if (failed > 0) {
-            logger.warn("{} batchId={} total={} created={} failed={} durationMs={}",
-                    BATCH_LOG_PREFIX, batchId, items.size(), created.size(), failed, durationMs);
+            // failed는 생성되지 않은 전체이고 duplicate는 그중 이미 등록된 공식 URL(중복) 건수다.
+            logger.warn("{} batchId={} total={} created={} failed={} duplicate={} durationMs={}",
+                    BATCH_LOG_PREFIX, batchId, items.size(), created.size(), failed, duplicates, durationMs);
         } else {
-            logger.info("{} batchId={} total={} created={} failed=0 durationMs={}",
+            logger.info("{} batchId={} total={} created={} failed=0 duplicate=0 durationMs={}",
                     BATCH_LOG_PREFIX, batchId, items.size(), created.size(), durationMs);
         }
         return created;

@@ -71,6 +71,40 @@ class AdminCompetitionIngestionFailurePersistenceTest {
     }
 
     @Test
+    void summaryCountsEveryFailureTypeInThePeriodSoDuplicateVolumeIsVisible() throws Exception {
+        mvc.perform(as(admin, get(PATH + "/summary"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(4))
+                .andExpect(jsonPath("$.byType.DUPLICATE").value(2))
+                .andExpect(jsonPath("$.byType.REJECTED").value(1))
+                .andExpect(jsonPath("$.byType.INVALID_FIELD").value(1))
+                .andExpect(jsonPath("$.byType.INVALID_FORMAT").value(0))
+                .andExpect(jsonPath("$.byType.UNEXPECTED").value(0));
+
+        // from은 포함, to는 미포함: 첫날(DAY1 이상 DAY2 미만)만 센다.
+        mvc.perform(as(admin, get(PATH + "/summary").param("from", DAY1.toString()).param("to", DAY2.toString())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.byType.DUPLICATE").value(1))
+                .andExpect(jsonPath("$.byType.REJECTED").value(1))
+                .andExpect(jsonPath("$.byType.INVALID_FIELD").value(0));
+        mvc.perform(as(admin, get(PATH + "/summary").param("to", DAY1.toString())))
+                .andExpect(jsonPath("$.total").value(0))
+                .andExpect(jsonPath("$.byType.DUPLICATE").value(0));
+        mvc.perform(as(admin, get(PATH + "/summary").param("from", DAY3.toString())))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.byType.DUPLICATE").value(1));
+    }
+
+    @Test
+    void summaryRejectsInvalidPeriodAndRequiresAnActiveAdmin() throws Exception {
+        mvc.perform(as(admin, get(PATH + "/summary").param("from", DAY2.toString()).param("to", DAY2.toString())))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(admin, get(PATH + "/summary").param("from", "not-a-time"))).andExpect(status().isBadRequest());
+        mvc.perform(get(PATH + "/summary")).andExpect(status().isUnauthorized());
+        mvc.perform(as(student, get(PATH + "/summary"))).andExpect(status().isForbidden());
+    }
+
+    @Test
     void listsNewestReceivedFirstWithReceivedAtAndRawPayload() throws Exception {
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(4)).andExpect(jsonPath("$.size").value(20))
