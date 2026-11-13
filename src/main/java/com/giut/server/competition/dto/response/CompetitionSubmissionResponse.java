@@ -16,8 +16,9 @@ public record CompetitionSubmissionResponse(
 ) {
     public enum Status { EXISTS, SUBMITTED, INVALID_INPUT }
 
-    public static CompetitionSubmissionResponse existing(String url) {
-        return new CompetitionSubmissionResponse(Status.EXISTS, url, null, null, null, null);
+    /** {@code competitionId}는 이미 있는 공모전이 공개 중(PUBLISHED)일 때만 채운다. */
+    public static CompetitionSubmissionResponse existing(String url, Long competitionId) {
+        return new CompetitionSubmissionResponse(Status.EXISTS, url, competitionId, null, null, null);
     }
 
     public static CompetitionSubmissionResponse submitted(Long competitionId) {

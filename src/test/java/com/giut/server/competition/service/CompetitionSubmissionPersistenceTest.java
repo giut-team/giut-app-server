@@ -114,9 +114,35 @@ class CompetitionSubmissionPersistenceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EXISTS"))
                 .andExpect(jsonPath("$.url").value(SOURCE))
+                .andExpect(jsonPath("$.competitionId").value(competitions.findAll().getFirst().getId()))
                 .andExpect(jsonPath("$.draft").doesNotExist())
                 .andExpect(jsonPath("$.requiredInputs").doesNotExist());
         verifyNoInteractions(publicSource, extractor);
+    }
+
+    @Test
+    void submittingAnOfficialLinkOfPublishedCompetitionReturnsThatCompetitionInsteadOfCreatingADraft() throws Exception {
+        mvc.perform(json(post(ADMIN), admin, officialOwnerForm("PUBLISHED"))).andExpect(status().isCreated());
+        long competitionId = competitions.findAll().getFirst().getId();
+
+        mvc.perform(json(post(SUBMISSIONS), member, submission(draftWithOfficialLink())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXISTS"))
+                .andExpect(jsonPath("$.url").value("https://official.example.com/contest"))
+                .andExpect(jsonPath("$.competitionId").value(competitionId));
+        assertThat(competitions.count()).isEqualTo(1);
+    }
+
+    @Test
+    void submittingAnOfficialLinkOfUnpublishedCompetitionDoesNotExposeItsId() throws Exception {
+        mvc.perform(json(post(ADMIN), admin, officialOwnerForm("DRAFT"))).andExpect(status().isCreated());
+
+        mvc.perform(json(post(SUBMISSIONS), member, submission(draftWithOfficialLink())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXISTS"))
+                .andExpect(jsonPath("$.url").value("https://official.example.com/contest"))
+                .andExpect(jsonPath("$.competitionId").doesNotExist());
+        assertThat(competitions.count()).isEqualTo(1);
     }
 
     @Test
@@ -220,6 +246,22 @@ class CompetitionSubmissionPersistenceTest {
         assertThat(competitions.count()).isEqualTo(1);
         assertThat(urls.count()).isEqualTo(1);
         verifyNoInteractions(extractor);
+    }
+
+    private String officialOwnerForm(String publicationStatus) {
+        return """
+                {"title":"기존 공고","category":"WEB_MOBILE_IT","summary":"소개","publicationStatus":"%s",
+                 "applicationEndAt":"2099-01-01T00:00:00Z",
+                 "urls":[{"type":"OFFICIAL","url":"https://official.example.com/contest","primary":true}]}
+                """.formatted(publicationStatus);
+    }
+
+    private String draftWithOfficialLink() {
+        return """
+                {"title":"학생 공모전","category":"WEB_MOBILE_IT","summary":"공고 설명","activityType":"COMPETITION",
+                 "applicationEndAt":"2099-01-01T00:00:00Z",
+                 "urls":[{"type":"OFFICIAL","url":"https://official.example.com/contest/","primary":false}]}
+                """;
     }
 
     private String submission(String form) {

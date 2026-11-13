@@ -307,10 +307,67 @@ class CompetitionExtractionJobPersistenceTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EXISTS"))
                 .andExpect(jsonPath("$.url").value(SOURCE))
+                // 공개 중인 공모전이면 그 공모전을 보여 줄 수 있도록 ID를 함께 돌려준다.
+                .andExpect(jsonPath("$.competitionId").value(competitions.findAll().getFirst().getId()))
                 .andExpect(jsonPath("$.jobId").doesNotExist())
                 .andExpect(header().doesNotExist("Location"));
         assertThat(jobs.count()).isZero();
         verifyNoInteractions(publicSource, extractor);
+    }
+
+    @Test
+    void extractedOfficialLinkOfPublishedCompetitionShowsThatCompetitionInsteadOfDraft() throws Exception {
+        String officialUrl = "https://official.example.com/contest";
+        createCompetitionWithOfficialLink(officialUrl, "PUBLISHED");
+        long competitionId = competitions.findAll().getFirst().getId();
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extractionWithOfficialLink(officialUrl));
+
+        long id = acceptedJobId(member, SOURCE);
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(id);
+
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.result.status").value("EXISTS"))
+                .andExpect(jsonPath("$.result.url").value(officialUrl))
+                .andExpect(jsonPath("$.result.competitionId").value(competitionId))
+                .andExpect(jsonPath("$.result.draft").doesNotExist())
+                .andExpect(jsonPath("$.result.requiredInputs").doesNotExist());
+        assertThat(competitions.count()).isEqualTo(1);
+    }
+
+    @Test
+    void extractedOfficialLinkOfUnpublishedCompetitionOnlyTellsItAlreadyExists() throws Exception {
+        String officialUrl = "https://official.example.com/contest";
+        createCompetitionWithOfficialLink(officialUrl, "DRAFT");
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extractionWithOfficialLink(officialUrl));
+
+        long id = acceptedJobId(member, SOURCE);
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(id);
+
+        // 공개되지 않은 공모전은 상세 조회가 막히므로 ID를 노출하지 않고 존재만 알린다.
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("EXISTS"))
+                .andExpect(jsonPath("$.result.url").value(officialUrl))
+                .andExpect(jsonPath("$.result.competitionId").doesNotExist())
+                .andExpect(jsonPath("$.result.draft").doesNotExist());
+    }
+
+    @Test
+    void extractedOfficialLinkNotRegisteredYetStillReturnsDraft() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class)))
+                .thenReturn(extractionWithOfficialLink("https://official.example.com/new"));
+
+        long id = acceptedJobId(member, SOURCE);
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(id);
+
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("READY"))
+                .andExpect(jsonPath("$.result.competitionId").doesNotExist())
+                .andExpect(jsonPath("$.result.draft.title").value("학생 공모전"));
     }
 
     @Test
@@ -589,6 +646,21 @@ class CompetitionExtractionJobPersistenceTest {
         verify(extractor, never()).extract(eq(staleUrl), any(Duration.class));
         verify(extractor, times(1)).extract(eq(freshUrl), any(Duration.class));
         verify(publicSource, never()).requirePublicAddress(staleUrl);
+    }
+
+    private void createCompetitionWithOfficialLink(String officialUrl, String publicationStatus) throws Exception {
+        mvc.perform(json(post(ADMIN), admin, """
+                {"title":"기존 공고","category":"WEB_MOBILE_IT","summary":"소개","publicationStatus":"%s",
+                 "applicationEndAt":"2099-01-01T00:00:00Z",
+                 "urls":[{"type":"OFFICIAL","url":"%s","primary":true}]}
+                """.formatted(publicationStatus, officialUrl))).andExpect(status().isCreated());
+    }
+
+    private AiCompetitionExtractClient.Extraction extractionWithOfficialLink(String officialUrl) {
+        return new AiCompetitionExtractClient.Extraction("학생 공모전", "기관", "대학생", null,
+                LocalDate.of(2099, 1, 1), LocalDate.of(2099, 1, 2), null, null, "CONTEST",
+                List.of("IT_DEVELOP"), false, "공고 설명", null,
+                List.of(new AiCompetitionExtractClient.ExtractedUrl("OFFICIAL", officialUrl)));
     }
 
     private List<CompetitionExtractionFailedEvent> failedEvents() {

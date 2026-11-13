@@ -14,6 +14,7 @@ public record CompetitionExtractionJobResponse(
         Long jobId,
         Status status,
         String url,
+        Long competitionId,
         String sourceUrl,
         Integer attemptCount,
         Instant createdAt,
@@ -26,14 +27,15 @@ public record CompetitionExtractionJobResponse(
     public record Error(String code, String message) {
     }
 
-    public static CompetitionExtractionJobResponse existing(String url) {
-        return new CompetitionExtractionJobResponse(null, Status.EXISTS, url, null, null, null, null, null, null);
+    public static CompetitionExtractionJobResponse existing(String url, Long competitionId) {
+        return new CompetitionExtractionJobResponse(null, Status.EXISTS, url, competitionId, null, null, null, null, null,
+                null);
     }
 
     public static CompetitionExtractionJobResponse of(CompetitionExtractionJob job, CompetitionExtractionResult result) {
         Error error = job.getStatus() == CompetitionExtractionJob.Status.FAILED
                 ? new Error(job.getErrorCode(), job.getErrorMessage()) : null;
-        return new CompetitionExtractionJobResponse(job.getId(), Status.valueOf(job.getStatus().name()), null,
+        return new CompetitionExtractionJobResponse(job.getId(), Status.valueOf(job.getStatus().name()), null, null,
                 job.getSourceUrl(), job.getAttemptCount(), job.getCreatedAt(), job.getCompletedAt(), result, error);
     }
 

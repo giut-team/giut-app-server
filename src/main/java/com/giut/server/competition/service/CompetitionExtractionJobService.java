@@ -34,9 +34,10 @@ public class CompetitionExtractionJobService {
     public Accepted accept(Long userId, String rawUrl) {
         String sourceUrl = rawUrl.trim();
         CompetitionUrlNormalizer.NormalizedUrl source = urlNormalizer.normalize(sourceUrl);
-        Optional<String> existing = submissions.findExistingUrl(source.hash());
+        Optional<CompetitionSubmissionService.ExistingCompetition> existing = submissions.findExisting(source.hash());
         if (existing.isPresent()) {
-            return new Accepted(CompetitionExtractionJobResponse.existing(existing.get()), false);
+            return new Accepted(CompetitionExtractionJobResponse.existing(
+                    existing.get().url(), existing.get().competitionId()), false);
         }
 
         publicSource.requirePublicAddress(source.value());
