@@ -6,7 +6,7 @@ import com.giut.server.competition.dto.request.CompetitionSubmissionForm;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record CompetitionExtractPreviewResponse(
+public record CompetitionExtractionResult(
         Status status,
         String url,
         String sourceUrl,
@@ -16,7 +16,7 @@ public record CompetitionExtractPreviewResponse(
 ) {
     public enum Status { EXISTS, READY, NEEDS_REVIEW, INVALID_ACTIVITY }
 
-    public static CompetitionExtractPreviewResponse existing(String url) {
-        return new CompetitionExtractPreviewResponse(Status.EXISTS, url, null, null, null, null);
+    public static CompetitionExtractionResult existing(String url) {
+        return new CompetitionExtractionResult(Status.EXISTS, url, null, null, null, null);
     }
 }

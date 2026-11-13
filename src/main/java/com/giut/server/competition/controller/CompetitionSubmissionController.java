@@ -1,6 +1,6 @@
 package com.giut.server.competition.controller;
 
-import com.giut.server.competition.dto.request.CompetitionExtractPreviewRequest;
+import com.giut.server.competition.dto.request.CompetitionExtractionRequest;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.response.CompetitionExtractionJobResponse;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
@@ -46,7 +46,7 @@ public class CompetitionSubmissionController {
                     + "202와 jobId·Location을 반환합니다. 같은 링크의 진행 중 작업이 있으면 그 작업을 202로, "
                     + "보관 중인 성공 작업이 있으면 200으로 다시 돌려줍니다.")
     public ResponseEntity<CompetitionExtractionJobResponse> requestExtraction(
-            @Valid @RequestBody CompetitionExtractPreviewRequest request, Authentication authentication) {
+            @Valid @RequestBody CompetitionExtractionRequest request, Authentication authentication) {
         CompetitionExtractionJobService.Accepted accepted =
                 extractions.accept(Long.valueOf(authentication.getName()), request.url());
         CompetitionExtractionJobResponse body = accepted.response();
@@ -60,7 +60,7 @@ public class CompetitionSubmissionController {
 
     @GetMapping("/extractions/{jobId}")
     @Operation(summary = "회원 공모전 URL 추출 작업 조회",
-            description = "본인 작업의 상태와 결과를 반환합니다. SUCCEEDED면 result에 기존 미리보기와 같은 형식의 초안이 있습니다. "
+            description = "본인 작업의 상태와 결과를 반환합니다. SUCCEEDED면 result에 초안(draft)과 회원이 보완할 필드(requiredInputs)가 있습니다. "
                     + "다른 사용자의 작업이나 없는 작업은 404입니다.")
     public ResponseEntity<CompetitionExtractionJobResponse> getExtraction(@PathVariable Long jobId,
                                                                           Authentication authentication) {

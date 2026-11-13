@@ -79,7 +79,7 @@ public class CompetitionExtractionJob {
     @Column(name = "lease_token", length = 36)
     private String leaseToken;
 
-    /** AI 원본 응답 JSON. 조회 때 기존 DTO 변환·필드 검증 로직으로 미리보기를 다시 만든다. */
+    /** AI 원본 응답 JSON. 조회 때 DTO 변환·필드 검증 로직으로 추출 결과(초안과 보완 필드)를 다시 만든다. */
     @Column(name = "result_json", columnDefinition = "mediumtext")
     private String resultJson;
 

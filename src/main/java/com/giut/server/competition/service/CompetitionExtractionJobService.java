@@ -1,6 +1,6 @@
 package com.giut.server.competition.service;
 
-import com.giut.server.competition.dto.response.CompetitionExtractPreviewResponse;
+import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.dto.response.CompetitionExtractionJobResponse;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
@@ -17,7 +17,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * 회원 URL 추출의 비동기 접수·조회. 입력 정규화·기존 링크 판단·공개 주소 검증은 동기 미리보기와 같은 규칙을 쓴다.
+ * 회원 URL 추출의 비동기 접수·조회. 입력 정규화 → 기존 링크 판단 → 공개 주소 검증 순서로 확인한다.
  * 이 클래스는 트랜잭션을 열지 않는다. DNS 확인은 트랜잭션 밖에서 하고, 저장은 {@link CompetitionExtractionJobStore}가 짧게 commit한다.
  */
 @Service
@@ -63,11 +63,11 @@ public class CompetitionExtractionJobService {
     }
 
     private CompetitionExtractionJobResponse toResponse(CompetitionExtractionJob job) {
-        CompetitionExtractPreviewResponse result = null;
+        CompetitionExtractionResult result = null;
         if (job.getStatus() == CompetitionExtractionJob.Status.SUCCEEDED) {
             AiCompetitionExtractClient.Extraction extraction =
                     objectMapper.readValue(job.getResultJson(), AiCompetitionExtractClient.Extraction.class);
-            result = submissions.previewFromExtraction(job.getSourceUrl(), job.getSourceUrlHash(), extraction);
+            result = submissions.toExtractionResult(job.getSourceUrl(), job.getSourceUrlHash(), extraction);
         }
         return CompetitionExtractionJobResponse.of(job, result);
     }

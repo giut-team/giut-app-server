@@ -5,7 +5,7 @@ import com.giut.server.competition.dto.request.AiCompetitionCategoryDeserializer
 import com.giut.server.competition.dto.request.CompetitionSubmissionForm;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
-import com.giut.server.competition.dto.response.CompetitionExtractPreviewResponse;
+import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.dto.response.CompetitionSubmissionFieldIssue;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
 import com.giut.server.competition.entity.Competition;
@@ -45,21 +45,21 @@ public class CompetitionSubmissionService {
     private final Validator validator;
 
     /**
-     * AI 원본 응답을 회원 확인용 미리보기(초안과 보완이 필요한 필드)로 바꾼다. 비동기 추출 작업의 결과 조회가 이 변환·필드 보완 규칙을 쓴다.
+     * AI 원본 응답을 회원 확인용 추출 결과(초안과 보완이 필요한 필드)로 바꾼다. 비동기 추출 작업의 결과 조회가 이 변환·필드 보완 규칙을 쓴다.
      * 공식 URL 중복 같은 DB 기준 검증은 호출 시점의 데이터로 다시 계산된다.
      */
-    public CompetitionExtractPreviewResponse previewFromExtraction(String sourceUrl, String sourceHash,
+    public CompetitionExtractionResult toExtractionResult(String sourceUrl, String sourceHash,
                                                                    AiCompetitionExtractClient.Extraction extraction) {
         CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, sourceHash);
         List<CompetitionSubmissionFieldIssue> issues = validate(form);
-        CompetitionExtractPreviewResponse.Status status;
+        CompetitionExtractionResult.Status status;
         if (AiActivityType.INVALID_ACTIVITY.name().equals(extraction.activityKind())) {
-            status = CompetitionExtractPreviewResponse.Status.INVALID_ACTIVITY;
+            status = CompetitionExtractionResult.Status.INVALID_ACTIVITY;
         } else {
             status = issues.isEmpty()
-                    ? CompetitionExtractPreviewResponse.Status.READY : CompetitionExtractPreviewResponse.Status.NEEDS_REVIEW;
+                    ? CompetitionExtractionResult.Status.READY : CompetitionExtractionResult.Status.NEEDS_REVIEW;
         }
-        return new CompetitionExtractPreviewResponse(status, null, sourceUrl, form, issues, validImages(extraction.images()));
+        return new CompetitionExtractionResult(status, null, sourceUrl, form, issues, validImages(extraction.images()));
     }
 
     public CompetitionSubmissionResponse submit(Long userId, CompetitionSubmissionRequest request) {

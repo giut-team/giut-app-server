@@ -18,7 +18,7 @@ public record CompetitionExtractionJobResponse(
         Integer attemptCount,
         Instant createdAt,
         Instant completedAt,
-        CompetitionExtractPreviewResponse result,
+        CompetitionExtractionResult result,
         Error error
 ) {
     public enum Status { EXISTS, PENDING, RUNNING, SUCCEEDED, FAILED }
@@ -30,7 +30,7 @@ public record CompetitionExtractionJobResponse(
         return new CompetitionExtractionJobResponse(null, Status.EXISTS, url, null, null, null, null, null, null);
     }
 
-    public static CompetitionExtractionJobResponse of(CompetitionExtractionJob job, CompetitionExtractPreviewResponse result) {
+    public static CompetitionExtractionJobResponse of(CompetitionExtractionJob job, CompetitionExtractionResult result) {
         Error error = job.getStatus() == CompetitionExtractionJob.Status.FAILED
                 ? new Error(job.getErrorCode(), job.getErrorMessage()) : null;
         return new CompetitionExtractionJobResponse(job.getId(), Status.valueOf(job.getStatus().name()), null,
