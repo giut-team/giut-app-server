@@ -27,6 +27,7 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompetitionExtractionJob {
     public static final int MAX_ERROR_MESSAGE_LENGTH = 300;
+    public static final int MAX_ERROR_DETAIL_LENGTH = 500;
     public static final int MAX_RESULT_LENGTH = 512_000;
 
     public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED }
@@ -89,6 +90,10 @@ public class CompetitionExtractionJob {
     @Column(name = "error_message", length = MAX_ERROR_MESSAGE_LENGTH)
     private String errorMessage;
 
+    /** 관리자 전용 원인 요약(오류 종류·HTTP 상태). 회원 응답에는 내보내지 않는다. */
+    @Column(name = "internal_error_detail", length = MAX_ERROR_DETAIL_LENGTH)
+    private String errorDetail;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -146,6 +151,7 @@ public class CompetitionExtractionJob {
         updatedAt = now;
         errorCode = "LEASE_EXPIRED";
         errorMessage = "추출 실행이 제한 시간 안에 끝나지 않았습니다.";
+        errorDetail = "임대 만료로 회수(서버 재시작 또는 응답 지연), 시도 " + attemptCount + "회";
         if (attemptCount < maxAttempts) {
             status = Status.PENDING;
             nextAttemptAt = retryAt;
@@ -161,6 +167,7 @@ public class CompetitionExtractionJob {
         }
         errorCode = "QUEUE_TIMEOUT";
         errorMessage = "추출 대기 시간이 초과됐습니다. 잠시 후 다시 요청해 주세요.";
+        errorDetail = "대기열에서 실행되지 못한 채 대기 제한 시간을 넘김";
         finish(Status.FAILED, now, terminalExpiresAt);
     }
 

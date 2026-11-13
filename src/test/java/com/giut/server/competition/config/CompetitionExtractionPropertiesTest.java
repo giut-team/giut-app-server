@@ -43,7 +43,7 @@ class CompetitionExtractionPropertiesTest {
     void retryDelayDoublesAndIsCapped() {
         CompetitionExtractionProperties properties = new CompetitionExtractionProperties(true, 2, Duration.ofSeconds(2),
                 Duration.ofSeconds(90), Duration.ofSeconds(180), 5, Duration.ofSeconds(30), Duration.ofMinutes(2),
-                Duration.ofMinutes(15), Duration.ofHours(24), 3, 20, 50, 100);
+                Duration.ofMinutes(15), Duration.ofHours(24), Duration.ofDays(30), 3, 20, 50, 100);
         assertThat(properties.retryDelay(1)).isEqualTo(Duration.ofSeconds(30));
         assertThat(properties.retryDelay(2)).isEqualTo(Duration.ofSeconds(60));
         assertThat(properties.retryDelay(3)).isEqualTo(Duration.ofMinutes(2));

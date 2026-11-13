@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS competition_extraction_jobs (
     result_json MEDIUMTEXT NULL,
     error_code VARCHAR(40) NULL,
     error_message VARCHAR(300) NULL,
+    internal_error_detail VARCHAR(500) NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     completed_at DATETIME(6) NULL,

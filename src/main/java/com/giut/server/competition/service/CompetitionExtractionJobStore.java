@@ -4,6 +4,7 @@ import com.giut.server.competition.config.CompetitionExtractionProperties;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.entity.CompetitionExtractionJobSubscription;
+import com.giut.server.competition.event.CompetitionExtractionFailedEvent;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
 import com.giut.server.competition.repository.CompetitionExtractionJobSubscriptionRepository;
 import com.giut.server.global.exception.ResourceNotFoundException;
@@ -11,6 +12,7 @@ import com.giut.server.global.exception.TooManyRequestsException;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class CompetitionExtractionJobStore {
     private final CompetitionExtractionJobSubscriptionRepository subscriptions;
     private final UserRepository users;
     private final CompetitionExtractionProperties properties;
+    private final ApplicationEventPublisher events;
 
     public record ClaimedJob(Long id, String token, String sourceUrl, int attemptCount) {
     }
@@ -129,7 +132,8 @@ public class CompetitionExtractionJobStore {
                     .ifPresent(job -> {
                         if (!job.getCreatedAt().isAfter(pendingCutoff)) {
                             // expireStalePending과 같은 경계(created_at <= cutoff). 시도 횟수를 늘리지 않고 limit에도 세지 않는다.
-                            job.expirePending(now, now.plus(properties.resultRetention()));
+                            job.expirePending(now, now.plus(properties.failureRetention()));
+                            publishFailed(job, now);
                             return;
                         }
                         job.claim(UUID.randomUUID().toString(), leaseExpiresAt, now);
@@ -147,17 +151,27 @@ public class CompetitionExtractionJobStore {
                 now.plus(properties.resultRetention())) == 1;
     }
 
-    /** 일시 실패이고 시도 횟수가 남으면 backoff 뒤 PENDING으로, 아니면 최종 실패로 저장한다. token 조건은 성공과 같다. */
+    /**
+     * 일시 실패이고 시도 횟수가 남으면 backoff 뒤 PENDING으로, 아니면 최종 실패로 저장한다. token 조건은 성공과 같다.
+     * 최종 실패로 확정되면 같은 트랜잭션에서 {@link CompetitionExtractionFailedEvent}를 발행한다(알림·로그는 commit 뒤).
+     * 반환값은 이번 실행의 결과가 현재 실행의 것이라 반영됐는지 여부다.
+     */
     @Transactional
-    public boolean recordFailure(ClaimedJob claimed, String code, String message, boolean retryable, Instant now) {
-        String safeMessage = message.length() > CompetitionExtractionJob.MAX_ERROR_MESSAGE_LENGTH
-                ? message.substring(0, CompetitionExtractionJob.MAX_ERROR_MESSAGE_LENGTH) : message;
+    public boolean recordFailure(ClaimedJob claimed, String code, String message, String detail, boolean retryable,
+                                 Instant now) {
+        String safeMessage = truncate(message, CompetitionExtractionJob.MAX_ERROR_MESSAGE_LENGTH);
+        String safeDetail = truncate(detail, CompetitionExtractionJob.MAX_ERROR_DETAIL_LENGTH);
         if (retryable && claimed.attemptCount() < properties.maxAttempts()) {
-            return jobs.markRetry(claimed.id(), claimed.token(), code, safeMessage,
+            return jobs.markRetry(claimed.id(), claimed.token(), code, safeMessage, safeDetail,
                     now.plus(properties.retryDelay(claimed.attemptCount())), now) == 1;
         }
-        return jobs.markFailed(claimed.id(), claimed.token(), code, safeMessage, now,
-                now.plus(properties.resultRetention())) == 1;
+        boolean failed = jobs.markFailed(claimed.id(), claimed.token(), code, safeMessage, safeDetail, now,
+                now.plus(properties.failureRetention())) == 1;
+        if (failed) {
+            events.publishEvent(new CompetitionExtractionFailedEvent(claimed.id(), claimed.sourceUrl(), code, safeMessage,
+                    safeDetail, claimed.attemptCount(), subscriptions.countByJob_Id(claimed.id()), now));
+        }
+        return failed;
     }
 
     /** 임대가 만료된 RUNNING 작업을 재대기 또는 최종 실패로 회수한다. 서버 재시작으로 멈춘 작업도 여기서 복구된다. */
@@ -166,8 +180,13 @@ public class CompetitionExtractionJobStore {
         List<CompetitionExtractionJob> expired = lockMatching(jobs.findExpiredLeaseIds(now, properties.maintenanceBatchSize()),
                 job -> job.getStatus() == Status.RUNNING && job.getLeaseExpiresAt() != null
                         && !job.getLeaseExpiresAt().isAfter(now));
-        expired.forEach(job -> job.recoverExpiredLease(properties.maxAttempts(),
-                now.plus(properties.retryDelay(job.getAttemptCount())), now, now.plus(properties.resultRetention())));
+        expired.forEach(job -> {
+            job.recoverExpiredLease(properties.maxAttempts(),
+                    now.plus(properties.retryDelay(job.getAttemptCount())), now, now.plus(properties.failureRetention()));
+            if (job.getStatus() == Status.FAILED) {
+                publishFailed(job, now);
+            }
+        });
         return expired.size();
     }
 
@@ -176,8 +195,21 @@ public class CompetitionExtractionJobStore {
         Instant cutoff = now.minus(properties.pendingTimeout());
         List<CompetitionExtractionJob> stale = lockMatching(jobs.findStalePendingIds(cutoff, properties.maintenanceBatchSize()),
                 job -> job.getStatus() == Status.PENDING && !job.getCreatedAt().isAfter(cutoff));
-        stale.forEach(job -> job.expirePending(now, now.plus(properties.resultRetention())));
+        stale.forEach(job -> {
+            job.expirePending(now, now.plus(properties.failureRetention()));
+            publishFailed(job, now);
+        });
         return stale.size();
+    }
+
+    private void publishFailed(CompetitionExtractionJob job, Instant now) {
+        events.publishEvent(new CompetitionExtractionFailedEvent(job.getId(), job.getSourceUrl(), job.getErrorCode(),
+                job.getErrorMessage(), job.getErrorDetail(), job.getAttemptCount(),
+                subscriptions.countByJob_Id(job.getId()), now));
+    }
+
+    private static String truncate(String value, int max) {
+        return value == null || value.length() <= max ? value : value.substring(0, max);
     }
 
     /** 후보를 PK 단건 SKIP LOCKED로 잠그고, 잠근 시점의 최신 값이 여전히 조건에 맞는 행만 돌려준다. */

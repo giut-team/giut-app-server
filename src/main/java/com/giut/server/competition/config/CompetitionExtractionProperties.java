@@ -18,7 +18,8 @@ import java.time.Duration;
  * @param retryBaseDelay           일시 실패 재시도 첫 대기 시간(이후 2배씩).
  * @param retryMaxDelay            재시도 대기 상한.
  * @param pendingTimeout           접수 후 이 시간 안에 끝나지 않고 대기 중이면 최종 실패로 정리한다.
- * @param resultRetention          종료 작업(결과·오류) 보관 기간. 지나면 삭제한다.
+ * @param resultRetention          성공 작업(결과) 보관 기간. 지나면 삭제한다.
+ * @param failureRetention         실패 작업 보관 기간. 관리자가 실패 목록에서 확인할 수 있는 기간이라 성공 결과보다 길게 둔다.
  * @param maxActivePerUser         사용자별 진행 중(PENDING/RUNNING) 작업 상한.
  * @param maxRequestsPerUserPerHour 사용자별 1시간 신규 작업 생성 상한.
  * @param maxActiveTotal           전체 진행 중 작업 상한(포화 시 신규 접수 503).
@@ -36,6 +37,7 @@ public record CompetitionExtractionProperties(
         @DefaultValue("5m") Duration retryMaxDelay,
         @DefaultValue("15m") Duration pendingTimeout,
         @DefaultValue("24h") Duration resultRetention,
+        @DefaultValue("30d") Duration failureRetention,
         @DefaultValue("3") int maxActivePerUser,
         @DefaultValue("20") int maxRequestsPerUserPerHour,
         @DefaultValue("50") int maxActiveTotal,
@@ -56,6 +58,7 @@ public record CompetitionExtractionProperties(
         require(pendingTimeout != null && pendingTimeout.compareTo(leaseDuration) > 0,
                 "pending-timeout must be longer than lease-duration");
         require(positive(resultRetention), "result-retention must be positive");
+        require(positive(failureRetention), "failure-retention must be positive");
         require(maxActivePerUser >= 1, "max-active-per-user must be positive");
         require(maxRequestsPerUserPerHour >= 1, "max-requests-per-user-per-hour must be positive");
         require(maxActiveTotal >= 1, "max-active-total must be positive");

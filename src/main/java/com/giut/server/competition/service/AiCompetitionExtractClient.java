@@ -55,7 +55,8 @@ public class AiCompetitionExtractClient {
 
     private static ExtractionUnavailable classify(Throwable error) {
         if (error instanceof TimeoutException) {
-            return new ExtractionUnavailable(HttpStatus.GATEWAY_TIMEOUT, "공모전 추출 응답 시간이 초과됐습니다.", true);
+            return new ExtractionUnavailable(HttpStatus.GATEWAY_TIMEOUT, "공모전 추출 응답 시간이 초과됐습니다.", true,
+                    "AI 응답 시간 초과(TimeoutException)");
         }
         // 연결 실패, AI 서버 과부하(5xx·429·408)는 잠시 뒤 같은 요청이 성공할 수 있다.
         // 그 밖의 4xx·응답 형식 오류는 같은 입력으로 재시도해도 같은 결과일 가능성이 높아 재시도하지 않는다.
@@ -63,7 +64,20 @@ public class AiCompetitionExtractClient {
                 || error instanceof WebClientResponseException response
                 && (response.getStatusCode().is5xxServerError() || response.getStatusCode().value() == 429
                 || response.getStatusCode().value() == 408);
-        return new ExtractionUnavailable(HttpStatus.BAD_GATEWAY, "공모전 추출 서비스 응답을 받지 못했습니다.", retryable);
+        return new ExtractionUnavailable(HttpStatus.BAD_GATEWAY, "공모전 추출 서비스 응답을 받지 못했습니다.", retryable,
+                describe(error));
+    }
+
+    /** 관리자가 원인을 짐작할 수 있는 오류 종류와 HTTP 상태만 남긴다. 요청·응답 본문, URL, 예외 메시지는 담지 않는다. */
+    private static String describe(Throwable error) {
+        if (error instanceof WebClientResponseException response) {
+            return "AI 서버가 HTTP " + response.getStatusCode().value() + "로 응답";
+        }
+        if (error instanceof WebClientRequestException) {
+            Throwable cause = error.getCause();
+            return "AI 서버 연결 실패(" + (cause == null ? error : cause).getClass().getSimpleName() + ")";
+        }
+        return "AI 응답 처리 실패(" + error.getClass().getSimpleName() + ")";
     }
 
     public record Extraction(
@@ -80,15 +94,26 @@ public class AiCompetitionExtractClient {
     public static class ExtractionUnavailable extends RuntimeException {
         private final HttpStatus status;
         private final boolean retryable;
+        private final String detail;
 
         public ExtractionUnavailable(HttpStatus status, String message) {
             this(status, message, false);
         }
 
         public ExtractionUnavailable(HttpStatus status, String message, boolean retryable) {
+            this(status, message, retryable, null);
+        }
+
+        public ExtractionUnavailable(HttpStatus status, String message, boolean retryable, String detail) {
             super(message);
             this.status = status;
             this.retryable = retryable;
+            this.detail = detail;
+        }
+
+        /** 관리자용 원인 요약. 회원 응답에는 쓰지 않는다. 없을 수 있다. */
+        public String detail() {
+            return detail;
         }
 
         public HttpStatus status() {

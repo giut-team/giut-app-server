@@ -240,14 +240,14 @@ class CompetitionExtractionJobMySqlTest {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Long id = enqueue("https://example.com/retry", now);
         ClaimedJob first = store.claim(5, now).getFirst();
-        assertThat(store.recordFailure(first, "AI_UNAVAILABLE", "잠시 후 다시", true, now)).isTrue();
+        assertThat(store.recordFailure(first, "AI_UNAVAILABLE", "잠시 후 다시", null, true, now)).isTrue();
         assertThat(jobs.findById(id).orElseThrow().getNextAttemptAt()).isEqualTo(now.plusSeconds(30));
         assertThat(store.claim(5, now.plusSeconds(29))).isEmpty();
         ClaimedJob second = store.claim(5, now.plusSeconds(30)).getFirst();
-        assertThat(store.recordFailure(second, "AI_UNAVAILABLE", "잠시 후 다시", true, now.plusSeconds(30))).isTrue();
+        assertThat(store.recordFailure(second, "AI_UNAVAILABLE", "잠시 후 다시", null, true, now.plusSeconds(30))).isTrue();
         assertThat(store.claim(5, now.plusSeconds(89))).isEmpty();
         ClaimedJob third = store.claim(5, now.plusSeconds(90)).getFirst();
-        assertThat(store.recordFailure(third, "AI_UNAVAILABLE", "잠시 후 다시", true, now.plusSeconds(90))).isTrue();
+        assertThat(store.recordFailure(third, "AI_UNAVAILABLE", "잠시 후 다시", null, true, now.plusSeconds(90))).isTrue();
         CompetitionExtractionJob failed = jobs.findById(id).orElseThrow();
         assertThat(failed.getStatus()).isEqualTo(Status.FAILED);
         assertThat(failed.getAttemptCount()).isEqualTo(3);

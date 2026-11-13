@@ -3,6 +3,7 @@ package com.giut.server.competition.service;
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
+import com.giut.server.competition.event.CompetitionExtractionFailedEvent;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
 import com.giut.server.competition.repository.CompetitionExtractionJobSubscriptionRepository;
 import com.giut.server.competition.repository.CompetitionRepository;
@@ -22,6 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -61,6 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * H2(MySQL 모드)·실제 Spring Security/JWT·MockMvc·commit된 상태로 비동기 추출 계약을 검증한다.
  * H2의 행 잠금은 MySQL InnoDB SKIP LOCKED 동작을 보장하지 않으므로 동시 선점은 CompetitionExtractionJobMySqlTest가 검증한다.
  */
+@RecordApplicationEvents
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:giut_extraction_jobs;MODE=MySQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
@@ -78,6 +82,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CompetitionExtractionJobPersistenceTest {
     private static final String EXTRACTIONS = "/api/competitions/extractions";
     private static final String ADMIN = "/api/admin/competitions";
+    private static final String FAILURES = "/api/admin/competitions/extraction-failures";
     private static final String SOURCE = "https://example.com/contest";
 
     @Autowired private WebApplicationContext context;
@@ -90,6 +95,7 @@ class CompetitionExtractionJobPersistenceTest {
     @Autowired private CompetitionExtractionJobSubscriptionRepository subscriptions;
     @Autowired private CompetitionExtractionJobStore store;
     @Autowired private CompetitionExtractionWorker worker;
+    @Autowired private ApplicationEvents events;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private CompetitionUrlNormalizer normalizer;
     @Autowired private DataSource dataSource;
@@ -337,10 +343,11 @@ class CompetitionExtractionJobPersistenceTest {
         Instant t0 = Instant.now();
         when(extractor.extract(eq(SOURCE), any(Duration.class))).thenThrow(
                 new AiCompetitionExtractClient.ExtractionUnavailable(HttpStatus.GATEWAY_TIMEOUT,
-                        "공모전 추출 응답 시간이 초과됐습니다.", true));
+                        "공모전 추출 응답 시간이 초과됐습니다.", true, "AI 응답 시간 초과(TimeoutException)"));
 
         ClaimedJob attempt1 = single(store.claim(5, t0));
         worker.execute(attempt1);
+        assertThat(failedEvents()).isEmpty(); // 재시도가 남은 실패는 알리지 않는다.
         CompetitionExtractionJob afterFirst = jobs.findById(id).orElseThrow();
         assertThat(afterFirst.getStatus()).isEqualTo(Status.PENDING);
         assertThat(afterFirst.getErrorCode()).isEqualTo("AI_TIMEOUT");
@@ -354,6 +361,7 @@ class CompetitionExtractionJobPersistenceTest {
         assertThat(attempt2.attemptCount()).isEqualTo(2);
         worker.execute(attempt2);
         assertThat(jobs.findById(id).orElseThrow().getNextAttemptAt()).isAfter(Instant.now().plusSeconds(59));
+        assertThat(failedEvents()).isEmpty();
 
         // 재시도도 접수 시각 기준 pending-timeout(15분) 안에서만 선점된다. 그 뒤면 QUEUE_TIMEOUT으로 끝난다.
         ClaimedJob attempt3 = single(store.claim(5, t0.plus(Duration.ofMinutes(14))));
@@ -365,7 +373,20 @@ class CompetitionExtractionJobPersistenceTest {
                 .andExpect(jsonPath("$.error.message").value("공모전 추출 응답 시간이 초과됐습니다."));
         CompetitionExtractionJob failed = jobs.findById(id).orElseThrow();
         assertThat(failed.getActiveKey()).isNull();
-        assertThat(failed.getExpiresAt()).isAfter(failed.getCompletedAt());
+        // 실패 작업은 관리자가 확인할 수 있도록 성공 결과(24시간)보다 오래(30일) 보관한다.
+        assertThat(failed.getExpiresAt()).isAfter(failed.getCompletedAt().plus(Duration.ofDays(29)));
+        assertThat(failed.getErrorDetail()).isEqualTo("AI 응답 시간 초과(TimeoutException)");
+        // 세 번째 시도까지 실패해 최종 확정될 때 한 번만 알린다.
+        assertThat(failedEvents()).singleElement().satisfies(event -> {
+            assertThat(event.jobId()).isEqualTo(id);
+            assertThat(event.errorCode()).isEqualTo("AI_TIMEOUT");
+            assertThat(event.attemptCount()).isEqualTo(3);
+            assertThat(event.waitingUsers()).isEqualTo(1);
+            assertThat(event.sourceUrl()).isEqualTo(SOURCE);
+        });
+        // 회원 응답에는 관리자용 원인 요약을 내보내지 않는다.
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member)).andExpect(jsonPath("$.error.detail").doesNotExist())
+                .andExpect(jsonPath("$.errorDetail").doesNotExist());
 
         // 최종 실패 뒤에는 같은 URL로 새 작업을 만들 수 있다.
         assertThat(acceptedJobId(member, SOURCE)).isNotEqualTo(id);
@@ -418,10 +439,79 @@ class CompetitionExtractionJobPersistenceTest {
         ClaimedJob newRun = single(store.claim(5, t0.plus(Duration.ofMinutes(10))));
         assertThat(newRun.token()).isNotEqualTo(oldRun.token());
         assertThat(store.recordSuccess(oldRun, "{\"title\":\"옛 응답\"}", Instant.now())).isFalse();
-        assertThat(store.recordFailure(oldRun, "AI_REJECTED", "x", false, Instant.now())).isFalse();
+        assertThat(store.recordFailure(oldRun, "AI_REJECTED", "x", null, false, Instant.now())).isFalse();
         assertThat(store.recordSuccess(newRun, "{\"title\":\"새 응답\"}", Instant.now())).isTrue();
         assertThat(store.recordSuccess(newRun, "{\"title\":\"중복 저장\"}", Instant.now())).isFalse();
         assertThat(jobs.findById(id).orElseThrow().getResultJson()).contains("새 응답");
+        assertThat(failedEvents()).isEmpty();
+    }
+
+    @Test
+    void exhaustedLeaseRecoveriesEndAsFailedAndReportOnlyTheFinalOne() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        Instant t0 = Instant.now();
+        // 서버 재시작 등으로 세 번 연속 실행이 끝나지 못했다. 앞의 두 번은 재대기하고 알리지 않는다.
+        single(store.claim(5, t0));
+        assertThat(store.recoverExpiredLeases(t0.plusSeconds(181))).isEqualTo(1);
+        single(store.claim(5, t0.plus(Duration.ofMinutes(5))));
+        assertThat(store.recoverExpiredLeases(t0.plus(Duration.ofMinutes(5)).plusSeconds(181))).isEqualTo(1);
+        assertThat(failedEvents()).isEmpty();
+        single(store.claim(5, t0.plus(Duration.ofMinutes(10))));
+        assertThat(store.recoverExpiredLeases(t0.plus(Duration.ofMinutes(10)).plusSeconds(181))).isEqualTo(1);
+
+        CompetitionExtractionJob failed = jobs.findById(id).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(failed.getErrorCode()).isEqualTo("LEASE_EXPIRED");
+        assertThat(failed.getErrorDetail()).contains("임대 만료");
+        assertThat(failedEvents()).singleElement().satisfies(event -> {
+            assertThat(event.jobId()).isEqualTo(id);
+            assertThat(event.errorCode()).isEqualTo("LEASE_EXPIRED");
+            assertThat(event.attemptCount()).isEqualTo(3);
+        });
+    }
+
+    @Test
+    void finalFailureIsListedForAdminsOnlyWithWaitingUsersAndFilters() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenThrow(
+                new AiCompetitionExtractClient.ExtractionUnavailable(HttpStatus.BAD_GATEWAY, "x", false,
+                        "AI 서버가 HTTP 400로 응답"));
+        long failedId = acceptedJobId(member, SOURCE);
+        acceptedJobId(other, SOURCE); // 같은 작업에 합류한 회원
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(failedId);
+        long okId = acceptedJobId(member, "https://example.com/ok");
+        when(extractor.extract(eq("https://example.com/ok"), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(okId);
+
+        mvc.perform(as(get(FAILURES), admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.failures[0].jobId").value(failedId))
+                .andExpect(jsonPath("$.failures[0].sourceUrl").value(SOURCE))
+                .andExpect(jsonPath("$.failures[0].errorCode").value("AI_REJECTED"))
+                .andExpect(jsonPath("$.failures[0].errorDetail").value("AI 서버가 HTTP 400로 응답"))
+                .andExpect(jsonPath("$.failures[0].attemptCount").value(1))
+                .andExpect(jsonPath("$.failures[0].waitingUsers").value(2))
+                .andExpect(jsonPath("$.failures[0].requestedAt").isNotEmpty())
+                .andExpect(jsonPath("$.failures[0].failedAt").isNotEmpty());
+        // 성공한 작업은 목록에 없다.
+        mvc.perform(as(get(FAILURES), admin)).andExpect(jsonPath("$.failures[?(@.jobId == " + okId + ")]").isEmpty());
+
+        mvc.perform(as(get(FAILURES).param("errorCode", "AI_REJECTED"), admin)).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(as(get(FAILURES).param("errorCode", "AI_TIMEOUT"), admin)).andExpect(jsonPath("$.totalElements").value(0));
+        Instant now = Instant.now();
+        mvc.perform(as(get(FAILURES).param("from", now.minusSeconds(60).toString()).param("to", now.plusSeconds(60).toString()), admin))
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(as(get(FAILURES).param("from", now.plusSeconds(60).toString()), admin))
+                .andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(as(get(FAILURES).param("from", now.toString()).param("to", now.toString()), admin))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(get(FAILURES).param("size", "101"), admin)).andExpect(status().isBadRequest());
+
+        // 일반 회원과 비로그인은 볼 수 없다.
+        mvc.perform(as(get(FAILURES), member)).andExpect(status().isForbidden());
+        mvc.perform(get(FAILURES)).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -433,10 +523,19 @@ class CompetitionExtractionJobPersistenceTest {
         CompetitionExtractionJob expired = jobs.findById(id).orElseThrow();
         assertThat(expired.getStatus()).isEqualTo(Status.FAILED);
         assertThat(expired.getErrorCode()).isEqualTo("QUEUE_TIMEOUT");
+        assertThat(expired.getErrorDetail()).isNotBlank();
+        assertThat(failedEvents()).singleElement().satisfies(event -> {
+            assertThat(event.jobId()).isEqualTo(id);
+            assertThat(event.errorCode()).isEqualTo("QUEUE_TIMEOUT");
+            assertThat(event.attemptCount()).isZero();
+        });
 
-        assertThat(store.purgeExpired(t0.plus(Duration.ofHours(23)))).isZero();
-        assertThat(store.purgeExpired(t0.plus(Duration.ofHours(25)))).isEqualTo(1);
+        // 실패 작업은 24시간이 지나도 관리자 확인용으로 남고, 30일이 지나면 정리된다(구독 행도 함께 지워진다).
+        assertThat(store.purgeExpired(t0.plus(Duration.ofHours(25)))).isZero();
+        assertThat(store.purgeExpired(t0.plus(Duration.ofDays(29)))).isZero();
+        assertThat(store.purgeExpired(t0.plus(Duration.ofDays(31)))).isEqualTo(1);
         assertThat(jobs.existsById(id)).isFalse();
+        assertThat(subscriptions.count()).isZero();
     }
 
     @Test
@@ -460,6 +559,10 @@ class CompetitionExtractionJobPersistenceTest {
         verify(extractor, never()).extract(eq(staleUrl), any(Duration.class));
         verify(extractor, times(1)).extract(eq(freshUrl), any(Duration.class));
         verify(publicSource, never()).requirePublicAddress(staleUrl);
+    }
+
+    private List<CompetitionExtractionFailedEvent> failedEvents() {
+        return events.stream(CompetitionExtractionFailedEvent.class).toList();
     }
 
     private long acceptedJobId(User actor, String url) throws Exception {

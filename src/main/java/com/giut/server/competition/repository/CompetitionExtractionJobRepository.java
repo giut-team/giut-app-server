@@ -4,6 +4,7 @@ import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,7 +14,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface CompetitionExtractionJobRepository extends JpaRepository<CompetitionExtractionJob, Long> {
+public interface CompetitionExtractionJobRepository
+        extends JpaRepository<CompetitionExtractionJob, Long>, JpaSpecificationExecutor<CompetitionExtractionJob> {
 
     /*
      * 선점·회수는 두 단계로 한다.
@@ -59,7 +61,7 @@ public interface CompetitionExtractionJobRepository extends JpaRepository<Compet
     @Query("""
             update CompetitionExtractionJob j
             set j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.SUCCEEDED,
-                j.resultJson = :resultJson, j.errorCode = null, j.errorMessage = null,
+                j.resultJson = :resultJson, j.errorCode = null, j.errorMessage = null, j.errorDetail = null,
                 j.leaseToken = null, j.leaseExpiresAt = null, j.nextAttemptAt = null, j.activeKey = null,
                 j.completedAt = :now, j.updatedAt = :now, j.expiresAt = :expiresAt
             where j.id = :id and j.leaseToken = :token
@@ -72,27 +74,28 @@ public interface CompetitionExtractionJobRepository extends JpaRepository<Compet
     @Query("""
             update CompetitionExtractionJob j
             set j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.FAILED,
-                j.errorCode = :code, j.errorMessage = :message,
+                j.errorCode = :code, j.errorMessage = :message, j.errorDetail = :detail,
                 j.leaseToken = null, j.leaseExpiresAt = null, j.nextAttemptAt = null, j.activeKey = null,
                 j.completedAt = :now, j.updatedAt = :now, j.expiresAt = :expiresAt
             where j.id = :id and j.leaseToken = :token
               and j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.RUNNING
             """)
     int markFailed(@Param("id") Long id, @Param("token") String token, @Param("code") String code,
-                   @Param("message") String message, @Param("now") Instant now, @Param("expiresAt") Instant expiresAt);
+                   @Param("message") String message, @Param("detail") String detail,
+                   @Param("now") Instant now, @Param("expiresAt") Instant expiresAt);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             update CompetitionExtractionJob j
             set j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.PENDING,
-                j.errorCode = :code, j.errorMessage = :message, j.nextAttemptAt = :nextAttemptAt,
+                j.errorCode = :code, j.errorMessage = :message, j.errorDetail = :detail, j.nextAttemptAt = :nextAttemptAt,
                 j.leaseToken = null, j.leaseExpiresAt = null, j.updatedAt = :now
             where j.id = :id and j.leaseToken = :token
               and j.status = com.giut.server.competition.entity.CompetitionExtractionJob.Status.RUNNING
             """)
     int markRetry(@Param("id") Long id, @Param("token") String token, @Param("code") String code,
-                  @Param("message") String message, @Param("nextAttemptAt") Instant nextAttemptAt,
-                  @Param("now") Instant now);
+                  @Param("message") String message, @Param("detail") String detail,
+                  @Param("nextAttemptAt") Instant nextAttemptAt, @Param("now") Instant now);
 
     /** 같은 URL의 진행 중 작업 또는 아직 보관 중인 성공 작업. 누가 접수했든 재사용한다(실패 작업은 재사용하지 않는다). */
     @Query("""

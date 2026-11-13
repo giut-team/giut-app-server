@@ -148,11 +148,11 @@ public class CompetitionExtractionWorker {
             fail(job, exception.status() == HttpStatus.GATEWAY_TIMEOUT ? "AI_TIMEOUT"
                     : exception.status() == HttpStatus.SERVICE_UNAVAILABLE ? "AI_NOT_CONFIGURED"
                     : exception.retryable() ? "AI_UNAVAILABLE" : "AI_REJECTED",
-                    exception.getMessage(), exception.retryable());
+                    exception.getMessage(), exception.detail(), exception.retryable());
             return;
         } catch (IllegalArgumentException exception) {
             // 실행 시점 DNS 재확인 실패(사설 주소로 바뀐 경우 포함). 같은 입력으로 재시도하지 않는다.
-            fail(job, "INVALID_SOURCE", "공개 인터넷 공고 URL만 추출할 수 있습니다.", false);
+            fail(job, "INVALID_SOURCE", "공개 인터넷 공고 URL만 추출할 수 있습니다.", "실행 시점 공개 주소 재확인 실패", false);
             return;
         } catch (RuntimeException exception) {
             if (!running) {
@@ -160,12 +160,14 @@ public class CompetitionExtractionWorker {
                 return;
             }
             log.error("Competition extraction job {} failed unexpectedly", job.id(), exception);
-            fail(job, "INTERNAL_ERROR", "공모전 정보를 추출하지 못했습니다.", false);
+            fail(job, "INTERNAL_ERROR", "공모전 정보를 추출하지 못했습니다.",
+                    "예상하지 못한 오류(" + exception.getClass().getSimpleName() + ")", false);
             return;
         }
 
         if (resultJson.length() > CompetitionExtractionJob.MAX_RESULT_LENGTH) {
-            fail(job, "INVALID_RESULT", "추출 결과가 너무 커서 저장할 수 없습니다.", false);
+            fail(job, "INVALID_RESULT", "추출 결과가 너무 커서 저장할 수 없습니다.",
+                    "결과 JSON " + resultJson.length() + "자(상한 " + CompetitionExtractionJob.MAX_RESULT_LENGTH + ")", false);
             return;
         }
         try {
@@ -178,12 +180,15 @@ public class CompetitionExtractionWorker {
         }
     }
 
-    private void fail(ClaimedJob job, String code, String message, boolean retryable) {
+    private void fail(ClaimedJob job, String code, String message, String detail, boolean retryable) {
         if (!running) {
             return;
         }
+        // 시도마다 남기는 로그. 최종 실패는 확정된(commit) 뒤 CompetitionExtractionFailureAlertService가 따로 남긴다.
+        log.warn("COMPETITION_EXTRACTION_ATTEMPT_FAILED jobId={} attempt={} code={} retryable={} detail={}",
+                job.id(), job.attemptCount(), code, retryable, detail);
         try {
-            if (!store.recordFailure(job, code, message, retryable, Instant.now())) {
+            if (!store.recordFailure(job, code, message, detail, retryable, Instant.now())) {
                 log.info("Discarded stale extraction failure for job {} (lease taken over)", job.id());
             }
         } catch (RuntimeException exception) {
