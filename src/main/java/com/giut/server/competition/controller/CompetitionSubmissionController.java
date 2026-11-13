@@ -2,7 +2,6 @@ package com.giut.server.competition.controller;
 
 import com.giut.server.competition.dto.request.CompetitionExtractPreviewRequest;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
-import com.giut.server.competition.dto.response.CompetitionExtractPreviewResponse;
 import com.giut.server.competition.dto.response.CompetitionExtractionJobResponse;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
 import com.giut.server.competition.service.AiCompetitionExtractClient.ExtractionUnavailable;
@@ -40,16 +39,6 @@ public class CompetitionSubmissionController {
 
     private final CompetitionSubmissionService submissions;
     private final CompetitionExtractionJobService extractions;
-
-    /** @deprecated 신규 링크는 AI 응답(약 1분)을 HTTP 요청 안에서 기다린다. {@code POST /extractions}로 전환한다. */
-    @Deprecated
-    @PostMapping("/extract-preview")
-    @Operation(summary = "회원 제출 공모전 추출 미리보기(전환 예정)", deprecated = true,
-            description = "기존 링크는 AI 호출 없이 반환합니다. 신규 링크는 추출 후 입력이 필요한 항목을 반환합니다. "
-                    + "AI 응답을 최대 20초 동기로 기다리므로 POST /api/competitions/extractions 비동기 접수로 전환하세요.")
-    public ResponseEntity<CompetitionExtractPreviewResponse> preview(@Valid @RequestBody CompetitionExtractPreviewRequest request) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(submissions.preview(request.url()));
-    }
 
     @PostMapping("/extractions")
     @Operation(summary = "회원 공모전 URL 추출 작업 접수",

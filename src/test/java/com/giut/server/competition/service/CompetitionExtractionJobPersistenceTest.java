@@ -266,6 +266,36 @@ class CompetitionExtractionJobPersistenceTest {
     }
 
     @Test
+    void missingDeadlineNeedsReviewAndAiCodesAndDatesAreNormalized() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(null));
+        long id = acceptedJobId(member, SOURCE);
+        assertThat(worker.pollOnce()).isEqualTo(1);
+        awaitTerminal(id);
+
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.result.status").value("NEEDS_REVIEW"))
+                .andExpect(jsonPath("$.result.draft.title").value("학생 공모전"))
+                .andExpect(jsonPath("$.result.draft.category").value("WEB_MOBILE_IT"))
+                .andExpect(jsonPath("$.result.draft.activityType").value("COMPETITION"))
+                .andExpect(jsonPath("$.result.draft.applicationStartAt").value("2098-12-31T15:00:00Z"))
+                .andExpect(jsonPath("$.result.draft.urls[0].primary").value(true))
+                .andExpect(jsonPath("$.result.requiredInputs[0].field").value("applicationEndAt"))
+                .andExpect(jsonPath("$.result.requiredInputs[0].type").value("datetime"));
+        assertThat(competitions.count()).isZero(); // 추출만으로는 공모전이 만들어지지 않는다.
+    }
+
+    @Test
+    void removedSynchronousPreviewEndpointIsNoLongerServed() throws Exception {
+        // 동기 추출은 AI 응답(약 1분)을 HTTP 요청 안에서 기다려 서버 스레드를 붙잡고 호출 한도도 피했다. 비동기 /extractions만 남긴다.
+        mvc.perform(json(post("/api/competitions/extract-preview"), member, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().is4xxClientError());
+        verifyNoInteractions(extractor);
+        assertThat(jobs.count()).isZero();
+    }
+
+    @Test
     void existingUrlKeepsExistsMeaningWithoutJobDnsOrAi() throws Exception {
         mvc.perform(json(post(ADMIN), admin, """
                 {"title":"기존 공고","category":"WEB_MOBILE_IT","summary":"소개","publicationStatus":"PUBLISHED",

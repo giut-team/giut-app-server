@@ -32,7 +32,7 @@ class AiCompetitionExtractClientTest {
         }).build();
 
         AiCompetitionExtractClient.Extraction result =
-                new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest");
+                new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest", Duration.ofSeconds(5));
 
         assertThat(result.applicationEndAt()).isEqualTo(LocalDate.of(2099, 1, 2));
         assertThat(result.applicationStartAt()).isNull();
@@ -45,7 +45,7 @@ class AiCompetitionExtractClientTest {
         WebClient client = WebClient.builder().exchangeFunction(request ->
                 Mono.just(ClientResponse.create(HttpStatus.UNPROCESSABLE_ENTITY).build())).build();
 
-        assertThatThrownBy(() -> new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest"))
+        assertThatThrownBy(() -> new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest", Duration.ofSeconds(5)))
                 .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class,
                         error -> assertThat(error.status()).isEqualTo(HttpStatus.BAD_GATEWAY));
     }
@@ -60,7 +60,7 @@ class AiCompetitionExtractClientTest {
 
         WebClient malformed = WebClient.builder().exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
                 .header("Content-Type", "application/json").body("{not json").build())).build();
-        assertThatThrownBy(() -> new AiCompetitionExtractClient(malformed, ENDPOINT).extract("https://example.com/contest"))
+        assertThatThrownBy(() -> new AiCompetitionExtractClient(malformed, ENDPOINT).extract("https://example.com/contest", Duration.ofSeconds(5)))
                 .isInstanceOfSatisfying(AiCompetitionExtractClient.ExtractionUnavailable.class,
                         error -> assertThat(error.retryable()).isFalse());
     }
@@ -74,7 +74,6 @@ class AiCompetitionExtractClientTest {
                     assertThat(error.status()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
                     assertThat(error.retryable()).isTrue();
                 });
-        assertThat(AiCompetitionExtractClient.PREVIEW_TIMEOUT).isEqualTo(Duration.ofSeconds(20));
     }
 
     @Test
@@ -92,7 +91,7 @@ class AiCompetitionExtractClientTest {
         WebClient client = WebClient.builder().exchangeFunction(request ->
                 Mono.just(ClientResponse.create(upstream).build())).build();
         try {
-            new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest");
+            new AiCompetitionExtractClient(client, ENDPOINT).extract("https://example.com/contest", Duration.ofSeconds(5));
         } catch (AiCompetitionExtractClient.ExtractionUnavailable error) {
             return error;
         }

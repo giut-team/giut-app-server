@@ -16,7 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,7 +24,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -55,13 +53,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class CompetitionSubmissionPersistenceTest {
     private static final String COMPETITIONS = "/api/competitions";
-    private static final String PREVIEW = COMPETITIONS + "/extract-preview";
+    private static final String EXTRACTIONS = COMPETITIONS + "/extractions";
     private static final String SUBMISSIONS = COMPETITIONS + "/submissions";
     private static final String ADMIN = "/api/admin/competitions";
     private static final String SOURCE = "https://example.com/contest";
-    private static final String PREVIEW_BODY = """
-            {"url":"https://example.com/contest"}
-            """;
     private static final String FORM = """
             {"title":"학생 공모전","category":"WEB_MOBILE_IT","summary":"공고 설명",
              "activityType":"COMPETITION","applicationEndAt":"2099-01-01T00:00:00Z"}
@@ -113,7 +108,7 @@ class CompetitionSubmissionPersistenceTest {
                 """;
         mvc.perform(json(post(ADMIN), admin, existingForm)).andExpect(status().isCreated());
 
-        mvc.perform(json(post(PREVIEW), member, """
+        mvc.perform(json(post(EXTRACTIONS), member, """
                 {"url":"https://EXAMPLE.COM:443/contest/"}
                 """))
                 .andExpect(status().isOk())
@@ -122,29 +117,6 @@ class CompetitionSubmissionPersistenceTest {
                 .andExpect(jsonPath("$.draft").doesNotExist())
                 .andExpect(jsonPath("$.requiredInputs").doesNotExist());
         verifyNoInteractions(publicSource, extractor);
-    }
-
-    @Test
-    void previewReturnsMissingFieldsAndNormalizesAiCodesAndDates() throws Exception {
-        when(extractor.extract(SOURCE)).thenReturn(extraction(null));
-        mvc.perform(json(post(PREVIEW), member, PREVIEW_BODY))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("NEEDS_REVIEW"))
-                .andExpect(jsonPath("$.draft.title").value("학생 공모전"))
-                .andExpect(jsonPath("$.draft.category").value("WEB_MOBILE_IT"))
-                .andExpect(jsonPath("$.draft.activityType").value("COMPETITION"))
-                .andExpect(jsonPath("$.draft.applicationStartAt").value("2098-12-31T15:00:00Z"))
-                .andExpect(jsonPath("$.draft.urls[0].primary").value(true))
-                .andExpect(jsonPath("$.requiredInputs[0].field").value("applicationEndAt"))
-                .andExpect(jsonPath("$.requiredInputs[0].type").value("datetime"));
-        assertThat(competitions.count()).isZero();
-
-        when(extractor.extract(SOURCE)).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
-        mvc.perform(json(post(PREVIEW), member, PREVIEW_BODY))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("READY"))
-                .andExpect(jsonPath("$.draft.applicationEndAt").value("2099-01-02T14:59:59Z"));
-        assertThat(competitions.count()).isZero();
     }
 
     @Test
@@ -218,17 +190,9 @@ class CompetitionSubmissionPersistenceTest {
     }
 
     @Test
-    void protectedEndpointsAndUpstreamErrorKeepTheirStatus() throws Exception {
-        mvc.perform(post(PREVIEW).contentType(MediaType.APPLICATION_JSON).content(PREVIEW_BODY))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(json(post(PREVIEW), unverified, PREVIEW_BODY)).andExpect(status().isForbidden());
+    void submissionRequiresUniversityVerification() throws Exception {
         mvc.perform(json(post(SUBMISSIONS), unverified, submission(FORM))).andExpect(status().isForbidden());
         verifyNoInteractions(extractor);
-
-        when(extractor.extract(SOURCE)).thenThrow(new AiCompetitionExtractClient.ExtractionUnavailable(
-                HttpStatus.GATEWAY_TIMEOUT, "추출 시간 초과"));
-        mvc.perform(json(post(PREVIEW), member, PREVIEW_BODY))
-                .andExpect(status().isGatewayTimeout()).andExpect(jsonPath("$.code").value(504));
     }
 
     @Test
@@ -256,12 +220,6 @@ class CompetitionSubmissionPersistenceTest {
         assertThat(competitions.count()).isEqualTo(1);
         assertThat(urls.count()).isEqualTo(1);
         verifyNoInteractions(extractor);
-    }
-
-    private AiCompetitionExtractClient.Extraction extraction(LocalDate deadline) {
-        return new AiCompetitionExtractClient.Extraction("학생 공모전", "기관", "대학생", null,
-                LocalDate.of(2099, 1, 1), deadline, null, null, "CONTEST",
-                List.of("IT_DEVELOP"), false, "공고 설명", null, null);
     }
 
     private String submission(String form) {

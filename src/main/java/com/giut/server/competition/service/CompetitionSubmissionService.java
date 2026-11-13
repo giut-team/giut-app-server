@@ -13,7 +13,6 @@ import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
-import com.giut.server.competition.util.PublicCompetitionSource;
 import com.giut.server.global.exception.ConflictException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -42,25 +41,11 @@ public class CompetitionSubmissionService {
     private final CompetitionRepository competitionRepository;
     private final CompetitionUrlRepository urlRepository;
     private final CompetitionUrlNormalizer urlNormalizer;
-    private final PublicCompetitionSource publicSource;
-    private final AiCompetitionExtractClient extractor;
     private final CompetitionService competitionService;
     private final Validator validator;
 
-    public CompetitionExtractPreviewResponse preview(String rawUrl) {
-        String sourceUrl = rawUrl.trim();
-        CompetitionUrlNormalizer.NormalizedUrl source = urlNormalizer.normalize(sourceUrl);
-        Optional<String> existing = findExistingUrl(source.hash());
-        if (existing.isPresent()) {
-            return CompetitionExtractPreviewResponse.existing(existing.get());
-        }
-
-        publicSource.requirePublicAddress(source.value());
-        return previewFromExtraction(sourceUrl, source.hash(), extractor.extract(sourceUrl));
-    }
-
     /**
-     * AI 원본 응답을 회원 확인용 미리보기로 바꾼다. 동기 미리보기와 비동기 추출 작업 결과 조회가 같은 변환·필드 보완 규칙을 쓴다.
+     * AI 원본 응답을 회원 확인용 미리보기(초안과 보완이 필요한 필드)로 바꾼다. 비동기 추출 작업의 결과 조회가 이 변환·필드 보완 규칙을 쓴다.
      * 공식 URL 중복 같은 DB 기준 검증은 호출 시점의 데이터로 다시 계산된다.
      */
     public CompetitionExtractPreviewResponse previewFromExtraction(String sourceUrl, String sourceHash,

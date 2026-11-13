@@ -16,9 +16,6 @@ import java.util.concurrent.TimeoutException;
 
 @Component
 public class AiCompetitionExtractClient {
-    /** 동기 미리보기(deprecated extract-preview)의 기존 제한 시간. 사용자 HTTP 요청을 오래 붙잡지 않도록 유지한다. */
-    public static final Duration PREVIEW_TIMEOUT = Duration.ofSeconds(20);
-
     private final WebClient webClient;
     private final String endpoint;
 
@@ -31,13 +28,9 @@ public class AiCompetitionExtractClient {
         return !endpoint.isBlank();
     }
 
-    public Extraction extract(String sourceUrl) {
-        return extract(sourceUrl, PREVIEW_TIMEOUT);
-    }
-
     /**
      * 호출 스레드를 막고 기다린다. 비동기 작업자는 DB 트랜잭션 밖의 전용 스레드에서만 호출한다.
-     * 실패의 HTTP 상태는 기존 미리보기 계약(504/502/503)을 유지하고, 재시도 가능 여부는 {@link ExtractionUnavailable#retryable()}로 구분한다.
+     * 실패는 {@link ExtractionUnavailable}로 돌려주며(시간 초과 504, 응답 오류 502, 미설정 503), 재시도 가능 여부는 {@link ExtractionUnavailable#retryable()}로 구분한다.
      */
     public Extraction extract(String sourceUrl, Duration timeout) {
         if (!isConfigured()) {

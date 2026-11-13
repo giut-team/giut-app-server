@@ -7,7 +7,7 @@ import java.time.Instant;
 
 /**
  * 회원 URL 추출 작업 접수·조회 응답.
- * EXISTS는 기존 extract-preview와 같은 의미(이미 등록·제출된 링크, AI 호출 없음)이며 jobId가 없다.
+ * EXISTS는 이미 등록·제출된 링크(AI 호출 없음)를 뜻하며 jobId가 없다.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record CompetitionExtractionJobResponse(
