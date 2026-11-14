@@ -312,9 +312,13 @@ public class CompetitionService {
     @Transactional
     public Long createByMember(Long userId, String sourceUrl, CompetitionUrlNormalizer.NormalizedUrl source,
                                CreateCompetitionRequest input, Boolean isForEnrolledOnly, Boolean isTeam) {
-        User submitter = userRepository.findById(userId)
+        // 작업자는 HTTP 인증 필터를 거치지 않는다. 탈퇴·학교 인증 해제와 같은 행 잠금 안에서 자격을 재확인한다.
+        User submitter = userRepository.findByIdForUpdate(userId)
                 .filter(user -> user.getStatus() == User.Status.ACTIVE)
                 .orElseThrow(() -> new ForbiddenException("활성 상태의 사용자만 공모전을 제출할 수 있습니다."));
+        if (submitter.getRole() != User.Role.ADMIN && submitter.getUniversityVerifiedAt() == null) {
+            throw new ForbiddenException("학교 인증을 완료한 사용자만 공모전을 제출할 수 있습니다.");
+        }
         UpsertCompetitionRequest request = input.toUpsertRequest();
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());

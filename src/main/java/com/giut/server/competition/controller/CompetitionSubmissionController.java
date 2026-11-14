@@ -44,7 +44,7 @@ public class CompetitionSubmissionController {
     @Operation(summary = "회원 공모전 URL 추출 작업 접수",
             description = "기존 링크면 200과 status=EXISTS(AI 호출 없음)를 반환합니다. 신규 링크는 작업을 저장·commit한 뒤 "
                     + "202와 jobId·Location을 반환합니다. 같은 링크의 진행 중 작업이 있으면 그 작업을 202로, "
-                    + "보관 중인 성공 작업이 있으면 200으로 다시 돌려줍니다.")
+                    + "보관 중인 성공 작업이 있으면 200으로 다시 돌려줍니다. 추출 정보가 완성되면 별도 제출 요청 없이 검토 대기로 자동 제출합니다.")
     public ResponseEntity<CompetitionExtractionJobResponse> requestExtraction(
             @Valid @RequestBody CompetitionExtractionRequest request, Authentication authentication) {
         CompetitionExtractionJobService.Accepted accepted =
@@ -60,7 +60,8 @@ public class CompetitionSubmissionController {
 
     @GetMapping("/extractions/{jobId}")
     @Operation(summary = "회원 공모전 URL 추출 작업 조회",
-            description = "본인 작업의 상태와 결과를 반환합니다. SUCCEEDED면 result에 초안(draft)과 회원이 보완할 필드(requiredInputs)가 있습니다. "
+            description = "본인 작업의 상태와 결과를 반환합니다. SUCCEEDED의 result.status=SUBMITTED면 검토 대기 자동 제출이 완료됐고 competitionId와 초안을 반환합니다. "
+                    + "NEEDS_REVIEW면 draft와 requiredInputs를 보완한 뒤 제출해야 합니다. "
                     + "다른 사용자의 작업이나 없는 작업은 404입니다.")
     public ResponseEntity<CompetitionExtractionJobResponse> getExtraction(@PathVariable Long jobId,
                                                                           Authentication authentication) {

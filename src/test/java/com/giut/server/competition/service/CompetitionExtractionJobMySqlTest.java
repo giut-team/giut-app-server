@@ -3,6 +3,9 @@ package com.giut.server.competition.service;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
+import com.giut.server.competition.repository.CompetitionRepository;
+import com.giut.server.competition.repository.CompetitionUrlRepository;
+import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
 import com.giut.server.competition.service.CompetitionExtractionJobStore.ClaimedJob;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.util.PublicCompetitionSource;
@@ -18,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
 import java.time.Duration;
@@ -61,6 +65,10 @@ import static org.mockito.Mockito.when;
 class CompetitionExtractionJobMySqlTest {
     @Autowired CompetitionExtractionJobStore store;
     @Autowired CompetitionExtractionJobRepository jobs;
+    @Autowired CompetitionRepository competitions;
+    @Autowired CompetitionUrlRepository urls;
+    @Autowired CompetitionVerificationLogRepository logs;
+    @Autowired ObjectMapper objectMapper;
     @Autowired CompetitionExtractionJobService service;
     @Autowired CompetitionExtractionWorker worker;
     @Autowired CompetitionUrlNormalizer normalizer;
@@ -86,6 +94,9 @@ class CompetitionExtractionJobMySqlTest {
     @AfterEach
     void tearDown() {
         jobs.deleteAll();
+        logs.deleteAll();
+        urls.deleteAll();
+        competitions.deleteAll();
         users.deleteAll();
     }
 
@@ -402,6 +413,70 @@ class CompetitionExtractionJobMySqlTest {
         assertThat(jdbc.queryForObject("""
                 select count(*) from competition_extraction_jobs where status in ('PENDING','RUNNING')
                 """, Long.class)).isEqualTo(10L);
+    }
+
+    @Test
+    void differentSourcesWithTheSameOfficialLinkCreateOnlyOneSubmission() throws Exception {
+        var bothInAi = new CountDownLatch(2);
+        when(extractor.extract(anyString(), any(Duration.class))).thenAnswer(invocation -> {
+            bothInAi.countDown();
+            assertThat(bothInAi.await(10, TimeUnit.SECONDS)).isTrue();
+            return completeExtraction("https://example.com/shared-official");
+        });
+        Instant now = Instant.now();
+        enqueue("https://example.com/source-a", now);
+        enqueue("https://example.com/source-b", now);
+        List<ClaimedJob> runs = store.claim(2, now.plusSeconds(1));
+        assertThat(runs).hasSize(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> worker.execute(runs.getFirst()));
+            var second = executor.submit(() -> worker.execute(runs.getLast()));
+            first.get(20, TimeUnit.SECONDS);
+            second.get(20, TimeUnit.SECONDS);
+        }
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(competitions.findAll().getFirst().getPublicationStatus())
+                .isEqualTo(com.giut.server.competition.entity.Competition.PublicationStatus.DRAFT);
+        assertThat(jobs.findAll()).allMatch(job -> job.getStatus() == Status.SUCCEEDED);
+        assertThat(runs.stream().map(run -> service.get(member.getId(), run.id()).result().status()).toList())
+                .containsExactlyInAnyOrder(
+                        com.giut.server.competition.dto.response.CompetitionExtractionResult.Status.SUBMITTED,
+                        com.giut.server.competition.dto.response.CompetitionExtractionResult.Status.EXISTS);
+    }
+
+    @Test
+    void completeResultRacingLeaseRecoveryCannotLeaveAnOrphanSubmission() throws Exception {
+        for (int round = 0; round < 10; round++) {
+            Instant now = Instant.now();
+            long before = competitions.count();
+            long id = enqueue("https://example.com/auto-race-" + round, now.minusSeconds(1));
+            ClaimedJob run = store.claim(1, now).getFirst();
+            String json = objectMapper.writeValueAsString(completeExtraction("https://example.com/race-official-" + round));
+            Instant afterLease = now.plusSeconds(181);
+            var start = new CountDownLatch(1);
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var save = executor.submit(() -> { start.await(); return store.recordSuccess(run, json, afterLease); });
+                var recover = executor.submit(() -> { start.await(); return store.recoverExpiredLeases(afterLease); });
+                start.countDown();
+                boolean saved = save.get(20, TimeUnit.SECONDS);
+                int recovered = recover.get(20, TimeUnit.SECONDS);
+                assertThat(saved ^ (recovered == 1)).isTrue();
+                assertThat(competitions.count()).isEqualTo(before + (saved ? 1 : 0));
+                assertThat(jobs.findById(id).orElseThrow().getStatus())
+                        .isEqualTo(saved ? Status.SUCCEEDED : Status.PENDING);
+                if (!saved) {
+                    // 다음 회차의 선점 후보에 남기지 않는다.
+                    ClaimedJob retry = store.claim(1, now.plusSeconds(240)).getFirst();
+                    assertThat(store.recordFailure(retry, "TEST", "종료", null, false, afterLease)).isTrue();
+                }
+            }
+        }
+    }
+
+    private AiCompetitionExtractClient.Extraction completeExtraction(String officialUrl) {
+        return new AiCompetitionExtractClient.Extraction("학생 공모전", "기관", "대학생", false, null,
+                LocalDate.of(2099, 1, 2), null, null, "CONTEST", List.of("IDEA"), true, "소개", null,
+                List.of(new AiCompetitionExtractClient.ExtractedUrl("OFFICIAL", officialUrl)));
     }
 
     @Test

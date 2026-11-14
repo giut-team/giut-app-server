@@ -15,7 +15,11 @@ public record CompetitionExtractionResult(
         List<CompetitionSubmissionFieldIssue> requiredInputs,
         List<String> images
 ) {
-    public enum Status { EXISTS, READY, NEEDS_REVIEW, INVALID_ACTIVITY }
+    public enum Status { EXISTS, READY, SUBMITTED, NEEDS_REVIEW, INVALID_ACTIVITY }
+
+    public CompetitionExtractionResult submitted(Long id) {
+        return new CompetitionExtractionResult(Status.SUBMITTED, null, id, sourceUrl, draft, List.of(), images);
+    }
 
     /**
      * 이미 등록·제출된 공모전. {@code competitionId}는 공개 중(PUBLISHED)인 공모전일 때만 채운다.

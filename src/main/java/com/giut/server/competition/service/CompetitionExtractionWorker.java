@@ -6,10 +6,14 @@ import com.giut.server.competition.service.AiCompetitionExtractClient.Extraction
 import com.giut.server.competition.service.CompetitionExtractionJobStore.ClaimedJob;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.util.PublicCompetitionSource;
+import com.giut.server.global.exception.ConflictException;
+import com.giut.server.global.exception.ForbiddenException;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -171,12 +175,31 @@ public class CompetitionExtractionWorker {
             return;
         }
         try {
-            if (!store.recordSuccess(job, resultJson, Instant.now())) {
+            if (!saveResult(job, resultJson)) {
                 log.info("Discarded stale extraction result for job {} (lease taken over)", job.id());
             }
+        } catch (CompetitionExtractionJobStore.ResultTooLarge exception) {
+            fail(job, "INVALID_RESULT", "추출 결과가 너무 커서 저장할 수 없습니다.", "자동 제출 결과 포함 저장 한도 초과", false);
+        } catch (ForbiddenException exception) {
+            fail(job, "SUBMISSION_NOT_ALLOWED", "현재 계정 상태에서는 공모전을 자동 제출할 수 없습니다.",
+                    "자동 제출 시 회원 제출 자격 검사 실패", false);
         } catch (RuntimeException exception) {
             // AI 결과를 받았지만 저장하지 못했다. 임대 만료 후 재시도되며 그때 AI가 다시 호출될 수 있다.
             log.warn("Saving extraction result for job {} failed", job.id(), exception);
+        }
+    }
+
+    private boolean saveResult(ClaimedJob job, String resultJson) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return store.recordSuccess(job, resultJson, Instant.now());
+            } catch (DataIntegrityViolationException | ConflictException | TransientDataAccessException exception) {
+                // 공식 URL 동시 제출은 MySQL에서 교착 → 중복 충돌 순서로 실패할 수 있다.
+                // 롤백이 끝난 뒤 같은 AI 결과로 최대 3번만 시도한다(추가 AI 호출 없음).
+                if (attempt >= 3) {
+                    throw exception;
+                }
+            }
         }
     }
 

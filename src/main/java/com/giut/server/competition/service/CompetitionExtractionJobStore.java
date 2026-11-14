@@ -1,6 +1,7 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.competition.config.CompetitionExtractionProperties;
+import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.entity.CompetitionExtractionJobSubscription;
@@ -16,6 +17,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +45,8 @@ public class CompetitionExtractionJobStore {
     private final UserRepository users;
     private final CompetitionExtractionProperties properties;
     private final ApplicationEventPublisher events;
+    private final CompetitionSubmissionService submissions;
+    private final ObjectMapper objectMapper;
 
     public record ClaimedJob(Long id, String token, String sourceUrl, int attemptCount) {
     }
@@ -144,10 +148,30 @@ public class CompetitionExtractionJobStore {
         return claimed;
     }
 
-    /** token이 아직 현재 실행의 것일 때만 결과를 저장한다. false면 회수·인계된 옛 실행의 응답이므로 버린다. */
+    /**
+     * 현재 token의 결과만 반영한다. 작업 행 잠금 안에서 READY 결과를 자동 제출하고 완료와 함께 commit한다.
+     * 회수·인계된 옛 실행은 제출도 하지 않는다. DNS·AI 호출은 이 트랜잭션에 포함하지 않는다.
+     */
     @Transactional
     public boolean recordSuccess(ClaimedJob claimed, String resultJson, Instant now) {
-        return jobs.markSucceeded(claimed.id(), claimed.token(), resultJson, now,
+        CompetitionExtractionJob job = jobs.lockIfAvailable(claimed.id())
+                .filter(found -> found.getStatus() == Status.RUNNING
+                        && claimed.token().equals(found.getLeaseToken()))
+                .orElse(null);
+        if (job == null) {
+            return false;
+        }
+        var extraction = objectMapper.readValue(resultJson, AiCompetitionExtractClient.Extraction.class);
+        CompetitionExtractionResult result = submissions.submitExtracted(job.getRequester().getId(), job.getSourceUrl(),
+                job.getSourceUrlHash(), extraction);
+        // 자동 제출 결과는 조회 시 재계산하면 자신의 OFFICIAL 링크와 충돌한다. 확정 결과를 함께 보관한다.
+        String storedJson = new CompetitionExtractionStoredResult(extraction,
+                result.status() == CompetitionExtractionResult.Status.SUBMITTED ? result.competitionId() : null)
+                .write(objectMapper);
+        if (storedJson.length() > CompetitionExtractionJob.MAX_RESULT_LENGTH) {
+            throw new ResultTooLarge();
+        }
+        return jobs.markSucceeded(claimed.id(), claimed.token(), storedJson, now,
                 now.plus(properties.resultRetention())) == 1;
     }
 
@@ -243,5 +267,8 @@ public class CompetitionExtractionJobStore {
         public long retryAfterSeconds() {
             return retryAfterSeconds;
         }
+    }
+
+    static class ResultTooLarge extends RuntimeException {
     }
 }

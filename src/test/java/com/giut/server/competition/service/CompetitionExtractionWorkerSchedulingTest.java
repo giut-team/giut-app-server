@@ -2,6 +2,10 @@ package com.giut.server.competition.service;
 
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.repository.CompetitionExtractionJobRepository;
+import com.giut.server.competition.repository.CompetitionRepository;
+import com.giut.server.competition.repository.CompetitionUrlRepository;
+import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
+import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.util.PublicCompetitionSource;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
@@ -36,6 +40,9 @@ import static org.mockito.Mockito.when;
 class CompetitionExtractionWorkerSchedulingTest {
     @Autowired CompetitionExtractionJobService service;
     @Autowired CompetitionExtractionJobRepository jobs;
+    @Autowired CompetitionRepository competitions;
+    @Autowired CompetitionUrlRepository urls;
+    @Autowired CompetitionVerificationLogRepository logs;
     @Autowired UserRepository users;
     @MockitoBean PublicCompetitionSource publicSource;
     @MockitoBean AiCompetitionExtractClient extractor;
@@ -43,6 +50,9 @@ class CompetitionExtractionWorkerSchedulingTest {
     @AfterEach
     void cleanUp() {
         jobs.deleteAll();
+        logs.deleteAll();
+        urls.deleteAll();
+        competitions.deleteAll();
         users.deleteAll();
     }
 
@@ -66,5 +76,7 @@ class CompetitionExtractionWorkerSchedulingTest {
             Thread.sleep(50);
         }
         assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.SUCCEEDED);
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(service.get(userId, id).result().status()).isEqualTo(CompetitionExtractionResult.Status.SUBMITTED);
     }
 }
