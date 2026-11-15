@@ -262,15 +262,18 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public ChatRoomListResponse getChatRooms(Long userId) {
-        List<ChatRoomResponse> chatRooms = chatRoomMemberRepository.findAllByUserIdAndLeftAtIsNull(userId).stream()
-                .map(ChatRoomMember::getChatRoomId)
-                .distinct()
-                .map(chatRoomRepository::findById)
-                .flatMap(java.util.Optional::stream)
-                .filter(chatRoom -> chatRoom.getType() == ChatRoom.Type.PERSONAL)
-                .filter(chatRoom -> chatRoom.getStatus() == ChatRoom.Status.ACTIVE)
-                .filter(chatRoom -> !chatBlockPolicy.isRoomBlocked(chatRoom, userId))
-                .map(chatRoom -> ChatRoomResponse.of(chatRoom, findOtherParticipantId(chatRoom.getId(), userId), false))
+        List<ChatRoomResponse> chatRooms = chatRoomMemberRepository
+                .findAvailablePersonalChatRooms(
+                        userId,
+                        ChatRoom.Type.PERSONAL,
+                        ChatRoom.Status.ACTIVE
+                )
+                .stream()
+                .map(item -> ChatRoomResponse.of(
+                        item.getChatRoom(),
+                        item.getTargetUserId(),
+                        false
+                ))
                 .toList();
 
         return new ChatRoomListResponse(chatRooms);
