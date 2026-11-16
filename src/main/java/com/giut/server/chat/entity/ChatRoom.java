@@ -18,13 +18,25 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "chat_rooms",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_chat_rooms_team_id",
-                columnNames = "team_id"
-        ),
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_chat_rooms_team_id",
+                        columnNames = "team_id"
+                ),
+                @UniqueConstraint(
+                        name = "uk_chat_rooms_personal_chat_key",
+                        columnNames = "personal_chat_key"
+                )
+        },
         indexes = {
-                @Index(name = "idx_chat_rooms_team_id", columnList = "team_id"),
-                @Index(name = "idx_chat_rooms_type_status", columnList = "type, status")
+                @Index(
+                        name = "idx_chat_rooms_team_id",
+                        columnList = "team_id"
+                ),
+                @Index(
+                        name = "idx_chat_rooms_type_status",
+                        columnList = "type, status"
+                )
         }
 )
 @Getter
@@ -34,6 +46,9 @@ public class ChatRoom extends BaseTimeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "personal_chat_key", length = 100)
+    private String personalChatKey;
 
     @Column(name = "team_id")
     private Long teamId;
@@ -65,10 +80,31 @@ public class ChatRoom extends BaseTimeEntity {
         return chatRoom;
     }
 
-    public static ChatRoom createPersonalRoom() {
+    public static String createPersonalChatKey(
+            Long firstUserId,
+            Long secondUserId
+    ) {
+        if (firstUserId.equals(secondUserId)) {
+            throw new IllegalArgumentException(
+                    "자기 자신과는 개인 채팅방을 만들 수 없습니다."
+            );
+        }
+
+        long smallerId = Math.min(firstUserId, secondUserId);
+        long largerId = Math.max(firstUserId, secondUserId);
+
+        return smallerId + ":" + largerId;
+    }
+
+    public static ChatRoom createPersonalRoom(
+            Long firstUserId,
+            Long secondUserId
+    ) {
         ChatRoom chatRoom = new ChatRoom();
         chatRoom.type = Type.PERSONAL;
         chatRoom.status = Status.ACTIVE;
+        chatRoom.personalChatKey = createPersonalChatKey(firstUserId, secondUserId);
+
         return chatRoom;
     }
 

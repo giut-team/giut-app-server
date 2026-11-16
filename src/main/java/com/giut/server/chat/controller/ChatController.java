@@ -10,6 +10,7 @@ import com.giut.server.chat.dto.response.ChatRoomListResponse;
 import com.giut.server.chat.dto.response.ChatRoomUnreadCountResponse;
 import com.giut.server.chat.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -43,7 +44,7 @@ public class ChatController {
     @GetMapping
     @Operation(
             summary = "내 채팅방 목록 조회",
-            description = "현재 로그인한 사용자가 참여 중인 활성 개인 채팅방 목록을 조회합니다."
+            description = "현재 로그인한 사용자가 참여 중인 활성 개인 채팅방 목록을 조회합니다. 상대 사용자가 나갔더라도 본인이 참여 중이면 기존 방을 반환합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponse(responseCode = "200", description = "채팅방 목록 조회 성공")
@@ -55,7 +56,7 @@ public class ChatController {
     @PostMapping("/personal")
     @Operation(
             summary = "개인 채팅방 생성",
-            description = "현재 로그인한 사용자와 상대 사용자 사이의 개인 채팅방을 생성합니다. 이미 활성화된 개인 채팅방이 있으면 기존 채팅방을 반환합니다."
+            description = "현재 로그인한 사용자와 상대 사용자 사이의 개인 채팅방을 생성합니다. 기존 채팅방이 있으면 메시지 이력을 유지한 같은 방을 반환하고, 요청자가 나간 상태라면 요청자만 재입장시킵니다. 상대 사용자는 자동으로 재입장시키지 않습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -79,6 +80,11 @@ public class ChatController {
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"인증이 필요합니다.\",\"code\":401}"))
             ),
             @ApiResponse(
+                    responseCode = "403",
+                    description = "두 사용자 사이에 차단 관계가 있어 채팅방을 생성할 수 없음",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"해당 사용자와 상호작용할 수 없습니다.\",\"code\":403}"))
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "사용자 또는 상대 사용자를 찾을 수 없음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 상대 사용자를 찾을 수 없습니다.\",\"code\":404}"))
@@ -97,7 +103,7 @@ public class ChatController {
     @PostMapping("/{chatRoomId}/messages")
     @Operation(
             summary = "채팅 메시지 전송",
-            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. 저장 성공 후 활성 참여자의 /user/queue/chat-rooms/{chatRoomId} 구독에 실시간 전달합니다."
+            description = "채팅방 참여자가 텍스트 메시지를 전송합니다. clientMessageId가 같은 재시도 요청에는 기존 메시지를 반환하며 중복 저장하거나 다시 실시간 전송하지 않습니다. 최초 저장 성공 후 활성 참여자의 /user/queue/chat-rooms/{chatRoomId} 구독에 실시간 전달합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -107,13 +113,18 @@ public class ChatController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ChatMessageResponse.class),
-                            examples = @ExampleObject(value = "{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}")
+                            examples = @ExampleObject(value = "{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"clientMessageId\":\"550e8400-e29b-41d4-a716-446655440000\",\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}")
                     )
             ),
             @ApiResponse(
                     responseCode = "400",
                     description = "유효하지 않은 요청값",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"클라이언트 메시지 ID는 UUID 형식이어야 합니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -124,6 +135,11 @@ public class ChatController {
                     responseCode = "404",
                     description = "채팅방을 찾을 수 없음",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"Resource not Found : 채팅방을 찾을 수 없습니다.\",\"code\":404}"))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "동일한 clientMessageId를 다른 채팅방 또는 내용에 재사용함",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"동일한 clientMessageId를 다른 메시지에 재사용할 수 없습니다.\",\"code\":409}"))
             )
     })
     public ResponseEntity<ChatMessageResponse> sendMessage(
@@ -141,7 +157,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 참여 중인 개인 채팅방의 상세 정보를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "채팅방 상세 조회 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<ChatRoomResponse> getChatRoom(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -153,10 +173,14 @@ public class ChatController {
     @DeleteMapping("/{chatRoomId}")
     @Operation(
             summary = "채팅방 나가기",
-            description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않습니다."
+            description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않으며, 남아 있는 상대 사용자의 채팅방 목록에는 기존 방이 유지됩니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "채팅방 나가기 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "채팅방 나가기 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 이미 나간 사용자"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<Void> leaveChatRoom(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -172,7 +196,11 @@ public class ChatController {
             description = "현재 로그인한 사용자의 마지막 읽은 메시지를 저장합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "읽음 처리 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "읽음 처리 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
+            @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
+    })
     public ResponseEntity<Void> markChatRoomAsRead(
             Authentication authentication,
             @PathVariable Long chatRoomId,
@@ -189,7 +217,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 아직 읽지 않은 상대방의 메시지 수를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "읽지 않은 메시지 수 조회 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임"),
+            @ApiResponse(responseCode = "404", description = "채팅방을 찾을 수 없음")
+    })
     public ResponseEntity<ChatRoomUnreadCountResponse> getUnreadMessageCount(
             Authentication authentication,
             @PathVariable Long chatRoomId
@@ -200,8 +232,13 @@ public class ChatController {
 
     @GetMapping("/{chatRoomId}/messages")
     @Operation(
-            summary = "채팅 메시지 목록 조회",
-            description = "채팅방 참여자가 메시지 목록을 조회합니다. 조회 성공 시 마지막 메시지를 읽은 메시지로 기록합니다."
+            summary = "채팅 메시지 커서 목록 조회",
+            description = """
+                beforeMessageId가 없으면 최신 메시지를 조회합니다.
+                값이 있으면 해당 메시지 ID보다 오래된 메시지를 조회합니다.
+                응답의 nextCursor를 다음 요청의 beforeMessageId로 사용합니다.
+                메시지 조회만으로 읽음 처리되지는 않습니다.
+                """
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -211,13 +248,18 @@ public class ChatController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ChatMessageListResponse.class),
-                            examples = @ExampleObject(value = "{\"chatRoomId\":5,\"page\":0,\"size\":30,\"hasNext\":false,\"messages\":[{\"messageId\":1,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-09-08T11:00:00Z\"}]}")
+                            examples = @ExampleObject(value = "{\"chatRoomId\":5,\"nextCursor\":71,\"size\":30,\"hasNext\":true,\"messages\":[{\"messageId\":71,\"chatRoomId\":5,\"senderId\":12,\"content\":\"안녕하세요. 팀 채팅 테스트입니다.\",\"messageType\":\"TEXT\",\"status\":\"ACTIVE\",\"createdAt\":\"2026-11-03T01:00:00Z\"}]}")
                     )
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "페이지 또는 요청 값 오류",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":400}"))
+                    description = "커서 또는 요청 값 오류",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"메시지 커서는 1 이상이어야 합니다.\",\"code\":400}"))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "채팅방 참여자가 아니거나 상대 사용자와 차단 관계임",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ResultDto.class), examples = @ExampleObject(value = "{\"success\":false,\"message\":\"채팅방 참여자만 메시지를 이용할 수 있습니다.\",\"code\":403}"))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -233,11 +275,21 @@ public class ChatController {
     public ResponseEntity<ChatMessageListResponse> getMessages(
             Authentication authentication,
             @PathVariable Long chatRoomId,
-            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "이 ID보다 오래된 메시지를 조회합니다. 첫 조회에서는 생략합니다.", example = "71")
+            @RequestParam(required = false) Long beforeMessageId,
+            @Parameter(description = "한 번에 조회할 메시지 수", example = "30")
             @RequestParam(defaultValue = "30") int size
     ) {
         Long userId = Long.valueOf(authentication.getName());
-        return ResponseEntity.ok(chatService.getMessages(userId, chatRoomId, page, size));
+
+        return ResponseEntity.ok(
+                chatService.getMessages(
+                        userId,
+                        chatRoomId,
+                        beforeMessageId,
+                        size
+                )
+        );
     }
 
     @DeleteMapping("/{chatRoomId}/messages/{messageId}")
@@ -246,7 +298,11 @@ public class ChatController {
             description = "현재 로그인한 사용자가 보낸 메시지를 삭제합니다. 실제 데이터는 삭제하지 않고 삭제 상태로 변경합니다."
     )
     @SecurityRequirement(name = "JWT")
-    @ApiResponse(responseCode = "204", description = "메시지 삭제 성공")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "메시지 삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "채팅방 참여자가 아니거나, 상대 사용자와 차단 관계이거나, 본인이 보낸 메시지가 아님"),
+            @ApiResponse(responseCode = "404", description = "채팅방 또는 해당 채팅방의 메시지를 찾을 수 없음")
+    })
     public ResponseEntity<Void> deleteMessage(
             Authentication authentication,
             @PathVariable Long chatRoomId,

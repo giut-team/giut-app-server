@@ -5,6 +5,7 @@ import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
+import com.giut.server.global.exception.ForbiddenException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +22,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ChatSubscriptionInterceptorTest {
@@ -28,12 +31,13 @@ class ChatSubscriptionInterceptorTest {
     @Mock ChatRoomRepository chatRoomRepository;
     @Mock ChatRoomMemberRepository chatRoomMemberRepository;
     @Mock UserRepository userRepository;
+    @Mock ChatBlockPolicy chatBlockPolicy;
     @InjectMocks ChatSubscriptionInterceptor interceptor;
 
     @Test
     void allowsActiveParticipantToSubscribe() {
         when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
-        ChatRoom room = ChatRoom.createPersonalRoom();
+        ChatRoom room = ChatRoom.createPersonalRoom(12L, 13L);
         when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
         when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
                 .thenReturn(true);
@@ -45,7 +49,49 @@ class ChatSubscriptionInterceptorTest {
     @Test
     void rejectsNonParticipant() {
         when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
-        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom()));
+        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(ChatRoom.createPersonalRoom(12L, 13L)));
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+    }
+
+    @Test
+    void rejectsFormerParticipant() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        when(chatRoomRepository.findById(5L))
+                .thenReturn(Optional.of(ChatRoom.createPersonalRoom(12L, 13L)));
+        when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
+                .thenReturn(false);
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+
+        verify(chatRoomMemberRepository)
+                .existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L);
+    }
+
+    @Test
+    void rejectsSubscriptionToClosedRoom() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        ChatRoom closedRoom = ChatRoom.createPersonalRoom(12L, 13L);
+        closedRoom.close();
+        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(closedRoom));
+        when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
+                .thenReturn(true);
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
+    }
+
+    @Test
+    void rejectsSubscriptionWhenEitherParticipantBlockedTheOther() {
+        when(userRepository.existsByIdAndStatus(12L, User.Status.ACTIVE)).thenReturn(true);
+        ChatRoom room = ChatRoom.createPersonalRoom(12L, 13L);
+        when(chatRoomRepository.findById(5L)).thenReturn(Optional.of(room));
+        when(chatRoomMemberRepository.existsByChatRoomIdAndUserIdAndLeftAtIsNull(5L, 12L))
+                .thenReturn(true);
+        doThrow(new ForbiddenException("해당 사용자와 상호작용할 수 없습니다."))
+                .when(chatBlockPolicy).requireRoomCanBeUsed(room, 12L);
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/user/queue/chat-rooms/5", () -> "12"), null));
