@@ -67,4 +67,9 @@ public class ChatRoomMember extends BaseTimeEntity {
     public void leave() {
         this.leftAt = Instant.now();
     }
+
+    public void rejoin() {
+        this.leftAt = null;
+        this.joinedAt = Instant.now();
+    }
 }

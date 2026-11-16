@@ -51,6 +51,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -74,6 +76,7 @@ public class TeamService {
     private final CompetitionRepository competitionRepository;
     private final UserRepository userRepository;
     private final ProfileRoleRepository profileRoleRepository;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public TeamPageResponse getRecruitingTeams(Long userId, Long competitionId, int page, int size) {
@@ -145,6 +148,8 @@ public class TeamService {
                 .filter(found -> found.getPublicationStatus() != Competition.PublicationStatus.ARCHIVED)
                 .orElseThrow(() -> new ResourceNotFoundException("대회를 찾을 수 없습니다."));
 
+        validateCompetitionRecruitmentOpen(competition);
+
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
             throw new ConflictException("이 공모전에 이미 모집 중인 팀이 있습니다.");
@@ -174,6 +179,13 @@ public class TeamService {
         );
 
         return CreateTeamResponse.of(team, recruitments, applicationQuestions);
+    }
+
+    private void validateCompetitionRecruitmentOpen(Competition competition) {
+        Instant applicationEndAt = competition.getApplicationEndAt();
+        if (applicationEndAt != null && !applicationEndAt.isAfter(clock.instant())) {
+            throw new ConflictException("모집이 마감된 공모전에는 팀을 생성할 수 없습니다.");
+        }
     }
 
     @Transactional

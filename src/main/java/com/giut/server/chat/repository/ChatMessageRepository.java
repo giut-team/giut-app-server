@@ -1,21 +1,29 @@
 package com.giut.server.chat.repository;
 
 import com.giut.server.chat.entity.ChatMessage;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+
+import java.util.Optional;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    Page<ChatMessage> findAllByChatRoomIdAndStatusOrderByIdDesc(
+    Optional<ChatMessage> findBySenderIdAndClientMessageId(
+            Long senderId,
+            String clientMessageId
+    );
+
+    Slice<ChatMessage> findByChatRoomIdAndStatusOrderByIdDesc(
             Long chatRoomId,
             ChatMessage.Status status,
             Pageable pageable
     );
 
-    Page<ChatMessage> findAllByChatRoomIdAndStatusOrderByIdAsc(
+    Slice<ChatMessage> findByChatRoomIdAndStatusAndIdLessThanOrderByIdDesc(
             Long chatRoomId,
             ChatMessage.Status status,
+            Long beforeMessageId,
             Pageable pageable
     );
 

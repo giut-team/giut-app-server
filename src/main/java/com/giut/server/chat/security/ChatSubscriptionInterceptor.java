@@ -3,6 +3,7 @@ package com.giut.server.chat.security;
 import com.giut.server.chat.entity.ChatRoom;
 import com.giut.server.chat.repository.ChatRoomMemberRepository;
 import com.giut.server.chat.repository.ChatRoomRepository;
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
+    private final ChatBlockPolicy chatBlockPolicy;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -76,14 +78,19 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
             throw new AccessDeniedException("잘못된 구독 요청입니다.");
         }
 
-        boolean activeRoom = chatRoomRepository.findById(roomId)
+        ChatRoom chatRoom = chatRoomRepository.findById(roomId)
                 .filter(room -> room.getStatus() == ChatRoom.Status.ACTIVE)
-                .isPresent();
+                .orElse(null);
         boolean participant = chatRoomMemberRepository
                 .existsByChatRoomIdAndUserIdAndLeftAtIsNull(roomId, userId);
 
-        if (!activeRoom || !participant) {
+        if (chatRoom == null || !participant) {
             throw new AccessDeniedException("채팅방 참여자만 구독할 수 있습니다.");
+        }
+        try {
+            chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
+        } catch (ForbiddenException exception) {
+            throw new AccessDeniedException(exception.getMessage(), exception);
         }
         return message;
     }

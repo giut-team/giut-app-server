@@ -37,6 +37,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -63,6 +65,7 @@ class TeamServiceTest {
     @Mock CompetitionRepository competitionRepository;
     @Mock UserRepository userRepository;
     @Mock ProfileRoleRepository profileRoleRepository;
+    @Mock Clock clock;
 
     @InjectMocks TeamService teamService;
 
@@ -114,6 +117,89 @@ class TeamServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> teamService.createTeam(12L, createRequest(1L)));
         verify(teamRepository, never()).save(any(Team.class));
         verify(teamMemberRepository, never()).save(any(TeamMember.class));
+    }
+
+    @Test
+    void cannotCreateTeamAfterCompetitionApplicationDeadline() {
+        Instant now = Instant.parse("2026-11-12T10:00:00Z");
+        User leader = mock(User.class);
+        Competition competition = mock(Competition.class);
+        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        when(competition.getApplicationEndAt()).thenReturn(now.minusSeconds(1));
+        when(clock.instant()).thenReturn(now);
+
+        ConflictException exception = assertThrows(
+                ConflictException.class,
+                () -> teamService.createTeam(12L, createRequest(1L))
+        );
+
+        assertEquals("모집이 마감된 공모전에는 팀을 생성할 수 없습니다.", exception.getMessage());
+        verify(teamRepository, never()).save(any(Team.class));
+        verify(teamMemberRepository, never()).save(any(TeamMember.class));
+    }
+
+    @Test
+    void cannotCreateTeamAtExactCompetitionApplicationDeadline() {
+        Instant now = Instant.parse("2026-11-12T10:00:00Z");
+        User leader = mock(User.class);
+        Competition competition = mock(Competition.class);
+        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        when(competition.getApplicationEndAt()).thenReturn(now);
+        when(clock.instant()).thenReturn(now);
+
+        assertThrows(
+                ConflictException.class,
+                () -> teamService.createTeam(12L, createRequest(1L))
+        );
+
+        verify(teamRepository, never()).save(any(Team.class));
+    }
+
+    @Test
+    void canCreateTeamBeforeCompetitionApplicationDeadline() {
+        Instant now = Instant.parse("2026-11-12T10:00:00Z");
+        User leader = mock(User.class);
+        Competition competition = mock(Competition.class);
+        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(leader.getId()).thenReturn(12L);
+        when(competition.getId()).thenReturn(1L);
+        when(competition.getApplicationEndAt()).thenReturn(now.plusSeconds(1));
+        when(clock.instant()).thenReturn(now);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
+            Team team = invocation.getArgument(0);
+            ReflectionTestUtils.setField(team, "id", 10L);
+            return team;
+        });
+
+        assertEquals(10L, teamService.createTeam(12L, createRequest(1L)).teamId());
+        verify(teamRepository).save(any(Team.class));
+    }
+
+    @Test
+    void legacyCompetitionWithoutApplicationDeadlineStillAllowsTeamCreation() {
+        User leader = mock(User.class);
+        Competition competition = mock(Competition.class);
+        when(leader.getStatus()).thenReturn(User.Status.ACTIVE);
+        when(leader.getId()).thenReturn(12L);
+        when(competition.getId()).thenReturn(1L);
+        when(competition.getApplicationEndAt()).thenReturn(null);
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
+            Team team = invocation.getArgument(0);
+            ReflectionTestUtils.setField(team, "id", 10L);
+            return team;
+        });
+
+        assertEquals(10L, teamService.createTeam(12L, createRequest(1L)).teamId());
+        verify(teamRepository).save(any(Team.class));
+        verify(clock, never()).instant();
     }
 
     @Test

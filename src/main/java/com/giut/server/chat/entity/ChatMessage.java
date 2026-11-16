@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,6 +18,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "chat_messages",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_chat_messages_sender_client_message",
+                columnNames = {"sender_id", "client_message_id"}
+        ),
         indexes = {
                 @Index(name = "idx_chat_messages_room_id_id", columnList = "chat_room_id, id"),
                 @Index(name = "idx_chat_messages_sender_id", columnList = "sender_id")
@@ -35,6 +40,9 @@ public class ChatMessage extends BaseTimeEntity {
 
     @Column(name = "sender_id", nullable = false)
     private Long senderId;
+
+    @Column(name = "client_message_id", length = 36)
+    private String clientMessageId;
 
     @Column(nullable = false, columnDefinition = "text")
     private String content;
@@ -59,9 +67,19 @@ public class ChatMessage extends BaseTimeEntity {
     }
 
     public static ChatMessage createText(Long chatRoomId, Long senderId, String content) {
+        return createText(chatRoomId, senderId, null, content);
+    }
+
+    public static ChatMessage createText(
+            Long chatRoomId,
+            Long senderId,
+            String clientMessageId,
+            String content
+    ) {
         ChatMessage chatMessage = new ChatMessage();
         chatMessage.chatRoomId = chatRoomId;
         chatMessage.senderId = senderId;
+        chatMessage.clientMessageId = clientMessageId;
         chatMessage.content = content;
         chatMessage.messageType = MessageType.TEXT;
         chatMessage.status = Status.ACTIVE;
