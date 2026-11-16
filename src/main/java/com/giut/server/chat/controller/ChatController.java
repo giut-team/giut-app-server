@@ -44,7 +44,7 @@ public class ChatController {
     @GetMapping
     @Operation(
             summary = "내 채팅방 목록 조회",
-            description = "현재 로그인한 사용자가 참여 중인 활성 개인 채팅방 목록을 조회합니다."
+            description = "현재 로그인한 사용자가 참여 중인 활성 개인 채팅방 목록을 조회합니다. 상대 사용자가 나갔더라도 본인이 참여 중이면 기존 방을 반환합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponse(responseCode = "200", description = "채팅방 목록 조회 성공")
@@ -56,7 +56,7 @@ public class ChatController {
     @PostMapping("/personal")
     @Operation(
             summary = "개인 채팅방 생성",
-            description = "현재 로그인한 사용자와 상대 사용자 사이의 개인 채팅방을 생성합니다. 이미 활성화된 개인 채팅방이 있으면 기존 채팅방을 반환합니다."
+            description = "현재 로그인한 사용자와 상대 사용자 사이의 개인 채팅방을 생성합니다. 기존 채팅방이 있으면 메시지 이력을 유지한 같은 방을 반환하고, 요청자가 나간 상태라면 요청자만 재입장시킵니다. 상대 사용자는 자동으로 재입장시키지 않습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -173,7 +173,7 @@ public class ChatController {
     @DeleteMapping("/{chatRoomId}")
     @Operation(
             summary = "채팅방 나가기",
-            description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않습니다."
+            description = "현재 로그인한 사용자를 채팅방 참여자에서 제외합니다. 채팅방과 메시지 데이터는 삭제하지 않으며, 남아 있는 상대 사용자의 채팅방 목록에는 기존 방이 유지됩니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({

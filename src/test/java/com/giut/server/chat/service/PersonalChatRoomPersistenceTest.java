@@ -12,7 +12,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
+import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -47,6 +50,9 @@ class PersonalChatRoomPersistenceTest {
 
     @Autowired
     private ChatRoomMemberRepository chatRoomMemberRepository;
+
+    @Autowired
+    private DataSource dataSource;
 
     private User firstUser;
     private User secondUser;
@@ -136,6 +142,98 @@ class PersonalChatRoomPersistenceTest {
                 .orElseThrow();
 
         assertThat(firstMember.getLeftAt()).isNull();
+    }
+
+    @Test
+    void remainingParticipantKeepsRoomAndDoesNotRejoinLeaver() {
+        ChatRoomResponse created = chatService.createPersonalChatRoom(
+                firstUser.getId(),
+                new CreatePersonalChatRoomRequest(secondUser.getId())
+        );
+
+        chatService.leaveChatRoom(
+                secondUser.getId(),
+                created.chatRoomId()
+        );
+
+        assertThat(chatService.getChatRooms(firstUser.getId()).chatRooms())
+                .extracting(ChatRoomResponse::chatRoomId)
+                .containsExactly(created.chatRoomId());
+        assertThat(chatService.getChatRooms(secondUser.getId()).chatRooms())
+                .isEmpty();
+
+        ChatRoomResponse detail = chatService.getChatRoom(
+                firstUser.getId(),
+                created.chatRoomId()
+        );
+        assertThat(detail.targetUserId()).isEqualTo(secondUser.getId());
+
+        ChatRoomResponse reopenedByRemainingUser =
+                chatService.createPersonalChatRoom(
+                        firstUser.getId(),
+                        new CreatePersonalChatRoomRequest(secondUser.getId())
+                );
+
+        assertThat(reopenedByRemainingUser.chatRoomId())
+                .isEqualTo(created.chatRoomId());
+        assertThat(chatRoomMemberRepository
+                .findByChatRoomIdAndUserId(
+                        created.chatRoomId(),
+                        secondUser.getId()
+                )
+                .orElseThrow()
+                .getLeftAt())
+                .isNotNull();
+
+        ChatRoomResponse reopenedByLeaver =
+                chatService.createPersonalChatRoom(
+                        secondUser.getId(),
+                        new CreatePersonalChatRoomRequest(firstUser.getId())
+                );
+
+        assertThat(reopenedByLeaver.chatRoomId())
+                .isEqualTo(created.chatRoomId());
+        assertThat(chatRoomMemberRepository
+                .findByChatRoomIdAndUserId(
+                        created.chatRoomId(),
+                        secondUser.getId()
+                )
+                .orElseThrow()
+                .getLeftAt())
+                .isNull();
+    }
+
+    @Test
+    void backfilledLegacyRoomIsReused() {
+        ChatRoomResponse created = chatService.createPersonalChatRoom(
+                firstUser.getId(),
+                new CreatePersonalChatRoomRequest(secondUser.getId())
+        );
+
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "UPDATE chat_rooms SET personal_chat_key = NULL WHERE id = ?"
+             )) {
+            statement.setLong(1, created.chatRoomId());
+            statement.executeUpdate();
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+
+        new ResourceDatabasePopulator(
+                new ClassPathResource(
+                        "db/manual/V26__backfill_personal_chat_keys.sql"
+                )
+        ).execute(dataSource);
+
+        ChatRoomResponse reused = chatService.createPersonalChatRoom(
+                firstUser.getId(),
+                new CreatePersonalChatRoomRequest(secondUser.getId())
+        );
+
+        assertThat(reused.chatRoomId()).isEqualTo(created.chatRoomId());
+        assertThat(reused.created()).isFalse();
+        assertThat(chatRoomRepository.count()).isEqualTo(1);
     }
 
     @Test

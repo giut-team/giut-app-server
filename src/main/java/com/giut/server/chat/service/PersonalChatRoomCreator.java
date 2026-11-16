@@ -45,16 +45,14 @@ public class PersonalChatRoomCreator {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void restoreParticipants(
+    public void restoreParticipant(
             Long chatRoomId,
-            Long userId,
-            Long targetUserId
+            Long userId
     ) {
-        restoreParticipant(chatRoomId, userId);
-        restoreParticipant(chatRoomId, targetUserId);
+        restoreOrCreateParticipant(chatRoomId, userId);
     }
 
-    private void restoreParticipant(
+    private void restoreOrCreateParticipant(
             Long chatRoomId,
             Long userId
     ) {

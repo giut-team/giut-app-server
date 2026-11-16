@@ -29,7 +29,6 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
              AND other.userId <> :userId
             WHERE mine.userId = :userId
               AND mine.leftAt IS NULL
-              AND other.leftAt IS NULL
               AND room.type = :type
               AND room.status = :status
               AND NOT EXISTS (

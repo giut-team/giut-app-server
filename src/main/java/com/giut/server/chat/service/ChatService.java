@@ -363,10 +363,9 @@ public class ChatService {
     }
 
     private Long findOtherParticipantId(Long chatRoomId, Long userId) {
-        return chatRoomMemberRepository.findAllByChatRoomIdAndLeftAtIsNull(chatRoomId).stream()
+        return chatRoomMemberRepository
+                .findFirstByChatRoomIdAndUserIdNot(chatRoomId, userId)
                 .map(ChatRoomMember::getUserId)
-                .filter(participantId -> !Objects.equals(participantId, userId))
-                .findFirst()
                 .orElse(null);
     }
 
@@ -402,10 +401,9 @@ public class ChatService {
             Long targetUserId,
             boolean created
     ) {
-        personalChatRoomCreator.restoreParticipants(
+        personalChatRoomCreator.restoreParticipant(
                 chatRoom.getId(),
-                userId,
-                targetUserId
+                userId
         );
 
         return ChatRoomResponse.of(
