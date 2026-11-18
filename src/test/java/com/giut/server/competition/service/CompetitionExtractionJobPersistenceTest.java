@@ -14,6 +14,13 @@ import com.giut.server.competition.service.CompetitionExtractionJobStore.Claimed
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.util.PublicCompetitionSource;
 import com.giut.server.global.exception.ConflictException;
+import com.giut.server.notification.entity.Notification;
+import com.giut.server.notification.entity.PushDelivery;
+import com.giut.server.notification.entity.PushDevice;
+import com.giut.server.notification.repository.NotificationRepository;
+import com.giut.server.notification.repository.PushDeliveryRepository;
+import com.giut.server.notification.repository.PushDeviceRepository;
+import com.giut.server.notification.service.NotificationService;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import com.zaxxer.hikari.HikariDataSource;
@@ -84,6 +91,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "DISCORD_ALERT_WEBHOOK_URL=", "DISCORD_SLOW_API_WEBHOOK_URL=",
         "logging.level.org.hibernate.SQL=OFF", "logging.level.org.hibernate.orm.jdbc.bind=OFF",
         "app.ai-extraction.jobs.worker-enabled=false",
+        "app.push.worker-enabled=false",
         "app.ai-extraction.jobs.max-active-per-user=2",
         "app.ai-extraction.jobs.max-requests-per-user-per-hour=4",
         "app.ai-extraction.jobs.max-active-total=3"
@@ -112,6 +120,10 @@ class CompetitionExtractionJobPersistenceTest {
     @Autowired private TransactionTemplate transactions;
     @MockitoBean private PublicCompetitionSource publicSource;
     @MockitoBean private AiCompetitionExtractClient extractor;
+    @MockitoSpyBean private NotificationService notificationService;
+    @Autowired private NotificationRepository notifications;
+    @Autowired private PushDeliveryRepository deliveries;
+    @Autowired private PushDeviceRepository devices;
 
     private MockMvc mvc;
     private User admin;
@@ -134,6 +146,9 @@ class CompetitionExtractionJobPersistenceTest {
 
     @AfterEach
     void cleanUp() {
+        deliveries.deleteAll();
+        devices.deleteAll();
+        notifications.deleteAll();
         jobs.deleteAll();
         logs.deleteAll();
         urls.deleteAll();
@@ -828,6 +843,117 @@ class CompetitionExtractionJobPersistenceTest {
         verify(extractor, never()).extract(eq(staleUrl), any(Duration.class));
         verify(extractor, times(1)).extract(eq(freshUrl), any(Duration.class));
         verify(publicSource, never()).requirePublicAddress(staleUrl);
+    }
+
+    @Test
+    void completedJobNotifiesEveryWaitingMemberAndQueuesPushInTheSameCommit() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(id));
+        Instant now = Instant.now();
+        PushDevice memberPhone = devices.saveAndFlush(PushDevice.register(member, "install-member-1",
+                "ExponentPushToken[member]", PushDevice.Platform.IOS, "1.0.0", now));
+        PushDevice otherOldPhone = PushDevice.register(other, "install-other-1", "ExponentPushToken[other]",
+                PushDevice.Platform.ANDROID, null, now);
+        otherOldPhone.deactivate(PushDevice.Reasons.LOGGED_OUT, now);
+        devices.saveAndFlush(otherOldPhone);
+        devices.saveAndFlush(PushDevice.register(third, "install-third-1", "ExponentPushToken[third]",
+                PushDevice.Platform.IOS, null, now));
+        ClaimedJob run = single(store.claim(1, now));
+
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2))), now)).isTrue();
+
+        Long competitionId = competitions.findAll().getFirst().getId();
+        List<Notification> created = notifications.findAll();
+        // 작업을 기다린 두 회원 모두에게, 구독하지 않은 회원에게는 만들지 않는다.
+        assertThat(created).extracting(n -> n.getUser().getId())
+                .containsExactlyInAnyOrder(member.getId(), other.getId());
+        assertThat(created).allSatisfy(n -> {
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_SUBMITTED);
+            assertThat(n.getActionPath()).isEqualTo("/competitions/extractions/" + id);
+            assertThat(n.getBody()).contains("학생 공모전");
+            assertThat(n.getPayload()).contains("\"competitionId\":" + competitionId).contains("\"resultStatus\":\"SUBMITTED\"");
+            assertThat(n.getReadAt()).isNull();
+        });
+        // 활성 기기에만 발송 대기가 생긴다(비활성 기기·비구독 회원 기기는 제외).
+        List<PushDelivery> queued = deliveries.findAll();
+        assertThat(queued).singleElement().satisfies(delivery -> {
+            assertThat(delivery.getDevice().getId()).isEqualTo(memberPhone.getId());
+            assertThat(delivery.getStatus()).isEqualTo(PushDelivery.Status.PENDING);
+        });
+
+        // 같은 실행의 재저장은 반영되지 않으므로 알림도 늘지 않는다.
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2))), now)).isFalse();
+        assertThat(notifications.count()).isEqualTo(2);
+        assertThat(deliveries.count()).isEqualTo(1);
+    }
+
+    @Test
+    void notificationFailureRollsBackCompletionAndSubmissionTogether() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        devices.saveAndFlush(PushDevice.register(member, "install-member-1", "ExponentPushToken[member]",
+                PushDevice.Platform.IOS, null, Instant.now()));
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+        String resultJson = objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2)));
+        // createAll은 MANDATORY라 stub 호출 자체도 트랜잭션 안에서 해야 한다.
+        transactions.executeWithoutResult(status ->
+                doThrow(new IllegalStateException("알림 저장 실패")).when(notificationService).createAll(any(), any()));
+
+        assertThatThrownBy(() -> store.recordSuccess(run, resultJson, Instant.now())).isInstanceOf(IllegalStateException.class);
+        assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.RUNNING);
+        assertThat(competitions.count()).isZero();
+        assertThat(notifications.count()).isZero();
+        assertThat(deliveries.count()).isZero();
+
+        transactions.executeWithoutResult(status -> doCallRealMethod().when(notificationService).createAll(any(), any()));
+        assertThat(store.recordSuccess(run, resultJson, Instant.now())).isTrue();
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(deliveries.count()).isEqualTo(1);
+    }
+
+    @Test
+    void incompleteResultNotifiesThatTheMemberMustReviewIt() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(null)), Instant.now())).isTrue();
+
+        assertThat(competitions.count()).isZero();
+        assertThat(notifications.findAll()).singleElement().satisfies(n -> {
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_NEEDS_REVIEW);
+            assertThat(n.getActionPath()).isEqualTo("/competitions/extractions/" + id);
+            assertThat(n.getPayload()).contains("\"resultStatus\":\"NEEDS_REVIEW\"").doesNotContain("competitionId");
+        });
+    }
+
+    @Test
+    void onlyTheFinalFailureNotifiesWaitingMembers() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        Instant t0 = Instant.now();
+        ClaimedJob first = single(store.claim(1, t0));
+        assertThat(store.recordFailure(first, "AI_TIMEOUT", "시간 초과", "detail", true, t0)).isTrue();
+        assertThat(notifications.count()).isZero(); // 재시도가 남은 실패는 알리지 않는다.
+
+        ClaimedJob second = single(store.claim(1, t0.plus(Duration.ofMinutes(10))));
+        assertThat(store.recordFailure(second, "AI_REJECTED", "추출 거부", "detail", false, t0.plus(Duration.ofMinutes(10)))).isTrue();
+
+        assertThat(notifications.findAll()).singleElement().satisfies(n -> {
+            assertThat(n.getUser().getId()).isEqualTo(member.getId());
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_FAILED);
+            assertThat(n.getDedupKey()).isEqualTo("competition-extraction:" + id + ":" + member.getId());
+            assertThat(n.getPayload()).contains("\"errorCode\":\"AI_REJECTED\"");
+        });
+    }
+
+    @Test
+    void stalePendingExpiryAlsoNotifiesWaitingMembers() throws Exception {
+        acceptedJobId(member, SOURCE);
+
+        assertThat(store.expireStalePending(Instant.now().plus(Duration.ofHours(1)))).isEqualTo(1);
+
+        assertThat(notifications.findAll()).singleElement()
+                .extracting(Notification::getNotificationType).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_FAILED);
     }
 
     private void createCompetitionWithOfficialLink(String officialUrl, String publicationStatus) throws Exception {

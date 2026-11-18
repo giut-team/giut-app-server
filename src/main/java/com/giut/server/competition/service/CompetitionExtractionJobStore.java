@@ -47,6 +47,7 @@ public class CompetitionExtractionJobStore {
     private final ApplicationEventPublisher events;
     private final CompetitionSubmissionService submissions;
     private final ObjectMapper objectMapper;
+    private final CompetitionExtractionNotifier notifier;
 
     public record ClaimedJob(Long id, String token, String sourceUrl, int attemptCount) {
     }
@@ -171,13 +172,19 @@ public class CompetitionExtractionJobStore {
         if (storedJson.length() > CompetitionExtractionJob.MAX_RESULT_LENGTH) {
             throw new ResultTooLarge();
         }
-        return jobs.markSucceeded(claimed.id(), claimed.token(), storedJson, now,
+        boolean succeeded = jobs.markSucceeded(claimed.id(), claimed.token(), storedJson, now,
                 now.plus(properties.resultRetention())) == 1;
+        if (succeeded) {
+            // 같은 트랜잭션: 완료·자동 제출·알림·푸시 발송 대기가 함께 commit되거나 함께 롤백된다.
+            notifier.notifySucceeded(claimed.id(), claimed.sourceUrl(), result, now);
+        }
+        return succeeded;
     }
 
     /**
      * 일시 실패이고 시도 횟수가 남으면 backoff 뒤 PENDING으로, 아니면 최종 실패로 저장한다. token 조건은 성공과 같다.
-     * 최종 실패로 확정되면 같은 트랜잭션에서 {@link CompetitionExtractionFailedEvent}를 발행한다(알림·로그는 commit 뒤).
+     * 최종 실패로 확정되면 같은 트랜잭션에서 회원 알림·푸시 발송 대기를 만들고 {@link CompetitionExtractionFailedEvent}를 발행한다
+     * (운영 로그·Discord는 commit 뒤).
      * 반환값은 이번 실행의 결과가 현재 실행의 것이라 반영됐는지 여부다.
      */
     @Transactional
@@ -192,6 +199,7 @@ public class CompetitionExtractionJobStore {
         boolean failed = jobs.markFailed(claimed.id(), claimed.token(), code, safeMessage, safeDetail, now,
                 now.plus(properties.failureRetention())) == 1;
         if (failed) {
+            notifier.notifyFailed(claimed.id(), claimed.sourceUrl(), code, now);
             events.publishEvent(new CompetitionExtractionFailedEvent(claimed.id(), claimed.sourceUrl(), code, safeMessage,
                     safeDetail, claimed.attemptCount(), subscriptions.countByJob_Id(claimed.id()), now));
         }
@@ -227,6 +235,7 @@ public class CompetitionExtractionJobStore {
     }
 
     private void publishFailed(CompetitionExtractionJob job, Instant now) {
+        notifier.notifyFailed(job.getId(), job.getSourceUrl(), job.getErrorCode(), now);
         events.publishEvent(new CompetitionExtractionFailedEvent(job.getId(), job.getSourceUrl(), job.getErrorCode(),
                 job.getErrorMessage(), job.getErrorDetail(), job.getAttemptCount(),
                 subscriptions.countByJob_Id(job.getId()), now));

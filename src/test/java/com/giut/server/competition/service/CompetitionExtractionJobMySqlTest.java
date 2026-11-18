@@ -58,6 +58,7 @@ import static org.mockito.Mockito.when;
         "DISCORD_ALERT_WEBHOOK_URL=", "DISCORD_SLOW_API_WEBHOOK_URL=",
         "logging.level.org.hibernate.SQL=OFF", "logging.level.org.hibernate.orm.jdbc.bind=OFF",
         "app.ai-extraction.jobs.worker-enabled=false",
+        "app.push.worker-enabled=false",
         "app.ai-extraction.jobs.max-active-per-user=100",
         "app.ai-extraction.jobs.max-requests-per-user-per-hour=1000",
         "app.ai-extraction.jobs.max-active-total=1000"
@@ -83,6 +84,7 @@ class CompetitionExtractionJobMySqlTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("DELETE FROM notifications");
         jobs.deleteAll();
         users.deleteAll();
         User user = User.createOAuthUser("mysql-extract@example.com", "학생", User.OAuthProvider.KAKAO, "mysql-extract");
@@ -93,6 +95,8 @@ class CompetitionExtractionJobMySqlTest {
 
     @AfterEach
     void tearDown() {
+        // 완료·실패 확정이 같은 트랜잭션에서 알림(→ users FK)을 만든다. 발송 기록은 ON DELETE CASCADE로 함께 지워진다.
+        jdbc.update("DELETE FROM notifications");
         jobs.deleteAll();
         logs.deleteAll();
         urls.deleteAll();
