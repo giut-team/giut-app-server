@@ -281,27 +281,21 @@ public class TeamService {
         List<Long> userIds = activeMembers.stream()
                 .map(TeamMember::getUserId)
                 .toList();
-        Map<Long, User> usersById = userRepository.findAllByIdInAndStatus(userIds, User.Status.ACTIVE)
+        Map<Long, String> nicknamesByUserId = userRepository.findNicknamesByIdInAndStatus(userIds, User.Status.ACTIVE)
                 .stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+                .collect(Collectors.toMap(UserRepository.UserNickname::getId, UserRepository.UserNickname::getNickname));
 
         List<TeamMemberResponse> members = activeMembers.stream()
-                .map(teamMember -> {
-                    User user = usersById.get(teamMember.getUserId());
-                    if (user == null) {
-                        return null;
-                    }
-                    return new TeamMemberResponse(
-                            teamMember.getId(),
-                            user.getId(),
-                            user.getNickname(),
-                            teamMember.getRole(),
-                            teamMember.getRoleCode(),
-                            teamMember.getStatus(),
-                            teamMember.getJoinedAt()
-                    );
-                })
-                .filter(java.util.Objects::nonNull)
+                .filter(teamMember -> nicknamesByUserId.containsKey(teamMember.getUserId()))
+                .map(teamMember -> new TeamMemberResponse(
+                        teamMember.getId(),
+                        teamMember.getUserId(),
+                        nicknamesByUserId.get(teamMember.getUserId()),
+                        teamMember.getRole(),
+                        teamMember.getRoleCode(),
+                        teamMember.getStatus(),
+                        teamMember.getJoinedAt()
+                ))
                 .toList();
 
         return new TeamMemberListResponse(teamId, members);

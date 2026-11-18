@@ -74,6 +74,10 @@ class PerformanceQueryCountBaselineTest {
                 "GET /api/teams/{teamId}",
                 () -> teamService.getTeamDetail(teamId, seed.measurementUserId())
         );
+        var teamMembers = sqlStatementCounter.measure(
+                "GET /api/teams/{teamId}/members",
+                () -> teamService.getTeamMembers(teamId)
+        );
         var chatRoomList = sqlStatementCounter.measure(
                 "GET /api/chat-rooms",
                 () -> chatService.getChatRooms(seed.measurementUserId())
@@ -98,6 +102,10 @@ class PerformanceQueryCountBaselineTest {
         assertThat(teamDetail.measurement().sqlStatementCount())
                 .as("팀 상세는 모집 분야 조회와 분야별 활성 팀원 수 집계를 같은 SQL에서 수행한다")
                 .isLessThanOrEqualTo(5L);
+        assertThat(teamMembers.result().members()).hasSize(dataset.teamMembersPerTeam());
+        assertThat(teamMembers.measurement().sqlStatementCount())
+                .as("팀원 목록은 사용자 엔티티와 프로필을 로딩하지 않고 닉네임을 한 번에 조회한다")
+                .isEqualTo(3L);
         assertThat(chatRoomList.result().chatRooms()).hasSize(dataset.chatRoomCount());
         assertThat(messageList.result().messages()).hasSize(30);
         assertThat(chatRoomList.measurement().sqlStatementCount())
@@ -107,6 +115,7 @@ class PerformanceQueryCountBaselineTest {
         List<SqlStatementMeasurement> measurements = List.of(
                 teamList.measurement(),
                 teamDetail.measurement(),
+                teamMembers.measurement(),
                 chatRoomList.measurement(),
                 messageList.measurement()
         );
@@ -122,6 +131,7 @@ class PerformanceQueryCountBaselineTest {
     private void warmUp(Long userId, Long competitionId, Long teamId, Long chatRoomId) {
         teamService.getRecruitingTeams(userId, competitionId, 0, 10);
         teamService.getTeamDetail(teamId, userId);
+        teamService.getTeamMembers(teamId);
         chatService.getChatRooms(userId);
         chatService.getMessages(userId, chatRoomId, null, 30);
     }
