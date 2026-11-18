@@ -243,9 +243,12 @@ public class TeamService {
                 .map(TeamApplicationQuestionResponse::from)
                 .toList();
         List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllByTeamIdOrderByIdAsc(teamId)
+                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE)
                 .stream()
-                .map(recruitment -> toRecruitmentResponse(recruitment))
+                .map(recruitment -> new TeamRecruitmentResponse(
+                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
+                        recruitment.getRequiredCount(), recruitment.getFilledCount()
+                ))
                 .toList();
 
         return new TeamDetailResponse(
