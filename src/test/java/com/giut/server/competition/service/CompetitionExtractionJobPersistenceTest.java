@@ -1,6 +1,7 @@
 package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionExtractionJob;
 import com.giut.server.competition.entity.CompetitionExtractionJob.Status;
 import com.giut.server.competition.event.CompetitionExtractionFailedEvent;
@@ -12,6 +13,14 @@ import com.giut.server.competition.repository.CompetitionVerificationLogReposito
 import com.giut.server.competition.service.CompetitionExtractionJobStore.ClaimedJob;
 import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.competition.util.PublicCompetitionSource;
+import com.giut.server.global.exception.ConflictException;
+import com.giut.server.notification.entity.Notification;
+import com.giut.server.notification.entity.PushDelivery;
+import com.giut.server.notification.entity.PushDevice;
+import com.giut.server.notification.repository.NotificationRepository;
+import com.giut.server.notification.repository.PushDeliveryRepository;
+import com.giut.server.notification.repository.PushDeviceRepository;
+import com.giut.server.notification.service.NotificationService;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import com.zaxxer.hikari.HikariDataSource;
@@ -21,8 +30,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,6 +41,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.ObjectMapper;
 
@@ -42,8 +54,12 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -75,6 +91,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "DISCORD_ALERT_WEBHOOK_URL=", "DISCORD_SLOW_API_WEBHOOK_URL=",
         "logging.level.org.hibernate.SQL=OFF", "logging.level.org.hibernate.orm.jdbc.bind=OFF",
         "app.ai-extraction.jobs.worker-enabled=false",
+        "app.push.worker-enabled=false",
         "app.ai-extraction.jobs.max-active-per-user=2",
         "app.ai-extraction.jobs.max-requests-per-user-per-hour=4",
         "app.ai-extraction.jobs.max-active-total=3"
@@ -94,13 +111,19 @@ class CompetitionExtractionJobPersistenceTest {
     @Autowired private CompetitionExtractionJobRepository jobs;
     @Autowired private CompetitionExtractionJobSubscriptionRepository subscriptions;
     @Autowired private CompetitionExtractionJobStore store;
+    @MockitoSpyBean private CompetitionService competitionService;
     @Autowired private CompetitionExtractionWorker worker;
     @Autowired private ApplicationEvents events;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private CompetitionUrlNormalizer normalizer;
     @Autowired private DataSource dataSource;
+    @Autowired private TransactionTemplate transactions;
     @MockitoBean private PublicCompetitionSource publicSource;
     @MockitoBean private AiCompetitionExtractClient extractor;
+    @MockitoSpyBean private NotificationService notificationService;
+    @Autowired private NotificationRepository notifications;
+    @Autowired private PushDeliveryRepository deliveries;
+    @Autowired private PushDeviceRepository devices;
 
     private MockMvc mvc;
     private User admin;
@@ -123,6 +146,9 @@ class CompetitionExtractionJobPersistenceTest {
 
     @AfterEach
     void cleanUp() {
+        deliveries.deleteAll();
+        devices.deleteAll();
+        notifications.deleteAll();
         jobs.deleteAll();
         logs.deleteAll();
         urls.deleteAll();
@@ -131,7 +157,7 @@ class CompetitionExtractionJobPersistenceTest {
     }
 
     @Test
-    void newUrlIsCommittedAs202ThenWorkerRunsAiOutsideTransactionAndOwnerReadsDraft() throws Exception {
+    void completeExtractionAutomaticallySubmitsEvenBeforeOwnerReadsResult() throws Exception {
         AtomicReference<Boolean> transactionActive = new AtomicReference<>();
         CountDownLatch inAi = new CountDownLatch(1);
         CountDownLatch finishAi = new CountDownLatch(1);
@@ -171,6 +197,7 @@ class CompetitionExtractionJobPersistenceTest {
         assertThat(worker.pollOnce()).isZero();
         finishAi.countDown();
         awaitTerminal(jobId);
+        assertThat(competitions.count()).isEqualTo(1); // 조회를 한 번도 하지 않아도 제출이 commit됐다.
         // 접수 시 1회 + 실행 직전 DNS 재확인 1회.
         verify(publicSource, times(2)).requirePublicAddress(SOURCE);
 
@@ -181,7 +208,7 @@ class CompetitionExtractionJobPersistenceTest {
                 .andExpect(jsonPath("$.attemptCount").value(1))
                 .andExpect(jsonPath("$.completedAt").isNotEmpty())
                 .andExpect(jsonPath("$.error").doesNotExist())
-                .andExpect(jsonPath("$.result.status").value("READY"))
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"))
                 .andExpect(jsonPath("$.result.sourceUrl").value(SOURCE))
                 .andExpect(jsonPath("$.result.draft.category").value("WEB_MOBILE_IT"))
                 .andExpect(jsonPath("$.result.draft.applicationStartAt").value("2098-12-31T15:00:00Z"))
@@ -194,20 +221,28 @@ class CompetitionExtractionJobPersistenceTest {
         mvc.perform(as(get(EXTRACTIONS + "/" + (jobId + 999)), member)).andExpect(status().isNotFound());
         mvc.perform(as(get(EXTRACTIONS + "/abc"), member)).andExpect(status().isBadRequest());
 
-        // 같은 사용자의 같은 URL 재요청은 보관 중인 성공 결과를 그대로 재사용한다(AI 재호출 없음).
-        mvc.perform(json(post(EXTRACTIONS), member, "{\"url\":\"https://EXAMPLE.COM:443/contest/\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.jobId").value(jobId))
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
-        // 다른 사용자도 같은 작업과 결과를 공유한다(새 작업·AI 호출 없음). 접수한 뒤부터 본인도 조회할 수 있다.
-        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.jobId").value(jobId))
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
-        mvc.perform(as(get(EXTRACTIONS + "/" + jobId), other))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("READY"));
+        // 별도 POST /submissions나 GET 없이 이미 커밋됐다. 검토 전에는 공개되지 않는다.
+        Competition submitted = competitions.findAll().getFirst();
+        // 기존 서버의 AI 원문 디코더도 새 메타데이터를 무시하고 공모전 정보를 읽을 수 있다.
+        assertThat(objectMapper.readValue(jobs.findById(jobId).orElseThrow().getResultJson(),
+                AiCompetitionExtractClient.Extraction.class).title()).isEqualTo("학생 공모전");
+        assertThat(submitted.getPublicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
+        assertThat(submitted.getVerificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
+        assertThat(submitted.getSubmittedByUser().getId()).isEqualTo(member.getId());
+        assertThat(submitted.getSubmissionSourceUrlHash()).isEqualTo(hash(SOURCE));
+        mvc.perform(as(get("/api/competitions/" + submitted.getId()), member)).andExpect(status().isNotFound());
+        mvc.perform(as(get(EXTRACTIONS + "/" + jobId), member))
+                .andExpect(jsonPath("$.result.competitionId").value(submitted.getId()))
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+        // 같은 URL 재요청은 이미 제출된 URL로 응답하며 미공개 ID는 숨긴다.
+        for (User actor : List.of(member, other)) {
+            mvc.perform(json(post(EXTRACTIONS), actor, "{\"url\":\"https://EXAMPLE.COM:443/contest/\"}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXISTS"))
+                    .andExpect(jsonPath("$.competitionId").doesNotExist());
+        }
+        assertThat(competitions.count()).isEqualTo(1);
         assertThat(jobs.count()).isEqualTo(1);
-        assertThat(subscriptions.count()).isEqualTo(2);
+        assertThat(subscriptions.count()).isEqualTo(1);
         verify(extractor, times(1)).extract(anyString(), any(Duration.class));
     }
 
@@ -283,7 +318,166 @@ class CompetitionExtractionJobPersistenceTest {
                 .andExpect(jsonPath("$.result.draft.urls[0].primary").value(true))
                 .andExpect(jsonPath("$.result.requiredInputs[0].field").value("applicationEndAt"))
                 .andExpect(jsonPath("$.result.requiredInputs[0].type").value("datetime"));
-        assertThat(competitions.count()).isZero(); // 추출만으로는 공모전이 만들어지지 않는다.
+        assertThat(competitions.count()).isZero(); // 필수 정보가 부족하면 자동 제출하지 않는다.
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.jobId").value(id))
+                .andExpect(jsonPath("$.result.status").value("NEEDS_REVIEW"));
+        verify(extractor, times(1)).extract(anyString(), any(Duration.class));
+    }
+
+    @Test
+    void deadlockThenDuplicateConflictRetryTheSameAiResultInFreshTransactions() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        doAnswer(invocation -> {
+            int attempt = attempts.incrementAndGet();
+            if (attempt == 1) throw new CannotAcquireLockException("교착 회귀");
+            if (attempt == 2) throw new ConflictException("중복 경합 회귀");
+            return invocation.callRealMethod();
+        }).when(competitionService).createByMember(any(), anyString(), any(), any(), any(), any());
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        long id = acceptedJobId(member, SOURCE);
+        worker.execute(single(store.claim(1, Instant.now())));
+        assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.SUCCEEDED);
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(attempts).hasValue(3);
+        verify(extractor, times(1)).extract(anyString(), any(Duration.class));
+    }
+
+    @Test
+    void storedResultSizeOverflowRollsBackSubmissionAndFinishesAsInvalidResult() throws Exception {
+        String emptyImageJson = objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2)))
+                .replace("\"images\":null", "\"images\":[\"https://image.example.com/\"]");
+        String largeJson = emptyImageJson.replace("https://image.example.com/",
+                "https://image.example.com/" + "x".repeat(CompetitionExtractionJob.MAX_RESULT_LENGTH - emptyImageJson.length()));
+        assertThat(largeJson).hasSize(CompetitionExtractionJob.MAX_RESULT_LENGTH);
+        when(extractor.extract(eq(SOURCE), any(Duration.class)))
+                .thenReturn(objectMapper.readValue(largeJson, AiCompetitionExtractClient.Extraction.class));
+        long id = acceptedJobId(member, SOURCE);
+        worker.execute(single(store.claim(1, Instant.now())));
+        CompetitionExtractionJob job = jobs.findById(id).orElseThrow();
+        assertThat(job.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(job.getErrorCode()).isEqualTo("INVALID_RESULT");
+        assertThat(competitions.count()).isZero();
+        assertThat(urls.count()).isZero();
+    }
+
+    @Test
+    void oldStoredAiJsonRemainsReadableAndGetDoesNotAutomaticallySubmitIt() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+        String rawJson = objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2)));
+        transactions.executeWithoutResult(ignored -> assertThat(jobs.markSucceeded(id, run.token(), rawJson,
+                Instant.now(), Instant.now().plusSeconds(3600))).isEqualTo(1));
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("READY"));
+        assertThat(competitions.count()).isZero();
+    }
+
+    @Test
+    void submissionAndJobCompletionRollBackTogetherThenTheSameResultCanBeSaved() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+        String resultJson = objectMapper.writeValueAsString(extractionWithOfficialLink("https://example.com/new-official"));
+        doAnswer(invocation -> {
+            invocation.callRealMethod();
+            throw new IllegalStateException("제출 저장 직후 실패");
+        }).when(competitionService).createByMember(any(), anyString(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> store.recordSuccess(run, resultJson, Instant.now()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(competitions.count()).isZero();
+        assertThat(urls.count()).isZero();
+        assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.RUNNING);
+        assertThat(jobs.findById(id).orElseThrow().getResultJson()).isNull();
+
+        doCallRealMethod().when(competitionService).createByMember(any(), anyString(), any(), any(), any(), any());
+        assertThat(store.recordSuccess(run, resultJson, Instant.now())).isTrue();
+        assertThat(store.recordSuccess(run, resultJson, Instant.now())).isFalse();
+        assertThat(competitions.count()).isEqualTo(1);
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+    }
+
+    @Test
+    void expiredRunCannotSubmitEvenWithACompleteResult() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        Instant now = Instant.now();
+        ClaimedJob oldRun = single(store.claim(1, now));
+        assertThat(store.recoverExpiredLeases(now.plusSeconds(181))).isEqualTo(1);
+        String resultJson = objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2)));
+        assertThat(store.recordSuccess(oldRun, resultJson, now.plusSeconds(182))).isFalse();
+        assertThat(competitions.count()).isZero();
+        ClaimedJob newRun = single(store.claim(1, now.plusSeconds(240)));
+        assertThat(store.recordSuccess(newRun, resultJson, now.plusSeconds(241))).isTrue();
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.SUCCEEDED);
+    }
+
+    @Test
+    void invalidActivityIsNotSubmittedEvenWithAllOtherFields() throws Exception {
+        var valid = extraction(LocalDate.of(2099, 1, 2));
+        var invalid = new AiCompetitionExtractClient.Extraction(valid.title(), valid.hostOrganization(),
+                valid.targetParticipants(), valid.isForEnrolledOnly(), valid.applicationStartAt(), valid.applicationEndAt(),
+                valid.totalPrizeAmount(), valid.prizeInfo(), "INVALID_ACTIVITY", valid.category(), valid.isTeam(),
+                valid.summary(), valid.images(), valid.urls());
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(invalid);
+        long id = acceptedJobId(member, SOURCE);
+        worker.execute(single(store.claim(1, Instant.now())));
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("INVALID_ACTIVITY"));
+        assertThat(competitions.count()).isZero();
+    }
+
+    @Test
+    void revokedUniversityVerificationPreventsAutomaticSubmission() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        member.revokeUniversityVerification();
+        users.saveAndFlush(member);
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        worker.execute(single(store.claim(1, Instant.now())));
+        CompetitionExtractionJob job = jobs.findById(id).orElseThrow();
+        assertThat(job.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(job.getErrorCode()).isEqualTo("SUBMISSION_NOT_ALLOWED");
+        assertThat(competitions.count()).isZero();
+    }
+
+    @Test
+    void activeAdminCanAutomaticallySubmitWithoutUniversityVerification() throws Exception {
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        long id = acceptedJobId(admin, SOURCE);
+        worker.execute(single(store.claim(1, Instant.now())));
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+        assertThat(competitions.findAll().getFirst().getSubmittedByUser().getId()).isEqualTo(admin.getId());
+    }
+
+    @Test
+    void withdrawnRequesterIsNotAutomaticallySubmitted() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        member.withdraw();
+        users.saveAndFlush(member);
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        worker.execute(single(store.claim(1, Instant.now())));
+        CompetitionExtractionJob job = jobs.findById(id).orElseThrow();
+        assertThat(job.getStatus()).isEqualTo(Status.FAILED);
+        assertThat(job.getErrorCode()).isEqualTo("SUBMISSION_NOT_ALLOWED");
+        assertThat(competitions.count()).isZero();
+    }
+
+    @Test
+    void sourceRegisteredAfterEnqueueIsNotSubmittedAgain() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        mvc.perform(json(post(ADMIN), admin, """
+                {"title":"기존 공고","category":"WEB_MOBILE_IT","summary":"소개","publicationStatus":"PUBLISHED",
+                 "applicationEndAt":"2099-01-01T00:00:00Z",
+                 "urls":[{"type":"SOURCE_ORIGINAL","url":"https://example.com/contest","primary":true}]}
+                """)).andExpect(status().isCreated());
+        when(extractor.extract(eq(SOURCE), any(Duration.class))).thenReturn(extraction(LocalDate.of(2099, 1, 2)));
+        worker.execute(single(store.claim(1, Instant.now())));
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("EXISTS"))
+                .andExpect(jsonPath("$.result.competitionId").value(competitions.findAll().getFirst().getId()));
+        assertThat(competitions.count()).isEqualTo(1);
     }
 
     @Test
@@ -356,7 +550,7 @@ class CompetitionExtractionJobPersistenceTest {
     }
 
     @Test
-    void extractedOfficialLinkNotRegisteredYetStillReturnsDraft() throws Exception {
+    void newOfficialLinkAutomaticallySubmitsAndKeepsSubmittedResultOnRepeatedReads() throws Exception {
         when(extractor.extract(eq(SOURCE), any(Duration.class)))
                 .thenReturn(extractionWithOfficialLink("https://official.example.com/new"));
 
@@ -365,9 +559,12 @@ class CompetitionExtractionJobPersistenceTest {
         awaitTerminal(id);
 
         mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
-                .andExpect(jsonPath("$.result.status").value("READY"))
-                .andExpect(jsonPath("$.result.competitionId").doesNotExist())
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.result.competitionId").value(competitions.findAll().getFirst().getId()))
                 .andExpect(jsonPath("$.result.draft.title").value("학생 공모전"));
+        mvc.perform(as(get(EXTRACTIONS + "/" + id), member))
+                .andExpect(jsonPath("$.result.status").value("SUBMITTED"));
+        assertThat(competitions.count()).isEqualTo(1);
     }
 
     @Test
@@ -646,6 +843,117 @@ class CompetitionExtractionJobPersistenceTest {
         verify(extractor, never()).extract(eq(staleUrl), any(Duration.class));
         verify(extractor, times(1)).extract(eq(freshUrl), any(Duration.class));
         verify(publicSource, never()).requirePublicAddress(staleUrl);
+    }
+
+    @Test
+    void completedJobNotifiesEveryWaitingMemberAndQueuesPushInTheSameCommit() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        mvc.perform(json(post(EXTRACTIONS), other, "{\"url\":\"" + SOURCE + "\"}"))
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(id));
+        Instant now = Instant.now();
+        PushDevice memberPhone = devices.saveAndFlush(PushDevice.register(member, "install-member-1",
+                "ExponentPushToken[member]", PushDevice.Platform.IOS, "1.0.0", now));
+        PushDevice otherOldPhone = PushDevice.register(other, "install-other-1", "ExponentPushToken[other]",
+                PushDevice.Platform.ANDROID, null, now);
+        otherOldPhone.deactivate(PushDevice.Reasons.LOGGED_OUT, now);
+        devices.saveAndFlush(otherOldPhone);
+        devices.saveAndFlush(PushDevice.register(third, "install-third-1", "ExponentPushToken[third]",
+                PushDevice.Platform.IOS, null, now));
+        ClaimedJob run = single(store.claim(1, now));
+
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2))), now)).isTrue();
+
+        Long competitionId = competitions.findAll().getFirst().getId();
+        List<Notification> created = notifications.findAll();
+        // 작업을 기다린 두 회원 모두에게, 구독하지 않은 회원에게는 만들지 않는다.
+        assertThat(created).extracting(n -> n.getUser().getId())
+                .containsExactlyInAnyOrder(member.getId(), other.getId());
+        assertThat(created).allSatisfy(n -> {
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_SUBMITTED);
+            assertThat(n.getActionPath()).isEqualTo("/competitions/extractions/" + id);
+            assertThat(n.getBody()).contains("학생 공모전");
+            assertThat(n.getPayload()).contains("\"competitionId\":" + competitionId).contains("\"resultStatus\":\"SUBMITTED\"");
+            assertThat(n.getReadAt()).isNull();
+        });
+        // 활성 기기에만 발송 대기가 생긴다(비활성 기기·비구독 회원 기기는 제외).
+        List<PushDelivery> queued = deliveries.findAll();
+        assertThat(queued).singleElement().satisfies(delivery -> {
+            assertThat(delivery.getDevice().getId()).isEqualTo(memberPhone.getId());
+            assertThat(delivery.getStatus()).isEqualTo(PushDelivery.Status.PENDING);
+        });
+
+        // 같은 실행의 재저장은 반영되지 않으므로 알림도 늘지 않는다.
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2))), now)).isFalse();
+        assertThat(notifications.count()).isEqualTo(2);
+        assertThat(deliveries.count()).isEqualTo(1);
+    }
+
+    @Test
+    void notificationFailureRollsBackCompletionAndSubmissionTogether() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        devices.saveAndFlush(PushDevice.register(member, "install-member-1", "ExponentPushToken[member]",
+                PushDevice.Platform.IOS, null, Instant.now()));
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+        String resultJson = objectMapper.writeValueAsString(extraction(LocalDate.of(2099, 1, 2)));
+        // createAll은 MANDATORY라 stub 호출 자체도 트랜잭션 안에서 해야 한다.
+        transactions.executeWithoutResult(status ->
+                doThrow(new IllegalStateException("알림 저장 실패")).when(notificationService).createAll(any(), any()));
+
+        assertThatThrownBy(() -> store.recordSuccess(run, resultJson, Instant.now())).isInstanceOf(IllegalStateException.class);
+        assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(Status.RUNNING);
+        assertThat(competitions.count()).isZero();
+        assertThat(notifications.count()).isZero();
+        assertThat(deliveries.count()).isZero();
+
+        transactions.executeWithoutResult(status -> doCallRealMethod().when(notificationService).createAll(any(), any()));
+        assertThat(store.recordSuccess(run, resultJson, Instant.now())).isTrue();
+        assertThat(competitions.count()).isEqualTo(1);
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(deliveries.count()).isEqualTo(1);
+    }
+
+    @Test
+    void incompleteResultNotifiesThatTheMemberMustReviewIt() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        ClaimedJob run = single(store.claim(1, Instant.now()));
+
+        assertThat(store.recordSuccess(run, objectMapper.writeValueAsString(extraction(null)), Instant.now())).isTrue();
+
+        assertThat(competitions.count()).isZero();
+        assertThat(notifications.findAll()).singleElement().satisfies(n -> {
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_NEEDS_REVIEW);
+            assertThat(n.getActionPath()).isEqualTo("/competitions/extractions/" + id);
+            assertThat(n.getPayload()).contains("\"resultStatus\":\"NEEDS_REVIEW\"").doesNotContain("competitionId");
+        });
+    }
+
+    @Test
+    void onlyTheFinalFailureNotifiesWaitingMembers() throws Exception {
+        long id = acceptedJobId(member, SOURCE);
+        Instant t0 = Instant.now();
+        ClaimedJob first = single(store.claim(1, t0));
+        assertThat(store.recordFailure(first, "AI_TIMEOUT", "시간 초과", "detail", true, t0)).isTrue();
+        assertThat(notifications.count()).isZero(); // 재시도가 남은 실패는 알리지 않는다.
+
+        ClaimedJob second = single(store.claim(1, t0.plus(Duration.ofMinutes(10))));
+        assertThat(store.recordFailure(second, "AI_REJECTED", "추출 거부", "detail", false, t0.plus(Duration.ofMinutes(10)))).isTrue();
+
+        assertThat(notifications.findAll()).singleElement().satisfies(n -> {
+            assertThat(n.getUser().getId()).isEqualTo(member.getId());
+            assertThat(n.getNotificationType()).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_FAILED);
+            assertThat(n.getDedupKey()).isEqualTo("competition-extraction:" + id + ":" + member.getId());
+            assertThat(n.getPayload()).contains("\"errorCode\":\"AI_REJECTED\"");
+        });
+    }
+
+    @Test
+    void stalePendingExpiryAlsoNotifiesWaitingMembers() throws Exception {
+        acceptedJobId(member, SOURCE);
+
+        assertThat(store.expireStalePending(Instant.now().plus(Duration.ofHours(1)))).isEqualTo(1);
+
+        assertThat(notifications.findAll()).singleElement()
+                .extracting(Notification::getNotificationType).isEqualTo(Notification.Type.COMPETITION_EXTRACTION_FAILED);
     }
 
     private void createCompetitionWithOfficialLink(String officialUrl, String publicationStatus) throws Exception {

@@ -15,6 +15,10 @@ public interface CompetitionExtractionJobSubscriptionRepository
 
     long countByJob_Id(Long jobId);
 
+    /** 작업을 기다리는 회원(처음 접수한 회원 + 같은 URL로 합류한 회원). 완료 알림 대상이다. */
+    @Query("select s.user.id from CompetitionExtractionJobSubscription s where s.job.id = :jobId order by s.id")
+    List<Long> findUserIdsByJobId(@Param("jobId") Long jobId);
+
     /** 작업마다 [작업 id, 구독 회원 수]를 돌려준다. 관리자 실패 목록에서 한 페이지 분량을 한 번에 센다. */
     @Query("""
             select s.job.id, count(s) from CompetitionExtractionJobSubscription s

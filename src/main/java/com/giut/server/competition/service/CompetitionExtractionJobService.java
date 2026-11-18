@@ -66,9 +66,9 @@ public class CompetitionExtractionJobService {
     private CompetitionExtractionJobResponse toResponse(CompetitionExtractionJob job) {
         CompetitionExtractionResult result = null;
         if (job.getStatus() == CompetitionExtractionJob.Status.SUCCEEDED) {
-            AiCompetitionExtractClient.Extraction extraction =
-                    objectMapper.readValue(job.getResultJson(), AiCompetitionExtractClient.Extraction.class);
-            result = submissions.toExtractionResult(job.getSourceUrl(), job.getSourceUrlHash(), extraction);
+            CompetitionExtractionStoredResult stored = CompetitionExtractionStoredResult.read(objectMapper, job.getResultJson());
+            result = submissions.toExtractionResult(job.getSourceUrl(), job.getSourceUrlHash(), stored.extraction(),
+                    stored.submittedCompetitionId());
         }
         return CompetitionExtractionJobResponse.of(job, result);
     }

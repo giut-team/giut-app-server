@@ -1,0 +1,50 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # 초안(Draft) PR은 건너뛰고, 포크에서 온 PR은 시크릿이 없으므로 제외한다.
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            이 Spring Boot(Java, Gradle) 서버 PR을 한국어로 리뷰해줘.
+            우선순위는 아래 순서야.
+            1. 버그 가능성과 예외 처리 누락
+            2. 트랜잭션 범위, 동시성, N+1 쿼리 같은 JPA 문제
+            3. 인증·인가, 입력 검증 등 보안 문제
+            4. 테스트가 빠진 변경
+            스타일·네이밍 지적은 꼭 필요한 경우에만 해줘.
+            문제가 없으면 "특이사항 없음"이라고 짧게 한 줄로 남겨줘.
+
+            PR 브랜치는 이미 현재 작업 디렉터리에 체크아웃되어 있어.
+            전체 요약은 `gh pr comment`로 한 번만 남기고,
+            특정 코드 줄에 대한 지적은 `mcp__github_inline_comment__create_inline_comment`
+            (confirmed: true)로 남겨줘.
+            GitHub 코멘트 외에 다른 방식으로 결과를 출력하지 마.
+
+          claude_args: |
+            --max-turns 12
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

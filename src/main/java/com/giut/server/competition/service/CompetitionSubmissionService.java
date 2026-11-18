@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -54,7 +56,21 @@ public class CompetitionSubmissionService {
      */
     public CompetitionExtractionResult toExtractionResult(String sourceUrl, String sourceHash,
                                                                    AiCompetitionExtractClient.Extraction extraction) {
+        return toExtractionResult(sourceUrl, sourceHash, extraction, null);
+    }
+
+    public CompetitionExtractionResult toExtractionResult(String sourceUrl, String sourceHash,
+                                                          AiCompetitionExtractClient.Extraction extraction,
+                                                          Long submittedCompetitionId) {
         CompetitionSubmissionForm form = prepareForm(toForm(extraction), sourceUrl, sourceHash);
+        if (submittedCompetitionId != null) {
+            return new CompetitionExtractionResult(CompetitionExtractionResult.Status.SUBMITTED, null,
+                    submittedCompetitionId, sourceUrl, form, List.of(), validImages(extraction.images()));
+        }
+        Optional<ExistingCompetition> existing = findExisting(sourceHash);
+        if (existing.isPresent()) {
+            return CompetitionExtractionResult.existing(existing.get().url(), existing.get().competitionId());
+        }
         boolean invalidActivity = AiActivityType.INVALID_ACTIVITY.name().equals(extraction.activityKind());
         if (!invalidActivity) {
             Optional<ExistingCompetition> owner = findOfficialOwner(form);
@@ -105,6 +121,20 @@ public class CompetitionSubmissionService {
                     .map(found -> CompetitionSubmissionResponse.existing(found.url(), found.competitionId()))
                     .orElseThrow(() -> exception);
         }
+    }
+
+    /** 작업 완료 트랜잭션에 참여한다. 제출 실패는 작업 완료와 함께 롤백하며, 재시도는 트랜잭션 밖에서 한다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public CompetitionExtractionResult submitExtracted(Long userId, String sourceUrl, String sourceHash,
+                                                       AiCompetitionExtractClient.Extraction extraction) {
+        CompetitionExtractionResult result = toExtractionResult(sourceUrl, sourceHash, extraction);
+        if (result.status() != CompetitionExtractionResult.Status.READY) {
+            return result;
+        }
+        CompetitionSubmissionForm form = result.draft();
+        Long id = competitionService.createByMember(userId, sourceUrl, urlNormalizer.normalize(sourceUrl),
+                form.toRegistrationRequest(), form.isForEnrolledOnly(), form.isTeam());
+        return result.submitted(id);
     }
 
     /**
