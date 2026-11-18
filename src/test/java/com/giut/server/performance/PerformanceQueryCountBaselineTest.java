@@ -89,6 +89,9 @@ class PerformanceQueryCountBaselineTest {
         );
 
         assertThat(teamList.result().teams()).hasSize(10);
+        assertThat(teamList.measurement().sqlStatementCount())
+                .as("팀 모집 목록은 페이지 조회와 북마크·활성 팀원 수 집계를 포함해 최대 4개의 SQL을 실행한다")
+                .isLessThanOrEqualTo(4L);
         assertThat(teamDetail.result().teamId()).isEqualTo(teamId);
         assertThat(chatRoomList.result().chatRooms()).hasSize(dataset.chatRoomCount());
         assertThat(messageList.result().messages()).hasSize(30);
