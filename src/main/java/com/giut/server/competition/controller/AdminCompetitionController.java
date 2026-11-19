@@ -75,7 +75,7 @@ public class AdminCompetitionController {
     }
 
     @PostMapping
-    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않으며 항상 MANUALLY_VERIFIED로 등록합니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 게시 상태는 별도로 선택하며 관리자 목록에 registrationSource=ADMIN으로 표시됩니다.")
+    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않고 게시 상태로 정합니다. DRAFT로 등록하면 MANUAL_REVIEW_PENDING(검토 대기)이 되어 회원 제출·AI 등록과 같이 검토 API(/review)로 공개하거나 반려하고, 그 밖의 게시 상태(예: PUBLISHED)로 등록하면 MANUALLY_VERIFIED입니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 등록한 공모전은 관리자 목록에 registrationSource=ADMIN으로 표시됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
