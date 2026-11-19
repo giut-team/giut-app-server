@@ -50,13 +50,11 @@ import com.giut.server.team.repository.TeamScrapRepository;
 import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -81,6 +79,8 @@ import java.util.stream.Collectors;
 public class TeamService {
 
     private static final Duration INVITE_LINK_TTL = Duration.ofHours(24);
+    private static final int MAX_ACTIVE_INVITE_LINKS = 10;
+    private static final int MAX_INVITE_LINKS_PER_24_HOURS = 30;
     private static final SecureRandom INVITE_LINK_RANDOM = new SecureRandom();
 
     private final TeamRepository teamRepository;
@@ -89,15 +89,13 @@ public class TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
     private final TeamInviteLinkRepository teamInviteLinkRepository;
+    private final TeamInviteLinkUrl teamInviteLinkUrl;
     private final TeamApplicationQuestionRepository teamApplicationQuestionRepository;
     private final TeamApplicationAnswerRepository teamApplicationAnswerRepository;
     private final CompetitionRepository competitionRepository;
     private final UserRepository userRepository;
     private final ProfileRoleRepository profileRoleRepository;
     private final Clock clock;
-
-    @Value("${app.team-invite.frontend-base-url:http://localhost:3000}")
-    private String inviteFrontendBaseUrl;
 
     @Transactional(readOnly = true)
     public TeamPageResponse getRecruitingTeams(Long userId, Long competitionId, int page, int size) {
@@ -522,18 +520,23 @@ public class TeamService {
         TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
         validateJoinCapacity(team, recruitment);
 
+        Instant now = clock.instant();
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNull(teamId, now)
+                >= MAX_ACTIVE_INVITE_LINKS) {
+            throw new ConflictException("팀당 활성 초대 링크는 최대 10개까지 발급할 수 있습니다.");
+        }
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfter(teamId, now) >= MAX_INVITE_LINKS_PER_24_HOURS) {
+            throw new ConflictException("팀당 최근 24시간 동안 초대 링크는 최대 30개까지 발급할 수 있습니다.");
+        }
+
         byte[] randomBytes = new byte[32];
         INVITE_LINK_RANDOM.nextBytes(randomBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
-        Instant expiresAt = clock.instant().plus(INVITE_LINK_TTL);
+        String inviteUrl = teamInviteLinkUrl.build(teamId, token);
+        Instant expiresAt = now.plus(INVITE_LINK_TTL);
         TeamInviteLink link = teamInviteLinkRepository.save(
                 TeamInviteLink.create(teamId, recruitment.getRoleCode(), hashInviteToken(token), expiresAt)
         );
-        String inviteUrl = UriComponentsBuilder.fromUriString(inviteFrontendBaseUrl)
-                .pathSegment("teams", teamId.toString(), "invite")
-                .replaceQuery(null)
-                .fragment("token=" + token)
-                .build().toUriString();
         return new TeamInviteLinkResponse(link.getId(), link.getRoleCode(), link.getExpiresAt(), inviteUrl);
     }
 

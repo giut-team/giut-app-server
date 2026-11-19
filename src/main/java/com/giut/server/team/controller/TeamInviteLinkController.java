@@ -34,7 +34,8 @@ public class TeamInviteLinkController {
     @ApiResponse(responseCode = "401", description = "인증 필요")
     @ApiResponse(responseCode = "403", description = "팀장 권한 또는 학교 인증 필요")
     @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
-    @ApiResponse(responseCode = "409", description = "팀 모집 또는 정원 마감")
+    @ApiResponse(responseCode = "409", description = "팀 모집 또는 정원 마감, 혹은 링크 발급 한도 초과")
+    @ApiResponse(responseCode = "500", description = "초대 링크용 프론트 주소 미설정")
     public ResponseEntity<TeamInviteLinkResponse> create(
             Authentication authentication,
             @PathVariable Long teamId,
@@ -75,7 +76,7 @@ public class TeamInviteLinkController {
             @PathVariable Long teamId,
             @Valid @RequestBody TeamInviteTokenRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(
                 teamService.joinViaInviteLink(Long.valueOf(authentication.getName()), teamId, request.token())
         );
     }

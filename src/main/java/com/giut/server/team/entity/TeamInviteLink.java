@@ -9,8 +9,9 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Entity
-@Table(name = "team_invite_links", uniqueConstraints =
-        @UniqueConstraint(name = "uk_team_invite_links_token_hash", columnNames = "token_hash"))
+@Table(name = "team_invite_links",
+        uniqueConstraints = @UniqueConstraint(name = "uk_team_invite_links_token_hash", columnNames = "token_hash"),
+        indexes = @Index(name = "idx_team_invite_links_team_expires", columnList = "team_id, expires_at"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TeamInviteLink extends BaseTimeEntity {

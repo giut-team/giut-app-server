@@ -10,5 +10,6 @@ CREATE TABLE IF NOT EXISTS team_invite_links (
     created_at DATETIME(6) NULL,
     updated_at DATETIME(6) NULL,
     PRIMARY KEY (id),
-    CONSTRAINT uk_team_invite_links_token_hash UNIQUE (token_hash)
+    CONSTRAINT uk_team_invite_links_token_hash UNIQUE (token_hash),
+    INDEX idx_team_invite_links_team_expires (team_id, expires_at)
 );
