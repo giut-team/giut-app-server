@@ -148,5 +148,10 @@ class AdminUserProfileControllerTest {
 
         @Bean
         DiscordAlertService discordAlertService() { return mock(DiscordAlertService.class); }
+
+        @Bean
+        com.giut.server.auth.service.OAuthCookieService oAuthCookieService() {
+            return mock(com.giut.server.auth.service.OAuthCookieService.class);
+        }
     }
 }
