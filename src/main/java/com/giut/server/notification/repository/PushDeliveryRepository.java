@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * 선점은 추출 작업과 같은 2단계다. 잠금 없는 후보 id 조회(인덱스) → 후보마다 PK 단건 {@code FOR UPDATE SKIP LOCKED}
  * → Java에서 조건 재확인. MySQL에서 한 단계 {@code WHERE status ... LIMIT n FOR UPDATE SKIP LOCKED}는 읽은 행을 모두
- * 잠글 수 있어 쓰지 않는다(docs/harness/database.md 2026-11-13).
+ * 잠글 수 있어 쓰지 않는다.
  */
 public interface PushDeliveryRepository extends JpaRepository<PushDelivery, Long> {
 
