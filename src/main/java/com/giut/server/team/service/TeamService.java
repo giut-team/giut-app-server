@@ -91,10 +91,11 @@ public class TeamService {
         Set<Long> scrappedTeamIds = teamIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(teamScrapRepository.findScrappedTeamIds(userId, teamIds));
+        Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
         List<TeamSummaryResponse> summaries = teams.getContent().stream()
                 .map(team -> TeamSummaryResponse.of(
                         team,
-                        teamMemberRepository.countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE),
+                        memberCountByTeamId.getOrDefault(team.getId(), 0L),
                         scrappedTeamIds.contains(team.getId())
                 ))
                 .toList();
@@ -117,13 +118,7 @@ public class TeamService {
         List<Long> teamIds = memberships.stream()
                 .map(TeamMember::getTeamId)
                 .toList();
-        Map<Long, Long> memberCountByTeamId = teamMemberRepository
-                .countByTeamIdsAndStatus(teamIds, TeamMember.Status.ACTIVE)
-                .stream()
-                .collect(Collectors.toMap(
-                        TeamMemberRepository.TeamMemberCount::getTeamId,
-                        TeamMemberRepository.TeamMemberCount::getMemberCount
-                ));
+        Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
 
         List<MyTeamResponse> teams = teamRepository
                 .findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED)
@@ -136,6 +131,17 @@ public class TeamService {
                 .toList();
 
         return new MyTeamListResponse(teams);
+    }
+
+    private Map<Long, Long> countActiveMembersByTeamId(List<Long> teamIds) {
+        if (teamIds.isEmpty()) {
+            return Map.of();
+        }
+        return teamMemberRepository.countByTeamIdsAndStatus(teamIds, TeamMember.Status.ACTIVE).stream()
+                .collect(Collectors.toMap(
+                        TeamMemberRepository.TeamMemberCount::getTeamId,
+                        TeamMemberRepository.TeamMemberCount::getMemberCount
+                ));
     }
 
     @Transactional
@@ -237,9 +243,12 @@ public class TeamService {
                 .map(TeamApplicationQuestionResponse::from)
                 .toList();
         List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllByTeamIdOrderByIdAsc(teamId)
+                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE)
                 .stream()
-                .map(recruitment -> toRecruitmentResponse(recruitment))
+                .map(recruitment -> new TeamRecruitmentResponse(
+                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
+                        recruitment.getRequiredCount(), recruitment.getFilledCount()
+                ))
                 .toList();
 
         return new TeamDetailResponse(
@@ -272,27 +281,21 @@ public class TeamService {
         List<Long> userIds = activeMembers.stream()
                 .map(TeamMember::getUserId)
                 .toList();
-        Map<Long, User> usersById = userRepository.findAllByIdInAndStatus(userIds, User.Status.ACTIVE)
+        Map<Long, String> nicknamesByUserId = userRepository.findNicknamesByIdInAndStatus(userIds, User.Status.ACTIVE)
                 .stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+                .collect(Collectors.toMap(UserRepository.UserNickname::getId, UserRepository.UserNickname::getNickname));
 
         List<TeamMemberResponse> members = activeMembers.stream()
-                .map(teamMember -> {
-                    User user = usersById.get(teamMember.getUserId());
-                    if (user == null) {
-                        return null;
-                    }
-                    return new TeamMemberResponse(
-                            teamMember.getId(),
-                            user.getId(),
-                            user.getNickname(),
-                            teamMember.getRole(),
-                            teamMember.getRoleCode(),
-                            teamMember.getStatus(),
-                            teamMember.getJoinedAt()
-                    );
-                })
-                .filter(java.util.Objects::nonNull)
+                .filter(teamMember -> nicknamesByUserId.containsKey(teamMember.getUserId()))
+                .map(teamMember -> new TeamMemberResponse(
+                        teamMember.getId(),
+                        teamMember.getUserId(),
+                        nicknamesByUserId.get(teamMember.getUserId()),
+                        teamMember.getRole(),
+                        teamMember.getRoleCode(),
+                        teamMember.getStatus(),
+                        teamMember.getJoinedAt()
+                ))
                 .toList();
 
         return new TeamMemberListResponse(teamId, members);

@@ -203,7 +203,7 @@ class TeamServiceTest {
     }
 
     @Test
-    void listShowsBookmarkOnlyForCurrentUser() {
+    void listShowsActiveMemberCountsAndBookmarkOnlyForCurrentUser() {
         Team first = team(12L);
         Team second = team(13L);
         ReflectionTestUtils.setField(first, "id", 1L);
@@ -214,9 +214,14 @@ class TeamServiceTest {
                 any(Pageable.class))).thenReturn(new PageImpl<>(List.of(first, second)));
         when(teamScrapRepository.findScrappedTeamIds(15L, List.of(1L, 2L)))
                 .thenReturn(List.of(2L));
+        TeamMemberRepository.TeamMemberCount secondTeamCount = memberCount(2L, 3L);
+        when(teamMemberRepository.countByTeamIdsAndStatus(List.of(1L, 2L), TeamMember.Status.ACTIVE))
+                .thenReturn(List.of(secondTeamCount));
 
         TeamPageResponse response = teamService.getRecruitingTeams(15L, 3L, 0, 10);
 
+        assertEquals(0L, response.teams().get(0).currentMemberCount());
+        assertEquals(3L, response.teams().get(1).currentMemberCount());
         assertFalse(response.teams().get(0).scrapped());
         assertTrue(response.teams().get(1).scrapped());
     }
@@ -270,7 +275,7 @@ class TeamServiceTest {
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllByTeamIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
         when(teamScrapRepository.existsByUser_IdAndTeam_Id(15L, 1L)).thenReturn(true);
 
         TeamDetailResponse response = teamService.getTeamDetail(1L, 15L);
@@ -289,7 +294,7 @@ class TeamServiceTest {
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllByTeamIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
 
         TeamDetailResponse response = teamService.updateTeam(
                 10L,
@@ -467,7 +472,7 @@ class TeamServiceTest {
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllByTeamIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
 
         assertEquals(Team.Status.CLOSED, teamService.closeRecruitment(10L, 1L).status());
     }
