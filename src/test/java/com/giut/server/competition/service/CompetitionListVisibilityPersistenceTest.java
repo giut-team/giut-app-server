@@ -552,6 +552,25 @@ class CompetitionListVisibilityPersistenceTest {
         assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
     }
 
+    @Test
+    void savingAStaleCompetitionEntityDoesNotOverwriteConcurrentScrapCountChanges() {
+        Competition target = competition(Competition.PublicationStatus.PUBLISHED);
+        org.springframework.transaction.support.TransactionTemplate newTransaction =
+                new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
+        newTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        transactions.executeWithoutResult(status -> {
+            Competition stale = competitions.findById(target.getId()).orElseThrow(); // scrapCount = 0으로 읽어 둔다.
+            // 그 사이 다른 트랜잭션에서 스크랩이 들어와 commit된다.
+            newTransaction.executeWithoutResult(inner -> competitionService.scrapCompetition(verified.getId(), target.getId()));
+            stale.changePrizeInfo("상금 수정"); // 같은 엔티티의 다른 필드를 바꿔 UPDATE가 나가게 한다.
+        });
+
+        Competition reloaded = competitions.findById(target.getId()).orElseThrow();
+        assertThat(reloaded.getPrizeInfo()).isEqualTo("상금 수정");
+        assertThat(reloaded.getScrapCount()).isEqualTo(1);
+    }
+
     private Competition competition(Competition.PublicationStatus state) {
         return save("목록 공모전", "주최", Competition.Category.WEB_MOBILE_IT, state,
                 Instant.now().minusSeconds(3600), Instant.now().plusSeconds(7200));

@@ -91,9 +91,11 @@ public class Competition extends BaseTimeEntity {
 
     /**
      * competition_scraps 행 수의 비정규화 사본(스크랩 순 정렬용). 스크랩 행을 실제로 추가·삭제한 같은 트랜잭션에서
-     * 원자적 UPDATE로 ±1 한다({@code CompetitionRepository#incrementScrapCount}). 엔티티 값으로는 바꾸지 않는다.
+     * 원자적 UPDATE로 ±1 한다({@code CompetitionRepository#incrementScrapCount}).
+     * {@code updatable = false}: Hibernate는 엔티티 UPDATE에 모든 컬럼을 넣으므로, 공모전을 수정·저장할 때 읽어 둔 옛 값으로
+     * 동시 스크랩 증감을 덮어쓰지 않게 엔티티 UPDATE에서 이 컬럼을 뺀다(JPQL 일괄 UPDATE는 영향 없음).
      */
-    @Column(name = "scrap_count", nullable = false)
+    @Column(name = "scrap_count", nullable = false, updatable = false)
     @org.hibernate.annotations.ColumnDefault("0")
     private long scrapCount;
 
