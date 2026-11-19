@@ -164,10 +164,10 @@ public class Competition extends BaseTimeEntity {
         return submissionSourceUrlHash != null;
     }
 
+    /** 등록 경로(회원·AI·관리자)와 무관하게 공개 대기(DRAFT) 공모전을 승인해 공개하거나 반려한다. */
     public void reviewSubmission(boolean approved, User reviewer) {
-        if (!isMemberSubmission() || publicationStatus != PublicationStatus.DRAFT
-                || verificationStatus != VerificationStatus.MANUAL_REVIEW_PENDING) {
-            throw new IllegalStateException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        if (publicationStatus != PublicationStatus.DRAFT) {
+            throw new IllegalStateException("공개 대기(DRAFT) 중인 공모전만 검토할 수 있습니다.");
         }
         if (approved) {
             verificationStatus = VerificationStatus.MANUALLY_VERIFIED;

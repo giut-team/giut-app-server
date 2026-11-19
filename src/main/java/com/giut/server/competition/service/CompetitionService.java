@@ -246,9 +246,12 @@ public class CompetitionService {
     public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
         UpsertCompetitionRequest request = input.toUpsertRequest();
-        // 관리자가 직접 등록하면 입력값과 무관하게 항상 수동 검증으로 고정한다
-        // (관리자가 내용을 보고 등록한다는 전제라 별도 검증 상태 선택지를 주지 않음).
-        Competition.VerificationStatus verificationStatus = Competition.VerificationStatus.MANUALLY_VERIFIED;
+        // 공개는 관리자 승인으로만 이뤄진다. DRAFT로 등록하면 회원 제출·AI 등록과 같은 검토 대기가 되어 /review로 공개한다.
+        // 그 밖의 상태(바로 공개 등)는 관리자가 내용을 보고 직접 결정한 것으로 보고 기존처럼 수동 검증으로 저장한다.
+        Competition.VerificationStatus verificationStatus =
+                request.publicationStatus() == Competition.PublicationStatus.DRAFT
+                        ? Competition.VerificationStatus.MANUAL_REVIEW_PENDING
+                        : Competition.VerificationStatus.MANUALLY_VERIFIED;
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
@@ -289,15 +292,16 @@ public class CompetitionService {
         Competition.ActivityType activityType = input.activityType().toActivityType();
         UpsertCompetitionRequest request = new UpsertCompetitionRequest(
                 input.title(), input.primaryCategory(), input.hostOrganization(), input.targetParticipants().name(), input.summary(),
-                input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.PUBLISHED, input.urls());
+                input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.DRAFT, input.urls());
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
         Competition competition = Competition.create(
                 request.title().trim(), request.category(), trimToNull(request.hostOrganization()),
                 request.targetParticipants().trim(), trimToNull(request.summary()), request.applicationStartAt(),
-                request.applicationEndAt(), Competition.PublicationStatus.PUBLISHED,
-                Competition.VerificationStatus.AUTO_VERIFIED, null);
+                // AI가 수집한 공고는 바로 공개하지 않는다. 관리자가 /review로 하나씩 승인해야 공개된다.
+                request.applicationEndAt(), Competition.PublicationStatus.DRAFT,
+                Competition.VerificationStatus.MANUAL_REVIEW_PENDING, null);
         competition.changeActivityType(activityType);
         competition.changePrizeInfo(trimToNull(input.prizeInfo()));
         competition.changeTotalPrizeAmount(input.totalPrizeAmount());
@@ -347,9 +351,9 @@ public class CompetitionService {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
         Competition.VerificationStatus previousStatus = competition.getVerificationStatus();
-        if (!competition.isMemberSubmission() || previousStatus != Competition.VerificationStatus.MANUAL_REVIEW_PENDING
-                || competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
-            throw new ConflictException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        // 회원 제출·AI 등록·관리자 DRAFT 등록 모두 같은 검토로 공개하거나 반려한다. 이미 공개·반려된 건은 다시 처리하지 않는다.
+        if (competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
+            throw new ConflictException("공개 대기(DRAFT) 중인 공모전만 검토할 수 있습니다.");
         }
 
         boolean approved = request.decision() == ReviewCompetitionSubmissionRequest.Decision.APPROVE;
@@ -360,8 +364,7 @@ public class CompetitionService {
         competition.reviewSubmission(approved, admin);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
                 competition, previousStatus, competition.getVerificationStatus(), admin, reason));
-        return toResponse(competition, CompetitionRegistrationSource.USER,
-                competitionUrlRepository.findAllByCompetition_Id(competitionId));
+        return toResponse(competition, competitionUrlRepository.findAllByCompetition_Id(competitionId));
     }
 
     @Transactional
@@ -371,6 +374,11 @@ public class CompetitionService {
         if (competition.isMemberSubmission() && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED
                 && competition.getPublicationStatus() != request.publicationStatus()) {
             throw new ConflictException("회원 제출의 게시 상태는 검토 API에서 변경할 수 있습니다.");
+        }
+        // 공개는 검토 API(/review)의 승인으로만 한다. 수정 API로 DRAFT 등을 PUBLISHED로 올려 검토를 건너뛰지 못하게 한다.
+        if (request.publicationStatus() == Competition.PublicationStatus.PUBLISHED
+                && competition.getPublicationStatus() != Competition.PublicationStatus.PUBLISHED) {
+            throw new ConflictException("공모전 공개는 검토 API에서 승인해야 합니다.");
         }
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
@@ -406,21 +414,6 @@ public class CompetitionService {
         List<CompetitionUrl> savedUrls = saveUrls(competition, urls);
 
         return toResponse(competition, savedUrls);
-    }
-
-    @Transactional
-    public AdminCompetitionResponse publishByAdmin(Long adminUserId, Long competitionId) {
-        findActiveAdmin(adminUserId);
-        Competition competition = findEditableCompetitionForUpdate(competitionId);
-
-        if (competition.isMemberSubmission()
-                && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED) {
-            throw new ConflictException("회원 제출은 관리자 검토 후 공개할 수 있습니다.");
-        }
-        competition.publish();
-
-        List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
-        return toResponse(competition, urls);
     }
 
     @Transactional

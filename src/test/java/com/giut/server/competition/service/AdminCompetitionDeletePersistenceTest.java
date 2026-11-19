@@ -218,12 +218,13 @@ class AdminCompetitionDeletePersistenceTest {
     }
 
     @Test
-    void archivedCompetitionCannotBeResurrectedByExistingUpdateOrPublish() throws Exception {
+    void archivedCompetitionCannotBeResurrectedByExistingUpdateOrReview() throws Exception {
         Competition target = competition(Competition.PublicationStatus.DRAFT);
         mvc.perform(as(admin, delete(path(target)))).andExpect(status().isNoContent());
         mvc.perform(as(admin, put(path(target))).contentType(MediaType.APPLICATION_JSON).content(updateBody()))
                 .andExpect(status().isNotFound());
-        mvc.perform(as(admin, patch(path(target) + "/publish"))).andExpect(status().isNotFound());
+        mvc.perform(as(admin, patch(path(target) + "/review")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APPROVE\"}")).andExpect(status().isNotFound());
         assertThat(competitions.findById(target.getId()).orElseThrow().getPublicationStatus())
                 .isEqualTo(Competition.PublicationStatus.ARCHIVED);
         assertThat(urls.count()).isZero();
@@ -243,14 +244,15 @@ class AdminCompetitionDeletePersistenceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"update", "publish"})
+    @ValueSource(strings = {"update", "review"})
     void concurrentDeleteAndAdminMutationCannotLeaveCompetitionPublished(String mutation) throws Exception {
         Competition target = competition(Competition.PublicationStatus.DRAFT);
         List<Integer> statuses = race(
                 () -> mvc.perform(as(admin, delete(path(target)))).andReturn().getResponse().getStatus(),
                 () -> mvc.perform(as(admin, "update".equals(mutation)
                         ? put(path(target)).contentType(MediaType.APPLICATION_JSON).content(updateBody())
-                        : patch(path(target) + "/publish"))).andReturn().getResponse().getStatus());
+                        : patch(path(target) + "/review").contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"decision\":\"APPROVE\"}"))).andReturn().getResponse().getStatus());
         assertThat(statuses.getFirst()).isEqualTo(204);
         assertThat(statuses.getLast()).isIn(200, 404);
         assertThat(competitions.findById(target.getId()).orElseThrow().getPublicationStatus())

@@ -6,6 +6,7 @@ import com.giut.server.competition.dto.request.AiCompetitionRequest;
 import com.giut.server.competition.dto.request.AiTargetParticipants;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CreateCompetitionRequest;
+import com.giut.server.competition.dto.request.ReviewCompetitionSubmissionRequest;
 import com.giut.server.competition.dto.request.UpsertCompetitionRequest;
 import com.giut.server.competition.dto.response.AdminCompetitionResponse;
 import com.giut.server.competition.dto.response.CompetitionRegistrationSource;
@@ -15,6 +16,7 @@ import com.giut.server.competition.entity.CompetitionVerificationLog;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
+import com.giut.server.global.exception.ConflictException;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +40,7 @@ import java.util.List;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -165,8 +168,9 @@ class AdminCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.size").value(10))
                 .andExpect(jsonPath("$.competitions[0].id").value(created.getId()))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").value("DRAFT"))
-                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"))
-                .andExpect(jsonPath("$.competitions[0].verifiedAt").isNotEmpty())
+                // DRAFT 등록은 다른 경로와 같이 검토 대기다(공개는 /review 승인으로만).
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUAL_REVIEW_PENDING"))
+                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()))
                 .andExpect(jsonPath("$.competitions[0].registrationSource").value("ADMIN"))
                 .andExpect(jsonPath("$.competitions[0].targetParticipants").value("대학생"))
                 .andExpect(jsonPath("$.competitions[0].urls[0].url").value("https://example.com/created-post"));
@@ -181,37 +185,38 @@ class AdminCompetitionListPersistenceTest {
     void retiredVerificationInputCannotOverrideServerAssignedStatusOrCreationLog(Competition.VerificationStatus state) throws Exception {
         mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON)
                         .content(creationBody("DRAFT", "\"" + state.name() + "\"")))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.verificationStatus").value("MANUALLY_VERIFIED"))
-                .andExpect(jsonPath("$.verifiedAt").isNotEmpty());
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.verificationStatus").value("MANUAL_REVIEW_PENDING"))
+                .andExpect(jsonPath("$.verifiedAt").value(nullValue()));
 
         Competition stored = competitions.findAll().getFirst();
-        assertThat(stored.getVerificationStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
-        assertThat(stored.getVerifiedAt()).isNotNull();
-        assertThat(stored.getVerifiedByUser().getId()).isEqualTo(admin.getId());
+        assertThat(stored.getVerificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
+        assertThat(stored.getVerifiedAt()).isNull();
+        assertThat(stored.getVerifiedByUser()).isNull();
         CompetitionVerificationLog log = logs.findAll().getFirst();
         assertThat(log.getFromStatus()).isNull();
-        assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+        assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
         assertThat(log.getVerificationMethod()).isEqualTo(CompetitionVerificationLog.Method.ADMIN_REVIEW);
         assertThat(log.getActorUser().getId()).isEqualTo(admin.getId());
         assertThat(log.getReason()).isEqualTo(CompetitionVerificationLog.ADMIN_CREATION_REASON);
         mvc.perform(as(otherAdmin, get(PATH)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].id").value(stored.getId()))
-                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"));
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUAL_REVIEW_PENDING"));
         mvc.perform(as(unverified, get("/api/competitions")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @ParameterizedTest
     @EnumSource(Competition.PublicationStatus.class)
-    void adminCreationIsAlwaysVerifiedForEveryPublicationStateAndKeepsExistingVisibility(Competition.PublicationStatus state) throws Exception {
+    void adminCreationWaitsForReviewOnlyAsDraftAndKeepsExistingVisibility(Competition.PublicationStatus state) throws Exception {
         mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON)
                         .content(creationBody(state.name(), "\"UNVERIFIED\"")))
                 .andExpect(status().isCreated());
         Competition created = competitions.findAll().getFirst();
         mvc.perform(as(admin, get(PATH).param("publicationStatus", state.name())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"));
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value(
+                        state == Competition.PublicationStatus.DRAFT ? "MANUAL_REVIEW_PENDING" : "MANUALLY_VERIFIED"));
         mvc.perform(as(admin, get(PATH)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements")
                         .value(state == Competition.PublicationStatus.ARCHIVED ? 0 : 1));
@@ -224,7 +229,7 @@ class AdminCompetitionListPersistenceTest {
 
     @Test
     void explicitNullKeepsLegacyVerifiedDefault() throws Exception {
-        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(creationBody("DRAFT", "null")))
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(creationBody("PUBLISHED", "null")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.verificationStatus").value("MANUALLY_VERIFIED"))
                 .andExpect(jsonPath("$.verifiedAt").isNotEmpty());
@@ -275,7 +280,7 @@ class AdminCompetitionListPersistenceTest {
     @ParameterizedTest
     @ValueSource(strings = {"\"NOT_A_STATUS\"", "123", "true", "[]", "{\"status\":\"UNVERIFIED\"}"})
     void retiredInputIsIgnoredRegardlessOfItsValueOrJsonType(String value) throws Exception {
-        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(creationBody("DRAFT", value)))
+        mvc.perform(as(admin, post(PATH)).contentType(MediaType.APPLICATION_JSON).content(creationBody("PUBLISHED", value)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.verificationStatus").value("MANUALLY_VERIFIED"));
         assertThat(competitions.findAll()).hasSize(1).allSatisfy(c -> {
@@ -304,28 +309,31 @@ class AdminCompetitionListPersistenceTest {
     }
 
     @Test
-    void legacyUnverifiedCreationRemainsUnverifiedAndListedAfterEditingAndPublishingThenArchiving() throws Exception {
-        // Legacy data is not rewritten just because new administrator creations are always verified.
+    void legacyUnverifiedCreationIsUnchangedByEditingAndBecomesVerifiedOnlyThroughReview() throws Exception {
+        // 수정만으로는 기존 검증 상태를 바꾸지 않는다. 공개는 /review 승인으로만 하며, 승인하면 수동 검증으로 기록된다.
         Competition created = competitions.saveAndFlush(Competition.create("기존 미인증 등록", Competition.Category.WEB_MOBILE_IT,
                 "주최", "대학생", "기존 소개", null, null, Competition.PublicationStatus.DRAFT,
                 Competition.VerificationStatus.UNVERIFIED, null));
         logs.saveAndFlush(CompetitionVerificationLog.createAdminReviewLog(created, null,
                 Competition.VerificationStatus.UNVERIFIED, admin, CompetitionVerificationLog.ADMIN_CREATION_REASON));
         service.updateByAdmin(otherAdmin.getId(), created.getId(), request("수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
-        service.publishByAdmin(otherAdmin.getId(), created.getId());
+        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"))
+                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()));
+        assertThat(logs.count()).isEqualTo(1);
+
+        approve(otherAdmin, created.getId());
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
-                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"))
-                .andExpect(jsonPath("$.competitions[0].verifiedAt").value(nullValue()))
+                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("MANUALLY_VERIFIED"))
                 .andExpect(jsonPath("$.competitions[0].registrationSource").value("ADMIN"));
-        assertThat(competitions.findById(created.getId()).orElseThrow().getVerifiedByUser()).isNull();
-        assertThat(logs.count()).isEqualTo(1);
-        assertThat(logs.findAll().getFirst().getActorUser().getId()).isEqualTo(admin.getId());
+        assertThat(competitions.findById(created.getId()).orElseThrow().getVerifiedByUser().getId()).isEqualTo(otherAdmin.getId());
+        // 생성 로그(최초)는 그대로 두고 검토 로그가 추가된다. 출처 판별은 최초 로그로 계속 ADMIN이다.
+        assertThat(logs.count()).isEqualTo(2);
         service.deleteByAdmin(otherAdmin.getId(), created.getId());
         mvc.perform(as(admin, get(PATH).param("publicationStatus", "ARCHIVED")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.competitions[0].verificationStatus").value("UNVERIFIED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
@@ -405,33 +413,72 @@ class AdminCompetitionListPersistenceTest {
     }
 
     @Test
-    void aiCreatedCompetitionIsListedAsAiAndStaysVisibleToAdminsAfterBecomingDraft() throws Exception {
+    void aiCreatedCompetitionWaitsForAdminReviewBeforeBecomingPublic() throws Exception {
         AdminCompetitionResponse created = service.createByAi(aiRequest("https://example.com/ai/draft"));
         assertThat(created.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        assertThat(created.publicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
+        assertThat(created.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
         CompetitionVerificationLog log = logs.findAll().getFirst();
         assertThat(log.getReason()).isEqualTo(CompetitionVerificationLog.AI_CREATION_REASON);
-        mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
+        assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
+        mvc.perform(as(admin, get(PATH).param("verificationStatus", "MANUAL_REVIEW_PENDING"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].id").value(created.id()))
-                .andExpect(jsonPath("$.competitions[0].publicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.competitions[0].publicationStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.competitions[0].registrationSource").value("AI"));
-        mvc.perform(as(verified, get("/api/competitions")))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
-
-        AdminCompetitionResponse drafted = service.updateByAdmin(admin.getId(), created.id(),
-                request("AI 수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
-        assertThat(drafted.publicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
-        assertThat(drafted.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
-        mvc.perform(as(admin, get(PATH).param("publicationStatus", "DRAFT"))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.competitions[0].id").value(created.id()))
-                .andExpect(jsonPath("$.competitions[0].registrationSource").value("AI"));
+        // 승인 전에는 일반 회원에게 보이지 않는다.
         mvc.perform(as(verified, get("/api/competitions")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
         mvc.perform(as(verified, get("/api/competitions/" + created.id()))).andExpect(status().isNotFound());
 
-        AdminCompetitionResponse republished = service.publishByAdmin(admin.getId(), created.id());
-        assertThat(republished.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        // 수정 API로 공개 상태를 올려 검토를 건너뛸 수 없다. DRAFT 유지 수정은 된다.
+        assertThatThrownBy(() -> service.updateByAdmin(admin.getId(), created.id(),
+                request("AI 우회", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED)))
+                .isInstanceOf(ConflictException.class);
+        AdminCompetitionResponse edited = service.updateByAdmin(admin.getId(), created.id(),
+                request("AI 수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT));
+        assertThat(edited.publicationStatus()).isEqualTo(Competition.PublicationStatus.DRAFT);
+        assertThat(edited.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
+
+        AdminCompetitionResponse approved = approve(admin, created.id());
+        assertThat(approved.publicationStatus()).isEqualTo(Competition.PublicationStatus.PUBLISHED);
+        assertThat(approved.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+        assertThat(approved.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        mvc.perform(as(verified, get("/api/competitions")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        // 이미 공개된 건은 다시 검토하지 않는다.
+        assertThatThrownBy(() -> approve(admin, created.id())).isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void reviewRejectsAiCompetitionWithReasonAndKeepsItHidden() {
+        AdminCompetitionResponse created = service.createByAi(aiRequest("https://example.com/ai/reject"));
+        assertThatThrownBy(() -> service.reviewSubmission(admin.getId(), created.id(),
+                new ReviewCompetitionSubmissionRequest(ReviewCompetitionSubmissionRequest.Decision.REJECT, " ")))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        AdminCompetitionResponse rejected = service.reviewSubmission(admin.getId(), created.id(),
+                new ReviewCompetitionSubmissionRequest(ReviewCompetitionSubmissionRequest.Decision.REJECT, "공모전 공고가 아님"));
+
+        assertThat(rejected.publicationStatus()).isEqualTo(Competition.PublicationStatus.REJECTED);
+        assertThat(rejected.verificationStatus()).isEqualTo(Competition.VerificationStatus.REJECTED);
+        assertThat(rejected.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
+        assertThat(logs.findAll()).extracting(CompetitionVerificationLog::getReason).contains("공모전 공고가 아님");
+    }
+
+    @Test
+    void adminDraftCreationWaitsForReviewWhileDirectPublishIsTreatedAsTheAdminsOwnApproval() {
+        AdminCompetitionResponse draft = create(admin, "관리자 초안", Competition.Category.ETC, Competition.PublicationStatus.DRAFT);
+        AdminCompetitionResponse published = create(admin, "관리자 즉시 공개", Competition.Category.ETC,
+                Competition.PublicationStatus.PUBLISHED);
+
+        assertThat(draft.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
+        assertThat(published.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
+        assertThat(approve(otherAdmin, draft.id()).publicationStatus()).isEqualTo(Competition.PublicationStatus.PUBLISHED);
+        // 공개된 건을 DRAFT로 내리는 수정은 기존처럼 허용한다(공개 방향만 검토로 제한).
+        assertThat(service.updateByAdmin(admin.getId(), published.id(),
+                request("내림", Competition.Category.ETC, Competition.PublicationStatus.DRAFT)).publicationStatus())
+                .isEqualTo(Competition.PublicationStatus.DRAFT);
     }
 
     @Test
@@ -441,7 +488,7 @@ class AdminCompetitionListPersistenceTest {
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.competitions[0].registrationSource").value("UNKNOWN"));
-        assertThat(service.publishByAdmin(admin.getId(), created.id()).registrationSource())
+        assertThat(approve(admin, created.id()).registrationSource())
                 .isEqualTo(CompetitionRegistrationSource.UNKNOWN);
     }
 
@@ -464,8 +511,9 @@ class AdminCompetitionListPersistenceTest {
                 .andExpect(jsonPath("$.competitions[2].registrationSource").value("AI"))
                 .andExpect(jsonPath("$.competitions[3].id").value(byAdmin.id()))
                 .andExpect(jsonPath("$.competitions[3].registrationSource").value("ADMIN"));
+        // AI 등록은 승인 전이라 공개 목록에 없다(관리자 즉시 공개 건만 보인다. 레거시는 마감일이 없어 숨김).
         mvc.perform(as(verified, get("/api/competitions"))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(2));
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
@@ -547,7 +595,7 @@ class AdminCompetitionListPersistenceTest {
         assertThat(service.updateByAdmin(otherAdmin.getId(), created.id(),
                 request("수정", Competition.Category.ETC, Competition.PublicationStatus.DRAFT)).registrationSource())
                 .isEqualTo(CompetitionRegistrationSource.ADMIN);
-        assertThat(service.publishByAdmin(otherAdmin.getId(), created.id()).registrationSource())
+        assertThat(approve(otherAdmin, created.id()).registrationSource())
                 .isEqualTo(CompetitionRegistrationSource.ADMIN);
         mvc.perform(as(admin, get(PATH))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.competitions[0].title").value("수정"))
@@ -624,5 +672,10 @@ class AdminCompetitionListPersistenceTest {
             servletRequest.setServletPath(servletRequest.getRequestURI());
             return servletRequest;
         });
+    }
+
+    private AdminCompetitionResponse approve(User reviewer, Long competitionId) {
+        return service.reviewSubmission(reviewer.getId(), competitionId,
+                new ReviewCompetitionSubmissionRequest(ReviewCompetitionSubmissionRequest.Decision.APPROVE, null));
     }
 }
