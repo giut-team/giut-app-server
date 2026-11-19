@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -164,6 +165,39 @@ class ActiveUserAuthorizationFilterTest {
         assertThat(result.continued()).isFalse();
         assertThat(result.response().getStatus()).isEqualTo(403);
         verify(cookies).clearLoginCookies(result.response());
+    }
+
+    @Test
+    void revokedCookieResponseCarriesExpiredLoginCookiesBeforeDenialIsWritten() throws Exception {
+        authenticate("42", "ROLE_STUDENT");
+        User user = activeUser();
+        user.bumpTokenVersion();
+        when(users.findById(42L)).thenReturn(Optional.of(user));
+        when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
+        // 403 핸들러가 응답을 커밋할 수 있으므로, 핸들러가 불리는 시점에 Set-Cookie가 이미 있어야 한다.
+        List<String> setCookieAtDenial = new java.util.ArrayList<>();
+        var handler = new JwtAccessDeniedHandler() {
+            @Override
+            public void handle(jakarta.servlet.http.HttpServletRequest request,
+                               jakarta.servlet.http.HttpServletResponse response,
+                               org.springframework.security.access.AccessDeniedException exception)
+                    throws java.io.IOException {
+                setCookieAtDenial.addAll(response.getHeaders(HttpHeaders.SET_COOKIE));
+                super.handle(request, response, exception);
+            }
+        };
+        var response = new MockHttpServletResponse();
+
+        new ActiveUserAuthorizationFilter(users, handler, jwtProvider, new OAuthCookieService())
+                .doFilter(cookieRequest("GET", "/api/profile"), response, (req, res) -> {});
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"code\":403");
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE))
+                .hasSize(2)
+                .anySatisfy(header -> assertThat(header).startsWith("giut_access_token=;").contains("Max-Age=0"))
+                .anySatisfy(header -> assertThat(header).startsWith("giut_refresh_token=;").contains("Max-Age=0"));
+        assertThat(setCookieAtDenial).containsExactlyElementsOf(response.getHeaders(HttpHeaders.SET_COOKIE));
     }
 
     @Test
