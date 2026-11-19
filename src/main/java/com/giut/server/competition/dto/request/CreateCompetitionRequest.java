@@ -41,7 +41,8 @@ public record CreateCompetitionRequest(
         Competition.PublicationStatus publicationStatus,
 
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
-        List<@Valid CompetitionUrlRequest> urls,
+        @Size(max = 10, message = "공모전 URL은 최대 10개까지 등록할 수 있습니다.")
+        List<@NotNull(message = "비어 있는 URL 항목은 등록할 수 없습니다.") @Valid CompetitionUrlRequest> urls,
 
         @Schema(description = "활동 유형. 생략하거나 null이면 공모전으로 저장합니다.", example = "HACKATHON")
         Competition.ActivityType activityType,
