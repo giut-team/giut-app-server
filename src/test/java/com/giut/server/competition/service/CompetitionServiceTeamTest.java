@@ -48,16 +48,20 @@ class CompetitionServiceTeamTest {
         User user = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
         Competition competition = mock(Competition.class);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(user));
-        when(competitionRepository.findByIdAndPublicationStatus(1L, Competition.PublicationStatus.PUBLISHED))
-                .thenReturn(Optional.of(competition));
+        when(competition.getPublicationStatus()).thenReturn(Competition.PublicationStatus.PUBLISHED);
+        when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
         assertThat(competitionService.scrapCompetition(12L, 1L).scrapped()).isTrue();
         assertThat(competitionService.removeCompetitionScrap(12L, 1L).scrapped()).isFalse();
-        var order = org.mockito.Mockito.inOrder(userRepository, competitionScrapRepository);
+        // 잠금 순서: 회원 행 → 공모전 행 → 스크랩 변경 → 스크랩 수 갱신.
+        var order = org.mockito.Mockito.inOrder(userRepository, competitionRepository, competitionScrapRepository);
         order.verify(userRepository).findByIdForUpdate(12L);
+        order.verify(competitionRepository).findByIdForUpdate(1L);
         order.verify(competitionScrapRepository).existsByUser_IdAndCompetition_Id(12L, 1L);
         order.verify(competitionScrapRepository).save(any());
+        order.verify(competitionRepository).incrementScrapCount(1L);
         order.verify(userRepository).findByIdForUpdate(12L);
-        order.verify(competitionScrapRepository).deleteByUser_IdAndCompetition_Id(12L, 1L);
+        order.verify(competitionRepository).findByIdForUpdate(1L);
+        order.verify(competitionScrapRepository).deleteByUserIdAndCompetitionId(12L, 1L);
     }
 
     @Test

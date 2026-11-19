@@ -22,7 +22,6 @@ import com.giut.server.competition.dto.response.PublicCompetitionListResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionScrap;
-import com.giut.server.competition.dto.request.CompetitionSort;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.entity.CompetitionVerificationLog;
 import com.giut.server.team.entity.Team;
@@ -46,8 +45,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Subquery;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -88,9 +85,6 @@ public class CompetitionService {
         }
         if (request.status() != null) {
             specification = specification.and(hasRecruitmentStatus(request.status(), now));
-        }
-        if (request.sortOrDefault() == CompetitionSort.SCRAPS) {
-            specification = specification.and(orderByScrapCountDesc());
         }
 
         Page<Competition> competitionPage = competitionRepository.findAll(
@@ -193,10 +187,13 @@ public class CompetitionService {
     @Transactional
     public CompetitionScrapResponse scrapCompetition(Long userId, Long competitionId) {
         User user = findActiveUserForScrapUpdate(userId);
-        Competition competition = findPublishedCompetition(competitionId);
+        Competition competition = findPublishedCompetitionForScrapUpdate(competitionId);
 
+        // 같은 회원의 요청은 회원 행 잠금으로 직렬화돼 있어 확인 뒤 저장해도 중복 행이 생기지 않는다.
+        // 행을 실제로 추가했을 때만, 같은 트랜잭션에서 스크랩 수를 1 늘린다(함께 commit·rollback).
         if (!competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId)) {
             competitionScrapRepository.save(CompetitionScrap.create(user, competition));
+            competitionRepository.incrementScrapCount(competitionId);
         }
         return new CompetitionScrapResponse(competitionId, true);
     }
@@ -204,9 +201,11 @@ public class CompetitionService {
     @Transactional
     public CompetitionScrapResponse removeCompetitionScrap(Long userId, Long competitionId) {
         findActiveUserForScrapUpdate(userId);
-        findPublishedCompetition(competitionId);
+        findPublishedCompetitionForScrapUpdate(competitionId);
 
-        competitionScrapRepository.deleteByUser_IdAndCompetition_Id(userId, competitionId);
+        if (competitionScrapRepository.deleteByUserIdAndCompetitionId(userId, competitionId) > 0) {
+            competitionRepository.decrementScrapCount(competitionId);
+        }
         return new CompetitionScrapResponse(competitionId, false);
     }
 
@@ -460,6 +459,17 @@ public class CompetitionService {
         return user;
     }
 
+    /**
+     * 스크랩 추가·취소용. 공모전 행을 처음부터 배타 잠금으로 읽는다. 잠금 없이 읽으면 스크랩 행 INSERT의 외래 키 검사가
+     * 공모전 행에 공유 잠금을 걸고, 뒤이은 scrap_count UPDATE가 배타 잠금으로 올리려다 다른 회원의 같은 시도와 교착된다
+     * (실제 MySQL에서 재현). 잠금 순서는 항상 회원 행 → 공모전 행이다.
+     */
+    private Competition findPublishedCompetitionForScrapUpdate(Long competitionId) {
+        return competitionRepository.findByIdForUpdate(competitionId)
+                .filter(competition -> competition.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
+    }
+
     private Competition findPublishedCompetition(Long competitionId) {
         return competitionRepository.findByIdAndPublicationStatus(
                         competitionId,
@@ -489,22 +499,6 @@ public class CompetitionService {
                     : CompetitionRegistrationSource.AI);
         });
         return sources;
-    }
-
-    /**
-     * 스크랩 수 많은 순, 동률은 최신 등록 순. 스크랩 수는 컬럼이 없어 공모전별 competition_scraps 수를 상관 서브쿼리로 센다.
-     * 목록 조회에만 정렬을 걸고, 같은 조건으로 실행되는 count 조회(결과 타입 Long)에는 걸지 않는다.
-     */
-    private Specification<Competition> orderByScrapCountDesc() {
-        return (root, query, builder) -> {
-            if (query != null && !Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
-                Subquery<Long> scrapCount = query.subquery(Long.class);
-                Root<CompetitionScrap> scrap = scrapCount.from(CompetitionScrap.class);
-                scrapCount.select(builder.count(scrap)).where(builder.equal(scrap.get("competition"), root));
-                query.orderBy(builder.desc(scrapCount), builder.desc(root.get("id")));
-            }
-            return builder.conjunction();
-        };
     }
 
     private Specification<Competition> publishedCompetition() {

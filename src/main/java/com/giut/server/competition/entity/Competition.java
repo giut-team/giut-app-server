@@ -14,7 +14,9 @@ import java.util.Objects;
         @UniqueConstraint(name = "uk_competitions_submission_url_hash", columnNames = "submission_source_url_hash"),
         indexes = {
         @Index(name = "idx_competitions_status_id", columnList = "publication_status, id"),
-        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at")
+        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at"),
+        // 스크랩 순 정렬(publication_status = ? ORDER BY scrap_count DESC, id DESC). InnoDB 보조 인덱스 끝에 PK가 붙어 id까지 정렬된다.
+        @Index(name = "idx_competitions_status_scrap_count", columnList = "publication_status, scrap_count")
 }) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Competition extends BaseTimeEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -86,6 +88,14 @@ public class Competition extends BaseTimeEntity {
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;
+
+    /**
+     * competition_scraps 행 수의 비정규화 사본(스크랩 순 정렬용). 스크랩 행을 실제로 추가·삭제한 같은 트랜잭션에서
+     * 원자적 UPDATE로 ±1 한다({@code CompetitionRepository#incrementScrapCount}). 엔티티 값으로는 바꾸지 않는다.
+     */
+    @Column(name = "scrap_count", nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private long scrapCount;
 
     public static Competition create(
             String title,

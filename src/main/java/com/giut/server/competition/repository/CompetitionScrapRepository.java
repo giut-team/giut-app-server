@@ -3,6 +3,7 @@ package com.giut.server.competition.repository;
 import com.giut.server.competition.entity.CompetitionScrap;
 import com.giut.server.competition.entity.Competition;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,7 +20,10 @@ public interface CompetitionScrapRepository extends JpaRepository<CompetitionScr
 
     long countByUser_IdAndCompetition_PublicationStatus(Long userId, Competition.PublicationStatus status);
 
-    void deleteByUser_IdAndCompetition_Id(Long userId, Long competitionId);
+    /** 삭제한 행 수(0 또는 1)를 돌려준다. 1일 때만 공모전의 스크랩 수를 줄인다. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from CompetitionScrap scrap where scrap.user.id = :userId and scrap.competition.id = :competitionId")
+    int deleteByUserIdAndCompetitionId(@Param("userId") Long userId, @Param("competitionId") Long competitionId);
 
     /** scrapped(내가 스크랩했는지)와 scrapCount(전체 수)를 한 번의 조회로 함께 얻는다. */
     @Query("""

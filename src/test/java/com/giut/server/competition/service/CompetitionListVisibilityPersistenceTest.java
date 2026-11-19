@@ -492,12 +492,13 @@ class CompetitionListVisibilityPersistenceTest {
         mvc.perform(as(verified, get("/api/competitions").param("sort", "VIEWS").param("size", "2").param("page", "1")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
                         middleEarlyDeadline.getId().intValue(), newestTieDeadline.getId().intValue())));
-        // 스크랩 순. 스크랩 수는 competition_scraps에서 센다. 같은 수면 최신 등록이 먼저다.
-        scraps.saveAndFlush(CompetitionScrap.create(verified, newestTieDeadline));
-        scraps.saveAndFlush(CompetitionScrap.create(admin, newestTieDeadline));
-        scraps.saveAndFlush(CompetitionScrap.create(verified, middleEarlyDeadline));
-        scraps.saveAndFlush(CompetitionScrap.create(unverified, middleEarlyDeadline));
-        scraps.saveAndFlush(CompetitionScrap.create(admin, newestMiddleDeadline));
+        // 스크랩 순. 스크랩 추가 API가 함께 갱신하는 scrap_count로 정렬한다. 같은 수면 최신 등록이 먼저다.
+        competitionService.scrapCompetition(verified.getId(), newestTieDeadline.getId());
+        competitionService.scrapCompetition(admin.getId(), newestTieDeadline.getId());
+        competitionService.scrapCompetition(verified.getId(), middleEarlyDeadline.getId());
+        competitionService.scrapCompetition(unverified.getId(), middleEarlyDeadline.getId());
+        competitionService.scrapCompetition(admin.getId(), newestMiddleDeadline.getId());
+        // 비공개 공모전은 스크랩 API로 스크랩할 수 없으므로 행만 직접 넣는다(목록에는 나오지 않아야 한다).
         scraps.saveAndFlush(CompetitionScrap.create(verified, hiddenDraft));
         scraps.saveAndFlush(CompetitionScrap.create(admin, hiddenDraft));
         scraps.saveAndFlush(CompetitionScrap.create(unverified, hiddenDraft));
@@ -520,6 +521,35 @@ class CompetitionListVisibilityPersistenceTest {
         for (String invalid : new String[]{"POPULAR", "OLDEST"}) {
             mvc.perform(as(verified, get("/api/competitions").param("sort", invalid))).andExpect(status().isBadRequest());
         }
+    }
+
+    @Test
+    void scrapCountColumnFollowsActualScrapRowsAndIsUsedForScrapSort() throws Exception {
+        Competition first = competition(Competition.PublicationStatus.PUBLISHED);
+        Competition second = competition(Competition.PublicationStatus.PUBLISHED);
+
+        competitionService.scrapCompetition(verified.getId(), first.getId());
+        competitionService.scrapCompetition(verified.getId(), first.getId()); // 중복 스크랩은 수를 늘리지 않는다.
+        competitionService.scrapCompetition(admin.getId(), first.getId());
+        competitionService.removeCompetitionScrap(unverified.getId(), first.getId()); // 없는 스크랩 취소는 줄이지 않는다.
+        assertThat(competitions.findById(first.getId()).orElseThrow().getScrapCount()).isEqualTo(2);
+        assertThat(scraps.countByCompetition_Id(first.getId())).isEqualTo(2);
+
+        competitionService.scrapCompetition(unverified.getId(), second.getId());
+        competitionService.removeCompetitionScrap(verified.getId(), first.getId());
+        competitionService.removeCompetitionScrap(verified.getId(), first.getId());
+        assertThat(competitions.findById(first.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        second.getId().intValue(), first.getId().intValue())))
+                .andExpect(jsonPath("$.competitions[*].scrapCount").value(org.hamcrest.Matchers.contains(1, 1)));
+
+        // HTTP 경로도 같은 트랜잭션에서 카운터를 갱신한다.
+        mvc.perform(as(admin, post("/api/competitions/" + second.getId() + "/scrap"))).andExpect(status().isOk());
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(2);
+        mvc.perform(as(admin, delete("/api/competitions/" + second.getId() + "/scrap"))).andExpect(status().isOk());
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
     }
 
     private Competition competition(Competition.PublicationStatus state) {
