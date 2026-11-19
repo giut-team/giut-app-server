@@ -376,14 +376,10 @@ public class CompetitionService {
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
-        if (competition.isMemberSubmission() && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED
-                && competition.getPublicationStatus() != request.publicationStatus()) {
-            throw new ConflictException("회원 제출의 게시 상태는 검토 API에서 변경할 수 있습니다.");
-        }
-        // 공개는 검토 API(/review)의 승인으로만 한다. 수정 API로 DRAFT 등을 PUBLISHED로 올려 검토를 건너뛰지 못하게 한다.
-        if (request.publicationStatus() == Competition.PublicationStatus.PUBLISHED
-                && competition.getPublicationStatus() != Competition.PublicationStatus.PUBLISHED) {
-            throw new ConflictException("공모전 공개는 검토 API에서 승인해야 합니다.");
+        // 공개 상태는 수정 API로 바꾸지 않는다. DRAFT → PUBLISHED·REJECTED는 검토 API(/review), 보관은 삭제 API로만 한다.
+        // 그래서 검토를 건너뛴 공개, 반려 후 DRAFT로 되돌려 다시 검토받기, 공개 건을 DRAFT로 내리기가 모두 막힌다.
+        if (request.publicationStatus() != competition.getPublicationStatus()) {
+            throw new ConflictException("공개 상태는 수정 API로 바꿀 수 없습니다. 공개·반려는 검토 API, 보관은 삭제 API를 사용하세요.");
         }
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());

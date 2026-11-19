@@ -464,6 +464,24 @@ class AdminCompetitionListPersistenceTest {
         assertThat(rejected.verificationStatus()).isEqualTo(Competition.VerificationStatus.REJECTED);
         assertThat(rejected.registrationSource()).isEqualTo(CompetitionRegistrationSource.AI);
         assertThat(logs.findAll()).extracting(CompetitionVerificationLog::getReason).contains("공모전 공고가 아님");
+
+        // 반려는 최종 결정이다. 수정 API로 DRAFT로 되돌려 다시 검토받거나 바로 공개할 수 없고, 다시 검토할 수도 없다.
+        for (Competition.PublicationStatus target : List.of(Competition.PublicationStatus.DRAFT, Competition.PublicationStatus.PUBLISHED)) {
+            assertThatThrownBy(() -> service.updateByAdmin(admin.getId(), created.id(),
+                    request("반려 되돌리기", Competition.Category.ETC, target)))
+                    .isInstanceOf(ConflictException.class);
+        }
+        assertThatThrownBy(() -> approve(admin, created.id())).isInstanceOf(ConflictException.class);
+        Competition stored = competitions.findById(created.id()).orElseThrow();
+        assertThat(stored.getPublicationStatus()).isEqualTo(Competition.PublicationStatus.REJECTED);
+        assertThat(stored.getVerificationStatus()).isEqualTo(Competition.VerificationStatus.REJECTED);
+        // 반려 상태를 유지한 내용 수정과 보관(삭제)은 된다.
+        assertThat(service.updateByAdmin(admin.getId(), created.id(),
+                request("반려 유지 수정", Competition.Category.ETC, Competition.PublicationStatus.REJECTED)).title())
+                .isEqualTo("반려 유지 수정");
+        service.deleteByAdmin(admin.getId(), created.id());
+        assertThat(competitions.findById(created.id()).orElseThrow().getPublicationStatus())
+                .isEqualTo(Competition.PublicationStatus.ARCHIVED);
     }
 
     @Test
@@ -475,10 +493,13 @@ class AdminCompetitionListPersistenceTest {
         assertThat(draft.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
         assertThat(published.verificationStatus()).isEqualTo(Competition.VerificationStatus.MANUALLY_VERIFIED);
         assertThat(approve(otherAdmin, draft.id()).publicationStatus()).isEqualTo(Competition.PublicationStatus.PUBLISHED);
-        // 공개된 건을 DRAFT로 내리는 수정은 기존처럼 허용한다(공개 방향만 검토로 제한).
+        // 수정 API로는 공개 상태를 바꿀 수 없다(공개 건을 DRAFT로 내리기도 불가, 보관은 삭제 API). 상태를 유지한 내용 수정은 된다.
+        assertThatThrownBy(() -> service.updateByAdmin(admin.getId(), published.id(),
+                request("내림", Competition.Category.ETC, Competition.PublicationStatus.DRAFT)))
+                .isInstanceOf(ConflictException.class);
         assertThat(service.updateByAdmin(admin.getId(), published.id(),
-                request("내림", Competition.Category.ETC, Competition.PublicationStatus.DRAFT)).publicationStatus())
-                .isEqualTo(Competition.PublicationStatus.DRAFT);
+                request("공개 유지 수정", Competition.Category.ETC, Competition.PublicationStatus.PUBLISHED)).title())
+                .isEqualTo("공개 유지 수정");
     }
 
     @Test
