@@ -62,8 +62,8 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // A leftover student token must not prevent a fresh credential-based admin login.
-        if (HttpMethod.POST.matches(method) && "/api/admin/auth/login".equals(path)) {
+        // 남아 있는 학생 토큰이 OAuth 로그인이나 관리자 로그인을 막아서는 안 된다.
+        if (LoginRoutes.MATCHER.matches(request)) {
             return false;
         }
 
@@ -77,7 +77,7 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
 
-        if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
+        if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method)) {
             return false;
         }
         if (HttpMethod.GET.matches(method)

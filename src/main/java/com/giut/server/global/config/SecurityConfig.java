@@ -5,6 +5,7 @@ import com.giut.server.auth.security.ActiveUserAuthorizationFilter;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtProvider;
+import com.giut.server.auth.security.LoginRoutes;
 import com.giut.server.auth.security.UniversityVerificationAuthorizationFilter;
 import com.giut.server.auth.service.OAuthCookieService;
 import com.giut.server.user.repository.UserRepository;
@@ -62,14 +63,13 @@ public class SecurityConfig {
                                 "/",
                                 "/actuator/health",
                                 "/actuator/health/**",
-                                "/api/admin/auth/login",
-                                "/api/oauth/**",
                                 "/swagger-ui",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers(LoginRoutes.MATCHER).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/profile/shares/{token}").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

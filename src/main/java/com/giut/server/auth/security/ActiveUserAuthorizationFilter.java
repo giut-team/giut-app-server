@@ -8,7 +8,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -47,8 +46,9 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
         boolean tokenVersionMatches = user != null && token != null
                 && user.getTokenVersion() == jwtProvider.getTokenVersion(token);
         if (user == null || user.getStatus() != User.Status.ACTIVE || !tokenVersionMatches) {
-            if (isLoginRoute(request)) {
-                // 로그인 경로는 모두 permitAll이라 인증 없이 진행해도 된다. 성공하면 새 쿠키가 덮어쓴다.
+            if (LoginRoutes.MATCHER.matches(request)) {
+                // 로그인 경로는 SecurityConfig에서 같은 매처로 permitAll이라 인증 없이 진행해도 된다.
+                // 성공하면 새 쿠키가 덮어쓴다.
                 SecurityContextHolder.clearContext();
                 chain.doFilter(request, response);
                 return;
@@ -61,12 +61,6 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
-    }
-
-    private boolean isLoginRoute(HttpServletRequest request) {
-        String path = request.getServletPath();
-        return path.startsWith("/api/oauth/")
-                || (HttpMethod.POST.matches(request.getMethod()) && "/api/admin/auth/login".equals(path));
     }
 
     private String resolveBearerToken(HttpServletRequest request) {
