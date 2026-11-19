@@ -75,7 +75,7 @@ public class AdminCompetitionController {
     }
 
     @PostMapping
-    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않으며 항상 MANUALLY_VERIFIED로 등록합니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 게시 상태는 별도로 선택하며 관리자 목록에 registrationSource=ADMIN으로 표시됩니다.")
+    @Operation(summary = "관리자 공모전 등록", description = "관리자가 공모전 정보와 URL을 직접 등록합니다. 대표 URL은 정확히 하나여야 합니다. 검증 상태는 입력받지 않고 게시 상태로 정합니다. DRAFT로 등록하면 MANUAL_REVIEW_PENDING(검토 대기)이 되어 회원 제출·AI 등록과 같이 검토 API(/review)로 공개하거나 반려하고, 그 밖의 게시 상태(예: PUBLISHED)로 등록하면 MANUALLY_VERIFIED입니다. 이전 클라이언트가 verificationStatus를 보내도 무시합니다. 등록한 공모전은 관리자 목록에 registrationSource=ADMIN으로 표시됩니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "공모전 등록 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION))),
@@ -116,15 +116,17 @@ public class AdminCompetitionController {
     }
 
     @PatchMapping("/{competitionId}/review")
-    @Operation(summary = "회원 제출 공모전 검토", description = "검토 대기 중인 회원 제출을 승인하고 공개하거나 반려합니다.")
+    @Operation(summary = "공모전 공개 검토",
+            description = "공개 대기(DRAFT) 공모전을 승인해 공개(PUBLISHED·MANUALLY_VERIFIED)하거나 반려(REJECTED, 사유 필수)합니다. "
+                    + "회원 제출·AI 수집·관리자 DRAFT 등록 모두 이 API로만 공개합니다(기존 /publish는 삭제).")
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "검토 완료"),
+            @ApiResponse(responseCode = "200", description = "검토 완료(승인 시 공개된 공모전)", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION_PUBLISHED))),
             @ApiResponse(responseCode = "400", description = "잘못된 검토 요청 또는 반려 사유 누락"),
             @ApiResponse(responseCode = "401", description = "로그인 필요"),
             @ApiResponse(responseCode = "403", description = "활성 관리자 권한 필요"),
             @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "이미 처리됐거나 검토 대기 상태가 아님")
+            @ApiResponse(responseCode = "409", description = "이미 공개·반려돼 DRAFT 상태가 아님")
     })
     public ResponseEntity<AdminCompetitionResponse> reviewSubmission(
             @PathVariable @Positive Long competitionId,
@@ -133,28 +135,5 @@ public class AdminCompetitionController {
     ) {
         return ResponseEntity.ok(competitionService.reviewSubmission(
                 Long.valueOf(authentication.getName()), competitionId, request));
-    }
-
-    @PatchMapping("/{competitionId}/publish")
-    @Operation(
-            summary = "관리자 공모전 공개 승인",
-            description = "DRAFT 상태인 공모전을 PUBLISHED 상태로 변경합니다. 공개된 공모전은 전체 공모전 목록에 노출됩니다."
-    )
-    @SecurityRequirement(name = "JWT")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "공모전 공개 승인 성공", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminCompetitionResponse.class), examples = @ExampleObject(value = SwaggerExamples.ADMIN_COMPETITION_PUBLISHED))),
-            @ApiResponse(responseCode = "400", description = "DRAFT 상태가 아닌 공모전 승인 시도"),
-            @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
-            @ApiResponse(responseCode = "403", description = "관리자 권한 없음"),
-            @ApiResponse(responseCode = "404", description = "공모전을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "회원 제출은 검토 API에서 승인해야 함"),
-            @ApiResponse(responseCode = "500", description = "서버 내부 오류")
-    })
-    public ResponseEntity<AdminCompetitionResponse> publishCompetition(
-            @PathVariable Long competitionId,
-            Authentication authentication
-    ) {
-        Long adminUserId = Long.valueOf(authentication.getName());
-        return ResponseEntity.ok(competitionService.publishByAdmin(adminUserId, competitionId));
     }
 }

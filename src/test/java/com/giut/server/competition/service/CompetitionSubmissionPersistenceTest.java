@@ -175,7 +175,8 @@ class CompetitionSubmissionPersistenceTest {
                 .andExpect(jsonPath("$.competitions[0].submittedByUserId").value(member.getId()))
                 .andExpect(jsonPath("$.competitions[0].submissionSourceUrl").value(SOURCE));
         mvc.perform(json(patch(ADMIN + "/" + id + "/review"), member, APPROVE)).andExpect(status().isForbidden());
-        mvc.perform(as(patch(ADMIN + "/" + id + "/publish"), admin)).andExpect(status().isConflict());
+        // 별도 공개 API는 삭제됐다. 공개는 /review 승인으로만 한다.
+        mvc.perform(as(patch(ADMIN + "/" + id + "/publish"), admin)).andExpect(status().isNotFound());
         mvc.perform(json(put(ADMIN + "/" + id), admin, """
                 {"title":"우회 수정","category":"WEB_MOBILE_IT","summary":"소개","publicationStatus":"PUBLISHED",
                  "applicationEndAt":"2099-01-01T00:00:00Z",

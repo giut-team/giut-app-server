@@ -14,7 +14,9 @@ import java.util.Objects;
         @UniqueConstraint(name = "uk_competitions_submission_url_hash", columnNames = "submission_source_url_hash"),
         indexes = {
         @Index(name = "idx_competitions_status_id", columnList = "publication_status, id"),
-        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at")
+        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at"),
+        // 스크랩 순 정렬(publication_status = ? ORDER BY scrap_count DESC, id DESC). InnoDB 보조 인덱스 끝에 PK가 붙어 id까지 정렬된다.
+        @Index(name = "idx_competitions_status_scrap_count", columnList = "publication_status, scrap_count")
 }) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Competition extends BaseTimeEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -86,6 +88,16 @@ public class Competition extends BaseTimeEntity {
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;
+
+    /**
+     * competition_scraps 행 수의 비정규화 사본(스크랩 순 정렬용). 스크랩 행을 실제로 추가·삭제한 같은 트랜잭션에서
+     * 원자적 UPDATE로 ±1 한다({@code CompetitionRepository#incrementScrapCount}).
+     * {@code updatable = false}: Hibernate는 엔티티 UPDATE에 모든 컬럼을 넣으므로, 공모전을 수정·저장할 때 읽어 둔 옛 값으로
+     * 동시 스크랩 증감을 덮어쓰지 않게 엔티티 UPDATE에서 이 컬럼을 뺀다(JPQL 일괄 UPDATE는 영향 없음).
+     */
+    @Column(name = "scrap_count", nullable = false, updatable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private long scrapCount;
 
     public static Competition create(
             String title,
@@ -164,10 +176,10 @@ public class Competition extends BaseTimeEntity {
         return submissionSourceUrlHash != null;
     }
 
+    /** 등록 경로(회원·AI·관리자)와 무관하게 공개 대기(DRAFT) 공모전을 승인해 공개하거나 반려한다. */
     public void reviewSubmission(boolean approved, User reviewer) {
-        if (!isMemberSubmission() || publicationStatus != PublicationStatus.DRAFT
-                || verificationStatus != VerificationStatus.MANUAL_REVIEW_PENDING) {
-            throw new IllegalStateException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        if (publicationStatus != PublicationStatus.DRAFT) {
+            throw new IllegalStateException("공개 대기(DRAFT) 중인 공모전만 검토할 수 있습니다.");
         }
         if (approved) {
             verificationStatus = VerificationStatus.MANUALLY_VERIFIED;

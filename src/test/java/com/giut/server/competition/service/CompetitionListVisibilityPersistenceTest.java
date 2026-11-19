@@ -2,6 +2,7 @@ package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.entity.CompetitionScrap;
 import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
@@ -49,6 +50,7 @@ class CompetitionListVisibilityPersistenceTest {
     @Autowired private CompetitionTop5Cache top5Cache;
     @Autowired private CompetitionService competitionService;
     @Autowired private CompetitionScrapRepository scraps;
+    @Autowired private org.springframework.transaction.support.TransactionTemplate transactions;
     private MockMvc mvc;
     private User admin;
     private User verified;
@@ -446,6 +448,127 @@ class CompetitionListVisibilityPersistenceTest {
             mvc.perform(as(admin, get("/api/competitions").param(param[0], param[1])))
                     .andExpect(status().isBadRequest());
         }
+    }
+
+    @Test
+    void sortParameterOrdersByDeadlineLatestViewsOrScrapsWithLatestAsTieBreaker() throws Exception {
+        Instant now = Instant.now();
+        Competition oldestLateDeadline = save("오래됨-늦은마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(30 * 86400));
+        Competition middleEarlyDeadline = save("중간-빠른마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(86400));
+        Competition newestMiddleDeadline = save("최신-중간마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(7 * 86400));
+        Competition newestTieDeadline = save("최신-빠른마감-동률", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), middleEarlyDeadline.getApplicationEndAt());
+        Competition hiddenDraft = competition(Competition.PublicationStatus.DRAFT); // 비공개는 어떤 정렬에도 나오지 않는다.
+        transactions.executeWithoutResult(status -> {
+            for (int i = 0; i < 5; i++) competitions.incrementViewCount(oldestLateDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+            for (int i = 0; i < 2; i++) competitions.incrementViewCount(newestMiddleDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+            for (int i = 0; i < 2; i++) competitions.incrementViewCount(middleEarlyDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+        });
+
+        // 기본(파라미터 없음)과 LATEST는 기존과 같은 등록 최신순이다.
+        for (String sort : new String[]{null, "LATEST"}) {
+            var request = get("/api/competitions");
+            if (sort != null) request = request.param("sort", sort);
+            mvc.perform(as(verified, request)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElements").value(4))
+                    .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                            newestTieDeadline.getId().intValue(), newestMiddleDeadline.getId().intValue(),
+                            middleEarlyDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())));
+        }
+        // 마감 임박순. 같은 마감이면 최신 등록이 먼저다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "DEADLINE"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue(),
+                        newestMiddleDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())));
+        // 조회수 순. 같은 조회수면 최신 등록이 먼저다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "VIEWS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        oldestLateDeadline.getId().intValue(), newestMiddleDeadline.getId().intValue(),
+                        middleEarlyDeadline.getId().intValue(), newestTieDeadline.getId().intValue())));
+        // 정렬은 페이지를 나누기 전에 적용된다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "VIEWS").param("size", "2").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        middleEarlyDeadline.getId().intValue(), newestTieDeadline.getId().intValue())));
+        // 스크랩 순. 스크랩 추가 API가 함께 갱신하는 scrap_count로 정렬한다. 같은 수면 최신 등록이 먼저다.
+        competitionService.scrapCompetition(verified.getId(), newestTieDeadline.getId());
+        competitionService.scrapCompetition(admin.getId(), newestTieDeadline.getId());
+        competitionService.scrapCompetition(verified.getId(), middleEarlyDeadline.getId());
+        competitionService.scrapCompetition(unverified.getId(), middleEarlyDeadline.getId());
+        competitionService.scrapCompetition(admin.getId(), newestMiddleDeadline.getId());
+        // 비공개 공모전은 스크랩 API로 스크랩할 수 없으므로 행만 직접 넣는다(목록에는 나오지 않아야 한다).
+        scraps.saveAndFlush(CompetitionScrap.create(verified, hiddenDraft));
+        scraps.saveAndFlush(CompetitionScrap.create(admin, hiddenDraft));
+        scraps.saveAndFlush(CompetitionScrap.create(unverified, hiddenDraft));
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue(),
+                        newestMiddleDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())))
+                .andExpect(jsonPath("$.competitions[*].scrapCount").value(org.hamcrest.Matchers.contains(2, 2, 1, 0)));
+        // 필터·페이지와 함께 써도 count는 정렬과 무관하게 맞다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS").param("size", "3").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        oldestLateDeadline.getId().intValue())));
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS").param("keyword", "빠른마감")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue())));
+        for (String invalid : new String[]{"POPULAR", "OLDEST"}) {
+            mvc.perform(as(verified, get("/api/competitions").param("sort", invalid))).andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void scrapCountColumnFollowsActualScrapRowsAndIsUsedForScrapSort() throws Exception {
+        Competition first = competition(Competition.PublicationStatus.PUBLISHED);
+        Competition second = competition(Competition.PublicationStatus.PUBLISHED);
+
+        competitionService.scrapCompetition(verified.getId(), first.getId());
+        competitionService.scrapCompetition(verified.getId(), first.getId()); // 중복 스크랩은 수를 늘리지 않는다.
+        competitionService.scrapCompetition(admin.getId(), first.getId());
+        competitionService.removeCompetitionScrap(unverified.getId(), first.getId()); // 없는 스크랩 취소는 줄이지 않는다.
+        assertThat(competitions.findById(first.getId()).orElseThrow().getScrapCount()).isEqualTo(2);
+        assertThat(scraps.countByCompetition_Id(first.getId())).isEqualTo(2);
+
+        competitionService.scrapCompetition(unverified.getId(), second.getId());
+        competitionService.removeCompetitionScrap(verified.getId(), first.getId());
+        competitionService.removeCompetitionScrap(verified.getId(), first.getId());
+        assertThat(competitions.findById(first.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        second.getId().intValue(), first.getId().intValue())))
+                .andExpect(jsonPath("$.competitions[*].scrapCount").value(org.hamcrest.Matchers.contains(1, 1)));
+
+        // HTTP 경로도 같은 트랜잭션에서 카운터를 갱신한다.
+        mvc.perform(as(admin, post("/api/competitions/" + second.getId() + "/scrap"))).andExpect(status().isOk());
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(2);
+        mvc.perform(as(admin, delete("/api/competitions/" + second.getId() + "/scrap"))).andExpect(status().isOk());
+        assertThat(competitions.findById(second.getId()).orElseThrow().getScrapCount()).isEqualTo(1);
+    }
+
+    @Test
+    void savingAStaleCompetitionEntityDoesNotOverwriteConcurrentScrapCountChanges() {
+        Competition target = competition(Competition.PublicationStatus.PUBLISHED);
+        org.springframework.transaction.support.TransactionTemplate newTransaction =
+                new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
+        newTransaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        transactions.executeWithoutResult(status -> {
+            Competition stale = competitions.findById(target.getId()).orElseThrow(); // scrapCount = 0으로 읽어 둔다.
+            // 그 사이 다른 트랜잭션에서 스크랩이 들어와 commit된다.
+            newTransaction.executeWithoutResult(inner -> competitionService.scrapCompetition(verified.getId(), target.getId()));
+            stale.changePrizeInfo("상금 수정"); // 같은 엔티티의 다른 필드를 바꿔 UPDATE가 나가게 한다.
+        });
+
+        Competition reloaded = competitions.findById(target.getId()).orElseThrow();
+        assertThat(reloaded.getPrizeInfo()).isEqualTo("상금 수정");
+        assertThat(reloaded.getScrapCount()).isEqualTo(1);
     }
 
     private Competition competition(Competition.PublicationStatus state) {

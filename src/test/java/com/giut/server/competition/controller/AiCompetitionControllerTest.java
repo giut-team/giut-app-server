@@ -7,6 +7,8 @@ import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
 import com.giut.server.competition.dto.request.AiTargetParticipants;
+import com.giut.server.competition.dto.request.ReviewCompetitionSubmissionRequest;
+import com.giut.server.competition.service.CompetitionService;
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
@@ -63,6 +65,7 @@ class AiCompetitionControllerTest {
     @Autowired CompetitionIngestionFailureRepository failures;
     @Autowired UserRepository users;
     @Autowired JwtProvider jwt;
+    @Autowired CompetitionService competitionService;
     MockMvc mvc;
 
     @BeforeEach
@@ -118,7 +121,7 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void aiTargetAndPrizeAreSavedAndPublished() throws Exception {
+    void aiTargetAndPrizeAreSavedAndPublishedAfterAdminReview() throws Exception {
         String body = BODY.replace("UNIV_ONLY", "NONE")
                 .replace("상금 미정", "총상금 1,000만 원");
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(body))
@@ -126,9 +129,13 @@ class AiCompetitionControllerTest {
                 .andExpect(jsonPath("$.registrationSource").value("AI"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"))
                 .andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
-                .andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"));
+                .andExpect(jsonPath("$.publicationStatus").value("DRAFT"));
         Long id = competitions.findAll().getFirst().getId();
         User user = users.saveAndFlush(User.createOAuthUser("prize@example.com", "학생", User.OAuthProvider.KAKAO, "prize"));
+        // 승인 전에는 공개 상세에 없다.
+        mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
+                .andExpect(status().isNotFound());
+        approve(id);
         mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.prizeInfo").value("총상금 1,000만 원"))
                 .andExpect(jsonPath("$.targetParticipants").value("NONE"));
@@ -140,6 +147,7 @@ class AiCompetitionControllerTest {
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(single))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
         Long id = competitions.findAll().getFirst().getId();
+        approve(id);
         User user = users.saveAndFlush(User.createOAuthUser("amount@example.com", "학생", User.OAuthProvider.KAKAO, "amount"));
         mvc.perform(get("/api/competitions/" + id).header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalPrizeAmount").value(10000000));
@@ -286,7 +294,8 @@ class AiCompetitionControllerTest {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].activityType").value("HACKATHON"))
                 .andExpect(jsonPath("$[1].activityType").value("COMPETITION"))
-                .andExpect(jsonPath("$[0].verificationStatus").value("AUTO_VERIFIED"))
+                .andExpect(jsonPath("$[0].publicationStatus").value("DRAFT"))
+                .andExpect(jsonPath("$[0].verificationStatus").value("MANUAL_REVIEW_PENDING"))
                 .andExpect(jsonPath("$[0].registrationSource").value("AI"))
                 .andExpect(jsonPath("$[1].registrationSource").value("AI"));
         assertThat(competitions.count()).isEqualTo(2);
@@ -409,6 +418,7 @@ class AiCompetitionControllerTest {
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
                         .content(aiBody.replace("HACKATHON", "CONTEST").replace("ai-contest", "ai-competition")))
                 .andExpect(status().isCreated());
+        competitions.findAll().forEach(competition -> approve(competition.getId()));
         User user = users.saveAndFlush(User.createOAuthUser("ai-category@example.com", "학생", User.OAuthProvider.KAKAO, "ai-category"));
         mvc.perform(get("/api/competitions").param("activityType", "HACKATHON").param("category", "AI_DATA")
                         .header("Authorization", "Bearer " + jwt.generateAccessToken(user)))
@@ -435,16 +445,17 @@ class AiCompetitionControllerTest {
     }
 
     @Test
-    void verifiedAiSubmissionIsPublishedAndDuplicateCannotOverwrite() throws Exception {
+    void aiSubmissionWaitsForAdminReviewAndDuplicateCannotOverwrite() throws Exception {
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(BODY))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.publicationStatus").value("PUBLISHED"))
-                .andExpect(jsonPath("$.verificationStatus").value("AUTO_VERIFIED"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.publicationStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.verificationStatus").value("MANUAL_REVIEW_PENDING"));
         mvc.perform(post(PATH).header("X-AI-API-Key", KEY).contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isConflict());
         assertThat(competitions.count()).isEqualTo(1);
         assertThat(urls.count()).isEqualTo(1);
         assertThat(logs.findAll()).singleElement().satisfies(log -> {
             assertThat(log.getVerificationMethod().name()).isEqualTo("AUTO_EXTRACTION");
+            assertThat(log.getToStatus()).isEqualTo(Competition.VerificationStatus.MANUAL_REVIEW_PENDING);
             assertThat(log.getActorUser()).isNull();
         });
     }
@@ -534,5 +545,13 @@ class AiCompetitionControllerTest {
                 .andExpect(jsonPath("$[1].activityType").value("HACKATHON"));
         assertThat(competitions.count()).isEqualTo(2);
         assertThat(urls.count()).isEqualTo(2);
+    }
+
+    /** AI 등록은 검토 대기로 저장되므로, 공개 API를 확인하려면 관리자가 먼저 승인해야 한다. */
+    private void approve(Long competitionId) {
+        User reviewer = users.findAll().stream().filter(u -> u.getRole() == User.Role.ADMIN).findFirst()
+                .orElseGet(() -> users.saveAndFlush(User.createAdmin("ai-reviewer@example.com", "hash", "검토자")));
+        competitionService.reviewSubmission(reviewer.getId(), competitionId,
+                new ReviewCompetitionSubmissionRequest(ReviewCompetitionSubmissionRequest.Decision.APPROVE, null));
     }
 }

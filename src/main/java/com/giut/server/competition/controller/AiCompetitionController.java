@@ -37,7 +37,7 @@ public class AiCompetitionController {
     private final AiCompetitionBatchService aiCompetitionBatchService;
 
     @PostMapping
-    @Operation(summary = "AI 검증 공모전 등록", description = "X-AI-API-Key 인증. 수신 즉시 PUBLISHED, AUTO_VERIFIED로 등록합니다.",
+    @Operation(summary = "AI 검증 공모전 등록", description = "X-AI-API-Key 인증. 공개 대기(DRAFT)·검토 대기(MANUAL_REVIEW_PENDING)로 저장하며, 관리자 검토 API(/review)에서 승인해야 공개(PUBLISHED·MANUALLY_VERIFIED)됩니다. 공식(OFFICIAL) URL이 이미 다른 공모전에 등록돼 있으면 반려(REJECTED)·보관(ARCHIVED)된 공모전이라도 409입니다.",
             parameters = @Parameter(name = "X-AI-API-Key", in = ParameterIn.HEADER, required = true,
                     description = "AI 서버 전용 비밀키"))
     public ResponseEntity<AdminCompetitionResponse> create(@Valid @RequestBody AiCompetitionRequest request) {
@@ -45,7 +45,7 @@ public class AiCompetitionController {
     }
 
     @PostMapping("/batch")
-    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~20건. 공고마다 따로 저장하므로 일부가 실패해도 나머지는 저장됩니다. 실패한 공고는 원본·사유·수신 시각과 함께 실패 기록에 남고 서버 로그에 AI_INGESTION_FAILURE로 기록됩니다. 응답은 201이며 저장에 성공한 공고만 담습니다. 본문 형식 오류·0건·21건 이상은 400, DB 연결 장애처럼 처리를 이어갈 수 없으면 500입니다.",
+    @Operation(summary = "AI 검증 공모전 일괄 등록", description = "1~20건. 각 공고는 단건 등록과 같이 DRAFT·MANUAL_REVIEW_PENDING으로 저장되고 관리자 검토 후 공개됩니다. 공고마다 따로 저장하므로 일부가 실패해도 나머지는 저장됩니다. 실패한 공고는 원본·사유·수신 시각과 함께 실패 기록에 남고 서버 로그에 AI_INGESTION_FAILURE로 기록됩니다. 응답은 201이며 저장에 성공한 공고만 담습니다. 본문 형식 오류·0건·21건 이상은 400, DB 연결 장애처럼 처리를 이어갈 수 없으면 500입니다.",
             parameters = @Parameter(name = "X-AI-API-Key", in = ParameterIn.HEADER, required = true,
                     description = "AI 서버 전용 비밀키"))
     public ResponseEntity<List<AdminCompetitionResponse>> createBatch(@Valid @RequestBody AiCompetitionBatchRequest request) {

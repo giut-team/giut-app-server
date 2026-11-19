@@ -88,7 +88,7 @@ class CompetitionSeedServiceTest {
         });
         verify(competitionService, times(10)).createByAdmin(eq(10L), any());
         verify(competitionService, never()).updateByAdmin(any(), any(), any());
-        verify(competitionService, never()).publishByAdmin(any(), any());
+        verify(competitionService, never()).reviewSubmission(any(), any(), any());
     }
 
     @Test

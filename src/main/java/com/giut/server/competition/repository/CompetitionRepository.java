@@ -55,4 +55,18 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long>,
             """)
     int incrementViewCount(@Param("competitionId") Long competitionId,
                            @Param("publicationStatus") Competition.PublicationStatus publicationStatus);
+
+    /**
+     * 스크랩 행을 실제로 추가한 트랜잭션에서 호출한다. 읽고-더하고-쓰는 대신 DB에서 원자적으로 더해
+     * 서로 다른 회원의 동시 스크랩에도 값이 유실되지 않는다. 영속성 컨텍스트는 비우지 않는다(같은 트랜잭션에서 다시 읽지 않음).
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update Competition competition set competition.scrapCount = competition.scrapCount + 1 where competition.id = :competitionId")
+    int incrementScrapCount(@Param("competitionId") Long competitionId);
+
+    /** 스크랩 행을 실제로 삭제했을 때만 호출한다. 어떤 경우에도 음수가 되지 않게 한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("update Competition competition set competition.scrapCount = competition.scrapCount - 1 "
+            + "where competition.id = :competitionId and competition.scrapCount > 0")
+    int decrementScrapCount(@Param("competitionId") Long competitionId);
 }

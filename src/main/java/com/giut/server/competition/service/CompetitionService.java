@@ -89,7 +89,7 @@ public class CompetitionService {
 
         Page<Competition> competitionPage = competitionRepository.findAll(
                 specification,
-                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id"))
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), request.sortOrDefault().toSort())
         );
         List<PublicCompetitionResponse> responses = toPublicResponses(competitionPage.getContent(), now);
 
@@ -187,10 +187,13 @@ public class CompetitionService {
     @Transactional
     public CompetitionScrapResponse scrapCompetition(Long userId, Long competitionId) {
         User user = findActiveUserForScrapUpdate(userId);
-        Competition competition = findPublishedCompetition(competitionId);
+        Competition competition = findPublishedCompetitionForScrapUpdate(competitionId);
 
+        // 같은 회원의 요청은 회원 행 잠금으로 직렬화돼 있어 확인 뒤 저장해도 중복 행이 생기지 않는다.
+        // 행을 실제로 추가했을 때만, 같은 트랜잭션에서 스크랩 수를 1 늘린다(함께 commit·rollback).
         if (!competitionScrapRepository.existsByUser_IdAndCompetition_Id(userId, competitionId)) {
             competitionScrapRepository.save(CompetitionScrap.create(user, competition));
+            competitionRepository.incrementScrapCount(competitionId);
         }
         return new CompetitionScrapResponse(competitionId, true);
     }
@@ -198,9 +201,11 @@ public class CompetitionService {
     @Transactional
     public CompetitionScrapResponse removeCompetitionScrap(Long userId, Long competitionId) {
         findActiveUserForScrapUpdate(userId);
-        findPublishedCompetition(competitionId);
+        findPublishedCompetitionForScrapUpdate(competitionId);
 
-        competitionScrapRepository.deleteByUser_IdAndCompetition_Id(userId, competitionId);
+        if (competitionScrapRepository.deleteByUserIdAndCompetitionId(userId, competitionId) > 0) {
+            competitionRepository.decrementScrapCount(competitionId);
+        }
         return new CompetitionScrapResponse(competitionId, false);
     }
 
@@ -246,9 +251,12 @@ public class CompetitionService {
     public AdminCompetitionResponse createByAdmin(Long adminUserId, CreateCompetitionRequest input) {
         User admin = findActiveAdmin(adminUserId);
         UpsertCompetitionRequest request = input.toUpsertRequest();
-        // 관리자가 직접 등록하면 입력값과 무관하게 항상 수동 검증으로 고정한다
-        // (관리자가 내용을 보고 등록한다는 전제라 별도 검증 상태 선택지를 주지 않음).
-        Competition.VerificationStatus verificationStatus = Competition.VerificationStatus.MANUALLY_VERIFIED;
+        // 공개는 관리자 승인으로만 이뤄진다. DRAFT로 등록하면 회원 제출·AI 등록과 같은 검토 대기가 되어 /review로 공개한다.
+        // 그 밖의 상태(바로 공개 등)는 관리자가 내용을 보고 직접 결정한 것으로 보고 기존처럼 수동 검증으로 저장한다.
+        Competition.VerificationStatus verificationStatus =
+                request.publicationStatus() == Competition.PublicationStatus.DRAFT
+                        ? Competition.VerificationStatus.MANUAL_REVIEW_PENDING
+                        : Competition.VerificationStatus.MANUALLY_VERIFIED;
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
@@ -289,15 +297,16 @@ public class CompetitionService {
         Competition.ActivityType activityType = input.activityType().toActivityType();
         UpsertCompetitionRequest request = new UpsertCompetitionRequest(
                 input.title(), input.primaryCategory(), input.hostOrganization(), input.targetParticipants().name(), input.summary(),
-                input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.PUBLISHED, input.urls());
+                input.applicationStartAt(), input.applicationEndAt(), Competition.PublicationStatus.DRAFT, input.urls());
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
         validateUrlOwnership(urls, null);
         Competition competition = Competition.create(
                 request.title().trim(), request.category(), trimToNull(request.hostOrganization()),
                 request.targetParticipants().trim(), trimToNull(request.summary()), request.applicationStartAt(),
-                request.applicationEndAt(), Competition.PublicationStatus.PUBLISHED,
-                Competition.VerificationStatus.AUTO_VERIFIED, null);
+                // AI가 수집한 공고는 바로 공개하지 않는다. 관리자가 /review로 하나씩 승인해야 공개된다.
+                request.applicationEndAt(), Competition.PublicationStatus.DRAFT,
+                Competition.VerificationStatus.MANUAL_REVIEW_PENDING, null);
         competition.changeActivityType(activityType);
         competition.changePrizeInfo(trimToNull(input.prizeInfo()));
         competition.changeTotalPrizeAmount(input.totalPrizeAmount());
@@ -347,9 +356,9 @@ public class CompetitionService {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
         Competition.VerificationStatus previousStatus = competition.getVerificationStatus();
-        if (!competition.isMemberSubmission() || previousStatus != Competition.VerificationStatus.MANUAL_REVIEW_PENDING
-                || competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
-            throw new ConflictException("검토 대기 중인 회원 제출만 처리할 수 있습니다.");
+        // 회원 제출·AI 등록·관리자 DRAFT 등록 모두 같은 검토로 공개하거나 반려한다. 이미 공개·반려된 건은 다시 처리하지 않는다.
+        if (competition.getPublicationStatus() != Competition.PublicationStatus.DRAFT) {
+            throw new ConflictException("공개 대기(DRAFT) 중인 공모전만 검토할 수 있습니다.");
         }
 
         boolean approved = request.decision() == ReviewCompetitionSubmissionRequest.Decision.APPROVE;
@@ -360,17 +369,17 @@ public class CompetitionService {
         competition.reviewSubmission(approved, admin);
         competitionVerificationLogRepository.save(CompetitionVerificationLog.createAdminReviewLog(
                 competition, previousStatus, competition.getVerificationStatus(), admin, reason));
-        return toResponse(competition, CompetitionRegistrationSource.USER,
-                competitionUrlRepository.findAllByCompetition_Id(competitionId));
+        return toResponse(competition, competitionUrlRepository.findAllByCompetition_Id(competitionId));
     }
 
     @Transactional
     public AdminCompetitionResponse updateByAdmin(Long adminUserId, Long competitionId, UpsertCompetitionRequest request) {
         User admin = findActiveAdmin(adminUserId);
         Competition competition = findEditableCompetitionForUpdate(competitionId);
-        if (competition.isMemberSubmission() && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED
-                && competition.getPublicationStatus() != request.publicationStatus()) {
-            throw new ConflictException("회원 제출의 게시 상태는 검토 API에서 변경할 수 있습니다.");
+        // 공개 상태는 수정 API로 바꾸지 않는다. DRAFT → PUBLISHED·REJECTED는 검토 API(/review), 보관은 삭제 API로만 한다.
+        // 그래서 검토를 건너뛴 공개, 반려 후 DRAFT로 되돌려 다시 검토받기, 공개 건을 DRAFT로 내리기가 모두 막힌다.
+        if (request.publicationStatus() != competition.getPublicationStatus()) {
+            throw new ConflictException("공개 상태는 수정 API로 바꿀 수 없습니다. 공개·반려는 검토 API, 보관은 삭제 API를 사용하세요.");
         }
         validateRequest(request);
         List<NormalizedCompetitionUrl> urls = normalizeUrls(request.urls());
@@ -409,21 +418,6 @@ public class CompetitionService {
     }
 
     @Transactional
-    public AdminCompetitionResponse publishByAdmin(Long adminUserId, Long competitionId) {
-        findActiveAdmin(adminUserId);
-        Competition competition = findEditableCompetitionForUpdate(competitionId);
-
-        if (competition.isMemberSubmission()
-                && competition.getVerificationStatus() != Competition.VerificationStatus.MANUALLY_VERIFIED) {
-            throw new ConflictException("회원 제출은 관리자 검토 후 공개할 수 있습니다.");
-        }
-        competition.publish();
-
-        List<CompetitionUrl> urls = competitionUrlRepository.findAllByCompetition_Id(competitionId);
-        return toResponse(competition, urls);
-    }
-
-    @Transactional
     public void deleteByAdmin(Long adminUserId, Long competitionId) {
         findActiveAdmin(adminUserId);
         if (competitionId == null || competitionId <= 0) {
@@ -459,6 +453,17 @@ public class CompetitionService {
             throw new ForbiddenException("활성 상태의 사용자만 공모전을 스크랩할 수 있습니다.");
         }
         return user;
+    }
+
+    /**
+     * 스크랩 추가·취소용. 공모전 행을 처음부터 배타 잠금으로 읽는다. 잠금 없이 읽으면 스크랩 행 INSERT의 외래 키 검사가
+     * 공모전 행에 공유 잠금을 걸고, 뒤이은 scrap_count UPDATE가 배타 잠금으로 올리려다 다른 회원의 같은 시도와 교착된다
+     * (실제 MySQL에서 재현). 잠금 순서는 항상 회원 행 → 공모전 행이다.
+     */
+    private Competition findPublishedCompetitionForScrapUpdate(Long competitionId) {
+        return competitionRepository.findByIdForUpdate(competitionId)
+                .filter(competition -> competition.getPublicationStatus() == Competition.PublicationStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("공개된 공모전을 찾을 수 없습니다."));
     }
 
     private Competition findPublishedCompetition(Long competitionId) {

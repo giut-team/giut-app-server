@@ -43,7 +43,7 @@ public class CompetitionController {
     @GetMapping
     @Operation(
             summary = "전체 공모전 조회",
-            description = "마감 일시가 현재보다 미래인 PUBLISHED 공모전을 페이지 단위로 조회합니다. 마감 일시가 없거나 마감된 공모전은 제외합니다. CLOSED 필터 결과는 현재 비어 있습니다. 관리자와 일반 사용자에게 동일하게 적용하며 DRAFT, REJECTED, ARCHIVED는 제외합니다. 관리자는 DRAFT를 관리자 공모전 목록에서 확인합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다."
+            description = "마감 일시가 현재보다 미래인 PUBLISHED 공모전을 페이지 단위로 조회합니다. 마감 일시가 없거나 마감된 공모전은 제외합니다. CLOSED 필터 결과는 현재 비어 있습니다. 관리자와 일반 사용자에게 동일하게 적용하며 DRAFT, REJECTED, ARCHIVED는 제외합니다. 관리자는 DRAFT를 관리자 공모전 목록에서 확인합니다. verified는 게시 상태와 무관하게 AUTO_VERIFIED 또는 MANUALLY_VERIFIED일 때만 true입니다. 키워드, 카테고리, 모집 상태는 모두 선택 필터이며 함께 보내면 AND 조건으로 적용됩니다. teamCount는 RECRUITING 상태의 팀만 집계하며, 공모전 마감일과 무관합니다. sort로 정렬을 고릅니다: DEADLINE(마감 임박 순), LATEST(최근 등록 순, 기본), VIEWS(조회수 순), SCRAPS(스크랩 순). 동률이면 최근 등록 순입니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({

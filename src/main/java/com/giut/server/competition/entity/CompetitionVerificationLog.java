@@ -60,7 +60,8 @@ public class CompetitionVerificationLog {
     public static CompetitionVerificationLog createAiVerificationLog(Competition competition) {
         CompetitionVerificationLog log = new CompetitionVerificationLog();
         log.competition = competition;
-        log.toStatus = Competition.VerificationStatus.AUTO_VERIFIED;
+        // AI 등록은 검토 대기로 저장된다. 로그도 실제 저장 상태를 남긴다(출처 판별은 방법·사유·행위자로 하며 상태와 무관).
+        log.toStatus = competition.getVerificationStatus();
         log.verificationMethod = Method.AUTO_EXTRACTION;
         log.reason = AI_CREATION_REASON;
         return log;
