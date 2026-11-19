@@ -30,6 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -279,7 +280,9 @@ class PushDispatchPersistenceTest {
     void stalePendingIsNotSentLateAndOldFinishedDeliveriesArePurged() {
         device(member, "install-member-1", "ExponentPushToken[member]");
         notify(member, "first");
-        Instant tooLate = Instant.now().plus(properties.maxPendingAge()).plusSeconds(1);
+        // DB(DATETIME(6))는 마이크로초까지만 저장한다. Linux JDK의 Instant.now()는 나노초까지 있어,
+        // 자르지 않으면 저장된 완료 시각이 같은 값의 비교 기준보다 작아져 아래 경계 검사가 CI에서만 실패했다.
+        Instant tooLate = Instant.now().plus(properties.maxPendingAge()).plusSeconds(1).truncatedTo(ChronoUnit.MILLIS);
 
         assertThat(store.expireStalePending(tooLate)).isEqualTo(1);
         PushDelivery expired = deliveries.findAll().getFirst();
