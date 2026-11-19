@@ -72,6 +72,11 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
 
+        // 가입 직후·인증 해제된 사용자도 공유 기기에서 세션을 끝낼 수 있어야 한다(토큰 폐기·쿠키 삭제).
+        if (HttpMethod.POST.matches(method) && "/api/auth/logout".equals(path)) {
+            return false;
+        }
+
         if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
             return false;
         }

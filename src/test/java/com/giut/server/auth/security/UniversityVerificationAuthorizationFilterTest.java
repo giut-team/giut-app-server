@@ -184,6 +184,16 @@ class UniversityVerificationAuthorizationFilterTest {
         assertDenied(invoke("DELETE", "/api/users/43"));
     }
 
+    @Test
+    void unverifiedAccountCanLogoutOnlyThroughTheExactPostRoute() throws Exception {
+        authenticateAsStudent("42");
+        assertThat(invoke("POST", "/api/auth/logout").continued()).isTrue();
+        verifyNoInteractions(userRepository);
+        assertDenied(invoke("GET", "/api/auth/logout"));
+        assertDenied(invoke("POST", "/api/auth/logout/extra"));
+        assertDenied(invoke("POST", "/api/auth/logout-all"));
+    }
+
     private void authenticateAsStudent(String userId) {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(
