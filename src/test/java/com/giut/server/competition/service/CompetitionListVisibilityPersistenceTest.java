@@ -2,6 +2,7 @@ package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.entity.CompetitionScrap;
 import com.giut.server.competition.dto.request.CompetitionPageRequest;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionScrapRepository;
@@ -49,6 +50,7 @@ class CompetitionListVisibilityPersistenceTest {
     @Autowired private CompetitionTop5Cache top5Cache;
     @Autowired private CompetitionService competitionService;
     @Autowired private CompetitionScrapRepository scraps;
+    @Autowired private org.springframework.transaction.support.TransactionTemplate transactions;
     private MockMvc mvc;
     private User admin;
     private User verified;
@@ -445,6 +447,78 @@ class CompetitionListVisibilityPersistenceTest {
                 new String[]{"size", "21"}, new String[]{"category", "INVALID"}, new String[]{"status", "DRAFT"})) {
             mvc.perform(as(admin, get("/api/competitions").param(param[0], param[1])))
                     .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void sortParameterOrdersByDeadlineLatestViewsOrScrapsWithLatestAsTieBreaker() throws Exception {
+        Instant now = Instant.now();
+        Competition oldestLateDeadline = save("오래됨-늦은마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(30 * 86400));
+        Competition middleEarlyDeadline = save("중간-빠른마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(86400));
+        Competition newestMiddleDeadline = save("최신-중간마감", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), now.plusSeconds(7 * 86400));
+        Competition newestTieDeadline = save("최신-빠른마감-동률", "주최", Competition.Category.WEB_MOBILE_IT,
+                Competition.PublicationStatus.PUBLISHED, now.minusSeconds(3600), middleEarlyDeadline.getApplicationEndAt());
+        Competition hiddenDraft = competition(Competition.PublicationStatus.DRAFT); // 비공개는 어떤 정렬에도 나오지 않는다.
+        transactions.executeWithoutResult(status -> {
+            for (int i = 0; i < 5; i++) competitions.incrementViewCount(oldestLateDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+            for (int i = 0; i < 2; i++) competitions.incrementViewCount(newestMiddleDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+            for (int i = 0; i < 2; i++) competitions.incrementViewCount(middleEarlyDeadline.getId(), Competition.PublicationStatus.PUBLISHED);
+        });
+
+        // 기본(파라미터 없음)과 LATEST는 기존과 같은 등록 최신순이다.
+        for (String sort : new String[]{null, "LATEST"}) {
+            var request = get("/api/competitions");
+            if (sort != null) request = request.param("sort", sort);
+            mvc.perform(as(verified, request)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElements").value(4))
+                    .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                            newestTieDeadline.getId().intValue(), newestMiddleDeadline.getId().intValue(),
+                            middleEarlyDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())));
+        }
+        // 마감 임박순. 같은 마감이면 최신 등록이 먼저다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "DEADLINE"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue(),
+                        newestMiddleDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())));
+        // 조회수 순. 같은 조회수면 최신 등록이 먼저다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "VIEWS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        oldestLateDeadline.getId().intValue(), newestMiddleDeadline.getId().intValue(),
+                        middleEarlyDeadline.getId().intValue(), newestTieDeadline.getId().intValue())));
+        // 정렬은 페이지를 나누기 전에 적용된다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "VIEWS").param("size", "2").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        middleEarlyDeadline.getId().intValue(), newestTieDeadline.getId().intValue())));
+        // 스크랩 순. 스크랩 수는 competition_scraps에서 센다. 같은 수면 최신 등록이 먼저다.
+        scraps.saveAndFlush(CompetitionScrap.create(verified, newestTieDeadline));
+        scraps.saveAndFlush(CompetitionScrap.create(admin, newestTieDeadline));
+        scraps.saveAndFlush(CompetitionScrap.create(verified, middleEarlyDeadline));
+        scraps.saveAndFlush(CompetitionScrap.create(unverified, middleEarlyDeadline));
+        scraps.saveAndFlush(CompetitionScrap.create(admin, newestMiddleDeadline));
+        scraps.saveAndFlush(CompetitionScrap.create(verified, hiddenDraft));
+        scraps.saveAndFlush(CompetitionScrap.create(admin, hiddenDraft));
+        scraps.saveAndFlush(CompetitionScrap.create(unverified, hiddenDraft));
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue(),
+                        newestMiddleDeadline.getId().intValue(), oldestLateDeadline.getId().intValue())))
+                .andExpect(jsonPath("$.competitions[*].scrapCount").value(org.hamcrest.Matchers.contains(2, 2, 1, 0)));
+        // 필터·페이지와 함께 써도 count는 정렬과 무관하게 맞다.
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS").param("size", "3").param("page", "1")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(4))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        oldestLateDeadline.getId().intValue())));
+        mvc.perform(as(verified, get("/api/competitions").param("sort", "SCRAPS").param("keyword", "빠른마감")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.competitions[*].id").value(org.hamcrest.Matchers.contains(
+                        newestTieDeadline.getId().intValue(), middleEarlyDeadline.getId().intValue())));
+        for (String invalid : new String[]{"POPULAR", "OLDEST"}) {
+            mvc.perform(as(verified, get("/api/competitions").param("sort", invalid))).andExpect(status().isBadRequest());
         }
     }
 

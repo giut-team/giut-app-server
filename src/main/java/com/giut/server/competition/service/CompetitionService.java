@@ -22,6 +22,7 @@ import com.giut.server.competition.dto.response.PublicCompetitionListResponse;
 import com.giut.server.competition.dto.response.PublicCompetitionResponse;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.entity.CompetitionScrap;
+import com.giut.server.competition.dto.request.CompetitionSort;
 import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.entity.CompetitionVerificationLog;
 import com.giut.server.team.entity.Team;
@@ -45,6 +46,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -86,10 +89,13 @@ public class CompetitionService {
         if (request.status() != null) {
             specification = specification.and(hasRecruitmentStatus(request.status(), now));
         }
+        if (request.sortOrDefault() == CompetitionSort.SCRAPS) {
+            specification = specification.and(orderByScrapCountDesc());
+        }
 
         Page<Competition> competitionPage = competitionRepository.findAll(
                 specification,
-                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), Sort.by(Sort.Direction.DESC, "id"))
+                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), request.sortOrDefault().toSort())
         );
         List<PublicCompetitionResponse> responses = toPublicResponses(competitionPage.getContent(), now);
 
@@ -483,6 +489,22 @@ public class CompetitionService {
                     : CompetitionRegistrationSource.AI);
         });
         return sources;
+    }
+
+    /**
+     * 스크랩 수 많은 순, 동률은 최신 등록 순. 스크랩 수는 컬럼이 없어 공모전별 competition_scraps 수를 상관 서브쿼리로 센다.
+     * 목록 조회에만 정렬을 걸고, 같은 조건으로 실행되는 count 조회(결과 타입 Long)에는 걸지 않는다.
+     */
+    private Specification<Competition> orderByScrapCountDesc() {
+        return (root, query, builder) -> {
+            if (query != null && !Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
+                Subquery<Long> scrapCount = query.subquery(Long.class);
+                Root<CompetitionScrap> scrap = scrapCount.from(CompetitionScrap.class);
+                scrapCount.select(builder.count(scrap)).where(builder.equal(scrap.get("competition"), root));
+                query.orderBy(builder.desc(scrapCount), builder.desc(root.get("id")));
+            }
+            return builder.conjunction();
+        };
     }
 
     private Specification<Competition> publishedCompetition() {

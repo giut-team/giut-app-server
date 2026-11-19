@@ -27,12 +27,20 @@ public record CompetitionSearchRequest(
         @Schema(description = "모집 상태", example = "OPEN")
         CompetitionRecruitmentStatus status,
         @Schema(description = "활동 유형. 분야 category와 독립적으로 적용합니다.", example = "HACKATHON")
-        Competition.ActivityType activityType
+        Competition.ActivityType activityType,
+
+        @Schema(description = "정렬 기준. DEADLINE(마감 임박 순), LATEST(최근 등록 순, 기본), VIEWS(조회수 순), "
+                + "SCRAPS(스크랩 순). 동률이면 최근 등록 순입니다.", example = "DEADLINE", defaultValue = "LATEST")
+        CompetitionSort sort
 ) {
 
     public CompetitionSearchRequest(Integer page, Integer size, String keyword, Competition.Category category,
                                     CompetitionRecruitmentStatus status) {
-        this(page, size, keyword, category, status, null);
+        this(page, size, keyword, category, status, null, null);
+    }
+
+    public CompetitionSort sortOrDefault() {
+        return sort == null ? CompetitionSort.LATEST : sort;
     }
 
     public int pageOrDefault() {
