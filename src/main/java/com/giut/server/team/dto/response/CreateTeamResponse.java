@@ -36,13 +36,20 @@ public record CreateTeamResponse(
         Instant createdAt,
 
         @Schema(description = "지원서 질문 목록")
-        List<TeamApplicationQuestionResponse> applicationQuestions
+        List<TeamApplicationQuestionResponse> applicationQuestions,
+
+        @Schema(description = "팀장 담당 분야 코드", example = "BACKEND_DEVELOPER", nullable = true)
+        String leaderRoleCode,
+
+        @Schema(description = "협업 도구 코드 목록")
+        List<Team.CollaborationTool> collaborationTools
 ) {
 
     public static CreateTeamResponse of(
             Team team,
             List<TeamRecruitmentResponse> recruitments,
-            List<TeamApplicationQuestionResponse> applicationQuestions
+            List<TeamApplicationQuestionResponse> applicationQuestions,
+            String leaderRoleCode
     ) {
         return new CreateTeamResponse(
                 team.getId(),
@@ -54,7 +61,9 @@ public record CreateTeamResponse(
                 team.getMeetingPlace(),
                 recruitments,
                 team.getCreatedAt(),
-                applicationQuestions
+                applicationQuestions,
+                leaderRoleCode,
+                team.collaborationToolCodes()
         );
     }
 }

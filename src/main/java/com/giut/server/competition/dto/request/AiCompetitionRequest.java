@@ -32,7 +32,7 @@ public record AiCompetitionRequest(
         @JsonDeserialize(using = AiFlexibleInstantDeserializer.End.class)
         @NotNull Instant applicationEndAt,
         @Schema(description = "공모전 URL 목록. primary를 생략하면 첫 번째 URL을 대표로 지정합니다.")
-        @NotEmpty List<@NotNull @Valid CompetitionUrlRequest> urls,
+        @NotEmpty @Size(max = 10, message = "공모전 URL은 최대 10개까지 등록할 수 있습니다.") List<@NotNull @Valid CompetitionUrlRequest> urls,
         @Schema(description = "AI 코드 사용: CONTEST=공모전, COMPETITION=경진대회. INVALID_ACTIVITY는 부적합 활동으로 등록되지 않으며 INTERNSHIP은 미지원입니다.", example = "HACKATHON")
         @JsonProperty("activityKind") @JsonAlias("activityType")
         @NotNull(message = "활동 유형은 필수입니다.") AiActivityType activityType,

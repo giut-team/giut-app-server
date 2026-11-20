@@ -99,6 +99,32 @@ class AiCompetitionBatchServiceTest {
         assertThat(captor.getValue().getPrimaryUrl()).isEqualTo("https://example.com/blank-title");
     }
 
+    @Test
+    void itemWithTooManyUrlsIsRecordedAsInvalidFieldWhileOtherItemsAreCreated() {
+        // 단건 API는 URL이 11개면 400이지만, 배치는 그 공고만 실패로 기록하고 나머지를 계속 처리한다.
+        AdminCompetitionResponse first = mock(AdminCompetitionResponse.class);
+        AdminCompetitionResponse third = mock(AdminCompetitionResponse.class);
+        when(competitionService.createByAi(any())).thenReturn(first, third);
+        String elevenUrls = java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> "{\"type\":\"OFFICIAL\",\"url\":\"https://example.com/too-many/" + i + "\"}")
+                .collect(java.util.stream.Collectors.joining(","));
+        JsonNode tooManyUrls = objectMapper.readTree(ITEM.formatted("too-many", "too-many")
+                .replaceFirst("\"urls\":\\[.*]", "\"urls\":[" + elevenUrls + "]"));
+
+        assertThat(service.ingest(List.of(item("first"), tooManyUrls, item("third")))).containsExactly(first, third);
+
+        ArgumentCaptor<com.giut.server.competition.dto.request.AiCompetitionRequest> created =
+                ArgumentCaptor.forClass(com.giut.server.competition.dto.request.AiCompetitionRequest.class);
+        verify(competitionService, times(2)).createByAi(created.capture());
+        assertThat(created.getAllValues()).extracting(request -> request.title()).containsExactly("first", "third");
+        ArgumentCaptor<CompetitionIngestionFailure> failure = ArgumentCaptor.forClass(CompetitionIngestionFailure.class);
+        verify(failureRepository).save(failure.capture());
+        assertThat(failure.getValue().getFailureType()).isEqualTo(CompetitionIngestionFailure.FailureType.INVALID_FIELD);
+        assertThat(failure.getValue().getItemIndex()).isEqualTo(1);
+        assertThat(failure.getValue().getErrorMessage()).isEqualTo("urls: 공모전 URL은 최대 10개까지 등록할 수 있습니다.");
+        assertThat(failure.getValue().getTitle()).isEqualTo("too-many");
+    }
+
     private JsonNode item(String name) {
         return objectMapper.readTree(ITEM.formatted(name, name));
     }

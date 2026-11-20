@@ -76,7 +76,7 @@ public class TeamController {
 
     @GetMapping("/applications/me")
     @Operation(summary = "내 팀 참가 신청 조회",
-            description = "내가 제출한 지원서와 처리 상태, 지원한 팀 요약을 최신순으로 조회합니다. 받은 합류 제안은 GET /api/teams/invitations/me에서 조회합니다.")
+            description = "내가 제출한 지원서, 처리 상태, 주간 투자 가능 시간, 회의 가능 시간대와 팀 요약을 최신순으로 조회합니다. 받은 합류 제안은 GET /api/teams/invitations/me에서 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponse(responseCode = "200", description = "내 신청 목록 조회 성공")
     public ResponseEntity<MyTeamApplicationListResponse> getMyApplications(Authentication authentication) {
@@ -97,7 +97,7 @@ public class TeamController {
     @PostMapping
     @Operation(
             summary = "팀 생성",
-            description = "대회에 참여할 팀을 생성합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다. 공모전 모집 마감 시각과 같거나 지난 뒤에는 새 팀을 만들 수 없습니다."
+            description = "대회에 참여할 팀을 생성합니다. 새 화면에서는 leaderRoleCode가 필수이며, 온라인은 협업 도구, 오프라인은 회의 장소, 혼합은 둘 다 필요합니다. 두 신규 필드 없이 회의 장소를 보내는 기존 클라이언트 요청도 지원합니다. 팀장은 팀원으로 자동 등록되며, 같은 공모전에 모집 중인 팀을 동시에 두 개 이상 만들 수 없습니다. 공모전 모집 마감 시각과 같거나 지난 뒤에는 새 팀을 만들 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -107,7 +107,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = CreateTeamResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"status\":\"RECRUITING\",\"createdAt\":\"2026-09-08T10:30:00Z\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"leaderRoleCode\":\"BACKEND_DEVELOPER\",\"collaborationTools\":[\"DISCORD\"],\"name\":\"기웃 백엔드팀\",\"status\":\"RECRUITING\",\"createdAt\":\"2026-09-08T10:30:00Z\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}]}")
                     )
             ),
             @ApiResponse(
@@ -162,7 +162,7 @@ public class TeamController {
     @PutMapping("/{teamId}")
     @Operation(
             summary = "팀 정보 수정",
-            description = "팀장이 팀 이름, 소개, 활동 방식, 최대 팀원 수, 주간 회의 횟수와 만남 장소를 수정합니다."
+            description = "팀장이 팀 이름, 소개, 활동 방식, 최대 팀원 수, 주간 회의 횟수, 협업 도구와 회의 장소를 수정합니다. leaderRoleCode를 보내면 팀장의 담당 분야도 변경합니다. 온라인은 협업 도구, 오프라인은 회의 장소, 혼합은 둘 다 필요합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -171,7 +171,7 @@ public class TeamController {
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "팀장이 아닌 사용자의 수정 요청"),
             @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "최대 팀원 수가 현재 팀원 수보다 작음")
+            @ApiResponse(responseCode = "409", description = "최대 팀원 수가 현재 팀원 수보다 작거나 활성 팀장 정보가 없음")
     })
     public ResponseEntity<TeamDetailResponse> updateTeam(
             Authentication authentication,
@@ -206,7 +206,7 @@ public class TeamController {
     @GetMapping("/{teamId}")
     @Operation(
             summary = "팀 상세 조회",
-            description = "팀의 기본 정보, 현재 팀원 수, 모집 상태, 지원서 질문과 현재 사용자의 북마크 여부를 조회합니다."
+            description = "팀의 기본 정보, 팀장 담당 분야, 협업 도구, 현재 팀원 수, 모집 상태, 지원서 질문과 북마크 여부를 조회합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -216,7 +216,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamDetailResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}],\"scrapped\":true}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"competitionId\":1,\"leaderUserId\":12,\"leaderRoleCode\":\"BACKEND_DEVELOPER\",\"collaborationTools\":[\"DISCORD\"],\"name\":\"기웃 백엔드팀\",\"description\":\"서울시립대 학생 공모전 팀입니다.\",\"activityMode\":\"HYBRID\",\"maxMemberCount\":4,\"currentMemberCount\":2,\"status\":\"RECRUITING\",\"applicationQuestions\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true,\"displayOrder\":1}],\"scrapped\":true}")
                     )
             ),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
@@ -233,7 +233,7 @@ public class TeamController {
     @GetMapping("/{teamId}/members")
     @Operation(
             summary = "팀원 목록 조회",
-            description = "팀에 현재 소속된 활성 팀원 목록을 조회합니다."
+            description = "팀에 소속된 활성 팀원의 이름, 팀 내 권한, 담당 역할과 상위 포지션을 조회합니다. 기존 팀원은 담당 역할이 비어 있을 수 있습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -243,7 +243,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamMemberListResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"members\":[{\"teamMemberId\":1,\"userId\":12,\"nickname\":\"팀장\",\"role\":\"LEADER\",\"status\":\"ACTIVE\",\"joinedAt\":\"2026-09-08T10:30:00Z\"}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"members\":[{\"teamMemberId\":1,\"userId\":12,\"nickname\":\"팀장\",\"role\":\"LEADER\",\"roleCode\":\"BACKEND_DEVELOPER\",\"roleName\":\"백엔드 개발자\",\"primaryRole\":\"DEVELOPMENT\",\"primaryRoleName\":\"개발\",\"status\":\"ACTIVE\",\"joinedAt\":\"2026-09-08T10:30:00Z\"}]}")
                     )
             ),
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
@@ -279,7 +279,7 @@ public class TeamController {
     @PostMapping("/{teamId}/applications")
     @Operation(
             summary = "팀 참가 신청",
-            description = "지원 분야와 지원서 답변을 제출합니다. 이미 팀원인 사용자나 승인 대기 중인 신청이 있는 사용자는 신청할 수 없습니다."
+            description = "지원 분야, 지원서 답변, 주간 투자 가능 시간과 선택한 회의 가능 시간대를 제출합니다. 이미 팀원인 사용자나 승인 대기 중인 신청이 있는 사용자는 신청할 수 없습니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -289,9 +289,10 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamApplicationResponse.class),
-                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"roleCode\":\"BACKEND_DEVELOPER\",\"assignedRoleCode\":null,\"rejectionReason\":null,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
+                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"roleCode\":\"BACKEND_DEVELOPER\",\"assignedRoleCode\":null,\"rejectionReason\":null,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"team\":null,\"applicantNickname\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
                     )
             ),
+            @ApiResponse(responseCode = "400", description = "잘못된 지원 분야, 답변 또는 시간 정보"),
             @ApiResponse(
                     responseCode = "409",
                     description = "모집 중이 아니거나 이미 참여/신청 중인 팀",
@@ -320,7 +321,7 @@ public class TeamController {
     @GetMapping("/{teamId}/applications")
     @Operation(
             summary = "팀 참가 신청 목록 조회",
-            description = "활성 사용자가 제출한 승인 대기 지원서와 지원자 닉네임을 팀장이 조회합니다. 팀장이 보낸 합류 제안은 제외합니다."
+            description = "팀장이 활성 사용자의 승인 대기 지원서와 지원자 닉네임, 주간 투자 가능 시간, 회의 가능 시간대를 조회합니다. 팀장이 보낸 합류 제안은 제외합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -330,7 +331,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamApplicationListResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"applications\":[{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"applicantNickname\":\"김민재\",\"team\":null,\"roleCode\":\"BACKEND_DEVELOPER\",\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"applications\":[{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"applicantNickname\":\"김민재\",\"team\":null,\"roleCode\":\"BACKEND_DEVELOPER\",\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}]}")
                     )
             ),
             @ApiResponse(

@@ -114,6 +114,28 @@ class ProfileShareAuthorizationTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"withdrawn", "token-revoked", "missing"})
+    void staleLoginCookieStillSeesSharedProfileAsAnonymous(String account) throws Exception {
+        // 다른 기기 로그아웃·탈퇴로 쓸 수 없게 된 쿠키가 남아 있어도 공개 화면은 막지 않고 익명으로 보여 준다.
+        ProfileShareLink link = link(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
+        when(links.findByTokenHash(anyString())).thenReturn(Optional.of(link));
+        when(profiles.getSharedProfile(org.mockito.ArgumentMatchers.nullable(Long.class), eq(12L))).thenReturn(new SharedProfileResponse(
+                "공유 회원", false, null, UserProfile.ActivityStatus.LOOKING_FOR_TEAM,
+                "팀 찾는 중", List.of(), "컴퓨터과학부", (short) 3, "소개", List.of()
+        ));
+        User stored = User.createOAuthUser("student@example.com", "학생", User.OAuthProvider.KAKAO, "provider-id");
+        if ("withdrawn".equals(account)) stored.withdraw();
+        if ("token-revoked".equals(account)) stored.bumpTokenVersion();
+        when(users.findById(42L)).thenReturn("missing".equals(account) ? Optional.empty() : Optional.of(stored));
+
+        mockMvc.perform(asViewer(get(SHARE_URL), "unverified-cookie"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Set-Cookie"))
+                .andExpect(jsonPath("$.nickname").value("공유 회원"));
+        verify(profiles).getSharedProfile(null, 12L);
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"malformed", "missing", "expired", "revoked", "over-three-hours"})
     void invalidShareTokensReturn404WithoutLogin(String state) throws Exception {
         if (!"malformed".equals(state)) {

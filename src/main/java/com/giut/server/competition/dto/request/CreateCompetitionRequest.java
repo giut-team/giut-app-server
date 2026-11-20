@@ -41,7 +41,8 @@ public record CreateCompetitionRequest(
         Competition.PublicationStatus publicationStatus,
 
         @NotEmpty(message = "공모전 URL은 하나 이상 등록해야 합니다.")
-        List<@Valid CompetitionUrlRequest> urls,
+        @Size(max = CreateCompetitionRequest.MAX_URLS, message = "공모전 URL은 최대 10개까지 등록할 수 있습니다.")
+        List<@NotNull(message = "비어 있는 URL 항목은 등록할 수 없습니다.") @Valid CompetitionUrlRequest> urls,
 
         @Schema(description = "활동 유형. 생략하거나 null이면 공모전으로 저장합니다.", example = "HACKATHON")
         Competition.ActivityType activityType,
@@ -50,6 +51,9 @@ public record CreateCompetitionRequest(
 
         @Schema(description = "총상금 숫자. 미입력 시 null입니다.", example = "10000000") Long totalPrizeAmount
 ) {
+    /** 저장되는 공모전 URL 최대 개수. 회원 제출 검증(CompetitionSubmissionService)도 이 값을 쓴다. */
+    public static final int MAX_URLS = 10;
+
     public CreateCompetitionRequest(String title, Competition.Category category, String hostOrganization,
             String targetParticipants, String summary, Instant applicationStartAt, Instant applicationEndAt,
             Competition.PublicationStatus publicationStatus, List<CompetitionUrlRequest> urls) {

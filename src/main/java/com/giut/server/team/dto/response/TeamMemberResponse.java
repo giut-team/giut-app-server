@@ -1,5 +1,6 @@
 package com.giut.server.team.dto.response;
 
+import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.team.entity.TeamMember;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -26,6 +27,15 @@ public record TeamMemberResponse(
         TeamMember.Status status,
 
         @Schema(description = "팀 합류일시", example = "2026-09-08T10:45:00Z")
-        Instant joinedAt
+        Instant joinedAt,
+
+        @Schema(description = "세부 담당 분야 이름", example = "백엔드 개발자", nullable = true)
+        String roleName,
+
+        @Schema(description = "상위 포지션 코드", example = "DEVELOPMENT", nullable = true)
+        ProfileRole.PrimaryRole primaryRole,
+
+        @Schema(description = "상위 포지션 이름", example = "개발", nullable = true)
+        String primaryRoleName
 ) {
 }

@@ -221,18 +221,25 @@ class AdminAuthPersistenceTest {
 
     @ParameterizedTest
     @MethodSource("inactiveLoginRequesters")
-    void publicLoginStillRejectsInactiveOrMissingTokenOwner(String accountStatus, boolean cookie) throws Exception {
+    void staleTokenOfInactiveRevokedOrMissingOwnerDoesNotBlockPublicLogin(String accountStatus, boolean cookie)
+            throws Exception {
+        // 로그인은 자격 증명으로만 판단한다. 다른 기기 로그아웃·탈퇴로 쓸 수 없게 된 토큰이 남아 있어도 막지 않는다.
         User admin = saveAdmin();
         User student = saveUnverifiedStudent();
         String token = jwt.generateAccessToken(student);
         if (accountStatus.equals("MISSING")) {
             users.deleteById(student.getId());
+        } else if (accountStatus.equals("REVOKED")) {
+            student.bumpTokenVersion();
+            users.saveAndFlush(student);
         } else {
             ReflectionTestUtils.setField(student, "status", User.Status.valueOf(accountStatus));
             users.saveAndFlush(student);
         }
         mvc.perform(withToken(login(admin.getEmail(), PASSWORD), token, cookie))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.accessToken").doesNotExist());
+                .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ADMIN"));
+        mvc.perform(withToken(login(admin.getEmail(), "wrong-password"), token, cookie))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.accessToken").doesNotExist());
     }
 
     @ParameterizedTest
@@ -360,7 +367,7 @@ class AdminAuthPersistenceTest {
     }
 
     static Stream<Arguments> inactiveLoginRequesters() {
-        return Stream.of("SUSPENDED", "DELETED", "MISSING")
+        return Stream.of("SUSPENDED", "DELETED", "MISSING", "REVOKED")
                 .flatMap(accountStatus -> Stream.of(false, true).map(cookie -> Arguments.of(accountStatus, cookie)));
     }
 

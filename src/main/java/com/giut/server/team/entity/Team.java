@@ -5,6 +5,12 @@ import com.giut.server.global.entity.BaseTimeEntity;
 import com.giut.server.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @Entity @Table(name = "teams") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Team extends BaseTimeEntity {
@@ -33,13 +39,23 @@ public class Team extends BaseTimeEntity {
     @Column(name = "weekly_meeting_count", nullable = false)
     private Short weeklyMeetingCount;
 
-    @Enumerated(EnumType.STRING) @Column(name = "meeting_place", nullable = false, length = 30)
+    @Enumerated(EnumType.STRING) @Column(name = "meeting_place", length = 30)
     private MeetingPlace meetingPlace;
+
+    @ElementCollection
+    @CollectionTable(name = "team_collaboration_tools",
+            joinColumns = @JoinColumn(name = "team_id", nullable = false),
+            foreignKey = @ForeignKey(name = "fk_team_collaboration_tools_team"))
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "tool_code", nullable = false, length = 30)
+    private Set<CollaborationTool> collaborationTools = new HashSet<>();
 
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
     private Status status;
 
     public enum ActivityMode { ONLINE, OFFLINE, HYBRID }
+    public enum CollaborationTool { DISCORD, ZOOM, GOOGLE_MEET, NOTION, SLACK }
     public enum MeetingPlace { CAMPUS, SEOUL, METROPOLITAN_AREA, ANYWHERE }
     public enum Status { RECRUITING, CLOSED, ARCHIVED }
 
@@ -65,6 +81,15 @@ public class Team extends BaseTimeEntity {
 
     public void archive() {
         this.status = Status.ARCHIVED;
+    }
+
+    public void replaceCollaborationTools(Set<CollaborationTool> tools) {
+        this.collaborationTools.clear();
+        this.collaborationTools.addAll(tools);
+    }
+
+    public List<CollaborationTool> collaborationToolCodes() {
+        return collaborationTools.stream().sorted().toList();
     }
 
     public static Team create(
