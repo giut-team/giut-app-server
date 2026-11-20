@@ -5,7 +5,7 @@ import com.giut.server.profile.entity.UserProfile;
 
 import java.util.List;
 
-/** 비회원 공유 화면에 허용된 프로필 필드만 포함한다. */
+/** 공유 카드 화면에 허용된 프로필 필드만 포함한다. */
 public record SharedProfileResponse(
         String nickname,
         boolean universityVerified,

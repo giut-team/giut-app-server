@@ -147,7 +147,7 @@ class UserBlockPersistenceTest {
     }
 
     @Test
-    void sharedCardsRespectLoggedInBlocksWhileAnonymousTokenPolicyStaysUnchanged() throws Exception {
+    void sharedCardsRequireLoginAndRespectBlocks() throws Exception {
         var issued = mvc.perform(as(target, post("/api/users/me/profile-share-links")))
                 .andExpect(status().isCreated()).andReturn();
         String token = new ObjectMapper().readTree(issued.getResponse().getContentAsString()).path("token").asText();
@@ -157,8 +157,9 @@ class UserBlockPersistenceTest {
         mvc.perform(as(actor, get(path + "/target"))).andExpect(status().isNotFound());
         mvc.perform(as(actor, post("/api/users/" + target.getId() + "/profile-share-links")))
                 .andExpect(status().isNotFound());
-        mvc.perform(get(path).servletPath(path)).andExpect(status().isOk()).andExpect(jsonPath("$.userId").doesNotExist());
-        mvc.perform(as(other, get(path))).andExpect(status().isOk());
+        // 공유 카드는 로그인이 필요하다. 차단 관계가 없는 회원은 카드만 받는다(userId 비노출).
+        mvc.perform(get(path).servletPath(path)).andExpect(status().isUnauthorized());
+        mvc.perform(as(other, get(path))).andExpect(status().isOk()).andExpect(jsonPath("$.userId").doesNotExist());
         mvc.perform(as(other, get(path + "/target"))).andExpect(status().isOk());
     }
 

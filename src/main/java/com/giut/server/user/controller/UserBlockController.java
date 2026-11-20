@@ -25,7 +25,7 @@ public class UserBlockController {
     private final UserBlockService service;
 
     @PostMapping("/{userId}/block")
-    @Operation(summary = "사용자 차단", description = "서로의 공개 프로필·추천 접근을 제한합니다. 본인 차단은 불가하며 중복 요청은 안전합니다. 기존 추천·메시지·팀 기록은 삭제하지 않습니다. 비회원 공유 카드는 기존 토큰 정책을 유지합니다.")
+    @Operation(summary = "사용자 차단", description = "서로의 공개 프로필·추천 접근을 제한합니다. 본인 차단은 불가하며 중복 요청은 안전합니다. 기존 추천·메시지·팀 기록은 삭제하지 않습니다. 공유 카드도 로그인한 사용자 기준으로 차단을 적용해 404를 반환합니다.")
     public ResponseEntity<UserBlockResponse> block(Authentication authentication, @PathVariable @Positive Long userId) {
         return response(service.block(currentUserId(authentication), userId));
     }

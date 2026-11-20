@@ -85,8 +85,8 @@ class ProfileShareAuthorizationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"anonymous", "unverified", "unverified-cookie", "verified"})
-    void validShareTokenAllowsAllViewersAndReturnsOnlyTheCard(String viewer) throws Exception {
+    @ValueSource(strings = {"unverified", "unverified-cookie", "verified"})
+    void validShareTokenAllowsLoggedInViewersWithoutSchoolCheckAndReturnsOnlyTheCard(String viewer) throws Exception {
         ProfileShareLink link = link(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
         when(links.findByTokenHash(anyString())).thenReturn(Optional.of(link));
         when(profiles.getSharedProfile(org.mockito.ArgumentMatchers.nullable(Long.class), eq(12L))).thenReturn(new SharedProfileResponse(
@@ -107,37 +107,38 @@ class ProfileShareAuthorizationTest {
         String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(TOKEN.getBytes(StandardCharsets.US_ASCII)));
         verify(links).findByTokenHash(hash);
-        verify(profiles).getSharedProfile("anonymous".equals(viewer) ? null : 42L, 12L);
-        if ("anonymous".equals(viewer)) verifyNoInteractions(users);
-        else verify(users).findById(42L);
+        verify(profiles).getSharedProfile(42L, 12L);
+        verify(users).findById(42L);
         verify(users, never()).existsByIdAndUniversityVerifiedAtIsNotNull(anyLong());
+    }
+
+    @org.junit.jupiter.api.Test
+    void sharedProfileCardRequiresLogin() throws Exception {
+        mockMvc.perform(asViewer(get(SHARE_URL), "anonymous"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+        verifyNoInteractions(links, profiles);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"withdrawn", "token-revoked", "missing"})
-    void staleLoginCookieStillSeesSharedProfileAsAnonymous(String account) throws Exception {
-        // 다른 기기 로그아웃·탈퇴로 쓸 수 없게 된 쿠키가 남아 있어도 공개 화면은 막지 않고 익명으로 보여 준다.
-        ProfileShareLink link = link(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
-        when(links.findByTokenHash(anyString())).thenReturn(Optional.of(link));
-        when(profiles.getSharedProfile(org.mockito.ArgumentMatchers.nullable(Long.class), eq(12L))).thenReturn(new SharedProfileResponse(
-                "공유 회원", false, null, UserProfile.ActivityStatus.LOOKING_FOR_TEAM,
-                "팀 찾는 중", List.of(), "컴퓨터과학부", (short) 3, "소개", List.of()
-        ));
+    void staleLoginCookieCannotOpenSharedProfileCard(String account) throws Exception {
+        // 공유 카드는 로그인이 필요한 API다. 다른 기기 로그아웃·탈퇴로 쓸 수 없게 된 토큰은 다른 보호 API처럼 403이다.
         User stored = User.createOAuthUser("student@example.com", "학생", User.OAuthProvider.KAKAO, "provider-id");
         if ("withdrawn".equals(account)) stored.withdraw();
         if ("token-revoked".equals(account)) stored.bumpTokenVersion();
         when(users.findById(42L)).thenReturn("missing".equals(account) ? Optional.empty() : Optional.of(stored));
 
         mockMvc.perform(asViewer(get(SHARE_URL), "unverified-cookie"))
-                .andExpect(status().isOk())
+                .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Set-Cookie"))
-                .andExpect(jsonPath("$.nickname").value("공유 회원"));
-        verify(profiles).getSharedProfile(null, 12L);
+                .andExpect(jsonPath("$.code").value(403));
+        verifyNoInteractions(links, profiles);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"malformed", "missing", "expired", "revoked", "over-three-hours"})
-    void invalidShareTokensReturn404WithoutLogin(String state) throws Exception {
+    void invalidShareTokensReturn404ForLoggedInViewer(String state) throws Exception {
         if (!"malformed".equals(state)) {
             Optional<ProfileShareLink> found = Optional.empty();
             if (!"missing".equals(state)) {
@@ -159,12 +160,12 @@ class ProfileShareAuthorizationTest {
             when(links.findByTokenHash(anyString())).thenReturn(found);
         }
 
-        mockMvc.perform(get("malformed".equals(state) ? "/api/profile/shares/invalid-token" : SHARE_URL))
+        mockMvc.perform(asViewer(get("malformed".equals(state) ? "/api/profile/shares/invalid-token" : SHARE_URL), "unverified"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(404))
                 .andExpect(jsonPath("$.message").value("공유 프로필을 찾을 수 없습니다."));
 
-        verifyNoInteractions(profiles, users, context.getBean(DiscordAlertService.class));
+        verifyNoInteractions(profiles, context.getBean(DiscordAlertService.class));
         if ("malformed".equals(state)) {
             verifyNoInteractions(links);
         }

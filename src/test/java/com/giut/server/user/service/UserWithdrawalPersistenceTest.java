@@ -151,18 +151,14 @@ class UserWithdrawalPersistenceTest {
         String token = jwt.generateAccessToken(target);
         mvc.perform(as(target, delete(PATH))).andExpect(status().isNoContent());
         LocalDateTime deletedAt = users.findById(target.getId()).orElseThrow().getUpdatedAt();
+        // 공유 카드도 로그인이 필요한 API라 탈퇴한 토큰이면 다른 보호 API처럼 403이다.
         for (String route : new String[]{"/api/userprofile/me/profile", "/api/competitions",
-                "/api/members/university-email/status", "/api/chat-rooms"}) {
+                "/api/members/university-email/status", "/api/chat-rooms", "/api/profile/shares/any-token"}) {
             mvc.perform(path(get(route)).header("Authorization", "Bearer " + token))
                     .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(403));
             mvc.perform(path(get(route)).cookie(new Cookie("giut_access_token", token)))
                     .andExpect(status().isForbidden());
         }
-        String publicShare = "/api/profile/shares/any-token";
-        mvc.perform(path(get(publicShare)).header("Authorization", "Bearer " + token))
-                .andExpect(status().isNotFound());
-        mvc.perform(path(get(publicShare)).cookie(new Cookie("giut_access_token", token)))
-                .andExpect(status().isNotFound());
         mvc.perform(path(delete(PATH)).header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
         assertThat(users.findById(target.getId()).orElseThrow().getUpdatedAt()).isEqualTo(deletedAt);
         mvc.perform(path(get("/actuator/health"))).andExpect(status().isOk());
@@ -207,12 +203,14 @@ class UserWithdrawalPersistenceTest {
         String share = "/api/profile/shares/" + sharing.createLink(target.getId()).token();
         mvc.perform(as(viewer, get("/api/profile"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
-        mvc.perform(path(get(share))).andExpect(status().isOk());
+        // 공유 카드는 로그인이 필요하다.
+        mvc.perform(path(get(share))).andExpect(status().isUnauthorized());
+        mvc.perform(as(viewer, get(share))).andExpect(status().isOk());
         mvc.perform(as(target, delete(PATH))).andExpect(status().isNoContent());
         mvc.perform(as(viewer, get("/api/profile"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0)).andExpect(jsonPath("$.profiles").isEmpty());
         mvc.perform(as(viewer, get("/api/profile/" + target.getId()))).andExpect(status().isNotFound());
-        mvc.perform(path(get(share))).andExpect(status().isNotFound());
+        mvc.perform(as(viewer, get(share))).andExpect(status().isNotFound());
         mvc.perform(as(viewer, get(share + "/target"))).andExpect(status().isNotFound());
         assertThat(profiles.existsById(target.getId())).isTrue();
         assertThat(links.count()).isEqualTo(1);

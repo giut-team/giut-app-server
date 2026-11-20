@@ -109,8 +109,6 @@ class ActiveUserAuthorizationFilterTest {
                 new String[]{"GET", "/api/oauth/apple/authorization"},
                 new String[]{"POST", "/api/oauth/apple/callback"},
                 new String[]{"POST", "/api/admin/auth/login"},
-                new String[]{"POST", "/api/auth/logout"},
-                new String[]{"GET", "/api/profile/shares/public-token"},
                 new String[]{"GET", "/actuator/health"},
                 new String[]{"GET", "/"})) {
             authenticate("42", "ROLE_STUDENT");
@@ -122,25 +120,42 @@ class ActiveUserAuthorizationFilterTest {
     }
 
     @Test
-    void withdrawnOrMissingAccountTokenDoesNotBlockOAuthLoginOrSharedProfile() throws Exception {
+    void withdrawnOrMissingAccountTokenDoesNotBlockLogin() throws Exception {
+        // 로그인은 남은 토큰과 관계없이 항상 진행된다.
         User user = activeUser();
         user.withdraw();
         when(users.findById(42L)).thenReturn(Optional.of(user));
         when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
-        for (String path : List.of("/api/oauth/kakao/callback", "/api/profile/shares/public-token")) {
-            authenticate("42", "ROLE_STUDENT");
-            assertThat(invoke(cookieRequest("GET", path)).continued()).as(path).isTrue();
-            assertThat(SecurityContextHolder.getContext().getAuthentication()).as(path).isNull();
-        }
+        authenticate("42", "ROLE_STUDENT");
+        assertThat(invoke(cookieRequest("GET", "/api/oauth/kakao/callback")).continued()).isTrue();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
 
         when(users.findById(42L)).thenReturn(Optional.empty());
         authenticate("42", "ROLE_ADMIN");
-        assertThat(invoke(cookieRequest("GET", "/api/profile/shares/public-token")).continued()).isTrue();
+        assertThat(invoke(cookieRequest("POST", "/api/admin/auth/login")).continued()).isTrue();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     @Test
-    void publicRouteExceptionIsExact() throws Exception {
+    void logoutAndSharedProfileRequireAValidLogin() throws Exception {
+        // 로그아웃과 공유 카드는 로그인이 필요한 API다. 쓸 수 없는 토큰이면 다른 보호 API처럼 403이다.
+        User user = activeUser();
+        user.withdraw();
+        when(users.findById(42L)).thenReturn(Optional.of(user));
+        when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
+        for (var route : List.of(
+                new String[]{"POST", "/api/auth/logout"},
+                new String[]{"GET", "/api/profile/shares/public-token"})) {
+            authenticate("42", "ROLE_STUDENT");
+            var result = invoke(cookieRequest(route[0], route[1]));
+            assertThat(result.continued()).as(route[1]).isFalse();
+            assertThat(result.response().getStatus()).as(route[1]).isEqualTo(403);
+            assertThat(result.response().getHeaders(HttpHeaders.SET_COOKIE)).as(route[1]).isEmpty();
+        }
+    }
+
+    @Test
+    void loginRouteExceptionIsExact() throws Exception {
         User user = activeUser();
         user.bumpTokenVersion();
         when(users.findById(42L)).thenReturn(Optional.of(user));
