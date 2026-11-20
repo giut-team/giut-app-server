@@ -2,9 +2,11 @@ package com.giut.server.competition.service;
 
 import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.dto.request.CompetitionSubmissionForm;
+import com.giut.server.competition.dto.request.CompetitionUrlRequest;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
 import com.giut.server.competition.entity.Competition;
+import com.giut.server.competition.entity.CompetitionUrl;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.competition.repository.CompetitionUrlRepository;
 import com.giut.server.competition.repository.CompetitionVerificationLogRepository;
@@ -222,12 +224,33 @@ class CompetitionSubmissionPersistenceTest {
         mvc.perform(json(post(SUBMISSIONS), member, submission(formWithRecruitmentLinks(10))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.requiredInputs[?(@.field == 'urls')].message",
-                        hasItem("공고 링크는 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다.")));
+                        hasItem("공모전 URL은 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다.")));
         assertThat(competitions.count()).isZero();
 
         // 9개를 입력하면 원본 링크를 더해 10개로 등록된다.
         mvc.perform(json(post(SUBMISSIONS), member, submission(formWithRecruitmentLinks(9))))
                 .andExpect(status().isCreated());
+        assertThat(urls.count()).isEqualTo(10);
+    }
+
+    @Test
+    void serviceCountsUrlsAfterTheSourceLinkIsAddedAndReportsOnlyTheSourceAwareMessage() {
+        // 원본 링크를 직접 넣은 11개, 자동으로 더해져 11개가 되는 10개 모두 거부한다.
+        // DTO @Size 메시지와 겹치지 않고 원본 포함 기준 메시지 하나만 남아야 한다.
+        for (var links : List.of(links(10, true), links(10, false))) {
+            CompetitionSubmissionResponse response = submissions.submit(member.getId(), submissionWith(links));
+            assertThat(response.status()).isEqualTo(CompetitionSubmissionResponse.Status.INVALID_INPUT);
+            assertThat(response.requiredInputs()).filteredOn(issue -> issue.field().equals("urls")).singleElement()
+                    .satisfies(issue -> {
+                        assertThat(issue.reason()).isEqualTo("INVALID_VALUE");
+                        assertThat(issue.message()).isEqualTo("공모전 URL은 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다.");
+                    });
+        }
+        assertThat(competitions.count()).isZero();
+
+        // 원본 링크 + 9개 = 10개는 허용한다.
+        CompetitionSubmissionResponse allowed = submissions.submit(member.getId(), submissionWith(links(9, true)));
+        assertThat(allowed.status()).isEqualTo(CompetitionSubmissionResponse.Status.SUBMITTED);
         assertThat(urls.count()).isEqualTo(10);
     }
 
@@ -278,6 +301,23 @@ class CompetitionSubmissionPersistenceTest {
                  "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"OFFICIAL","url":"https://official.example.com/contest/","primary":false}]}
                 """;
+    }
+
+    private List<CompetitionUrlRequest> links(int recruitmentCount, boolean includeSource) {
+        List<CompetitionUrlRequest> links = new java.util.ArrayList<>();
+        if (includeSource) {
+            links.add(new CompetitionUrlRequest(CompetitionUrl.Type.SOURCE_ORIGINAL, SOURCE, true));
+        }
+        for (int i = 1; i <= recruitmentCount; i++) {
+            links.add(new CompetitionUrlRequest(CompetitionUrl.Type.RECRUITMENT, "https://recruit.example.com/" + i, false));
+        }
+        return links;
+    }
+
+    private CompetitionSubmissionRequest submissionWith(List<CompetitionUrlRequest> links) {
+        return new CompetitionSubmissionRequest(SOURCE, new CompetitionSubmissionForm("학생 공모전",
+                Competition.Category.WEB_MOBILE_IT, null, null, "공고 설명", null, Instant.parse("2099-01-01T00:00:00Z"),
+                links, Competition.ActivityType.COMPETITION, null, null, null, null));
     }
 
     private String formWithRecruitmentLinks(int count) {

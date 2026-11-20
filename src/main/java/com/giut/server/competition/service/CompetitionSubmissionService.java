@@ -5,6 +5,7 @@ import com.giut.server.competition.dto.request.AiCompetitionCategoryDeserializer
 import com.giut.server.competition.dto.request.CompetitionSubmissionForm;
 import com.giut.server.competition.dto.request.CompetitionSubmissionRequest;
 import com.giut.server.competition.dto.request.CompetitionUrlRequest;
+import com.giut.server.competition.dto.request.CreateCompetitionRequest;
 import com.giut.server.competition.dto.response.CompetitionExtractionResult;
 import com.giut.server.competition.dto.response.CompetitionSubmissionFieldIssue;
 import com.giut.server.competition.dto.response.CompetitionSubmissionResponse;
@@ -17,6 +18,7 @@ import com.giut.server.competition.util.CompetitionUrlNormalizer;
 import com.giut.server.global.exception.ConflictException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
@@ -42,8 +44,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CompetitionSubmissionService {
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-    /** CreateCompetitionRequest의 urls 상한과 같다. 저장되는 링크 총합(자동으로 더해지는 원본 링크 포함) 기준이다. */
-    private static final int MAX_URLS = 10;
 
     private final CompetitionRepository competitionRepository;
     private final CompetitionUrlRepository urlRepository;
@@ -240,13 +240,16 @@ public class CompetitionSubmissionService {
 
     private List<CompetitionSubmissionFieldIssue> validate(CompetitionSubmissionForm form) {
         Map<String, CompetitionSubmissionFieldIssue> issues = new LinkedHashMap<>();
+        // URL 개수는 여기서만 검사한다. form.urls()는 prepareForm이 원본 링크를 더한 뒤라 저장될 총합과 같다.
+        // 사용자는 10개를 입력하고도 거부될 수 있으므로, DTO의 @Size 메시지 대신 원본 포함 기준임을 알린다.
+        if (form.urls().size() > CreateCompetitionRequest.MAX_URLS) {
+            issues.put("urls", issue("urls", "INVALID_VALUE",
+                    "공모전 URL은 원본 링크를 포함해 최대 " + CreateCompetitionRequest.MAX_URLS + "개까지 등록할 수 있습니다."));
+        }
         validator.validate(form.toRegistrationRequest()).stream()
+                .filter(violation -> !isUrlCountViolation(violation))
                 .sorted(Comparator.comparing(violation -> violation.getPropertyPath().toString()))
                 .forEach(violation -> addConstraintIssue(issues, violation));
-        if (form.urls().size() > MAX_URLS) {
-            // 원본 링크는 prepareForm에서 자동으로 더해진다. 10개를 입력해도 거부될 수 있으므로 원본 포함 기준임을 알린다.
-            issues.put("urls", issue("urls", "INVALID_VALUE", "공고 링크는 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다."));
-        }
         if (form.activityType() == null || form.activityType() == Competition.ActivityType.NOT_ACTIVITY) {
             issues.put("activityType", issue("activityType", "INVALID_ACTIVITY_TYPE", "등록할 활동 유형을 선택해 주세요."));
         }
@@ -278,6 +281,11 @@ public class CompetitionSubmissionService {
             issues.put("urls", issue("urls", "OFFICIAL_URL_EXISTS", "이미 다른 공모전에 등록된 공식 URL입니다."));
         }
         return List.copyOf(issues.values());
+    }
+
+    private static boolean isUrlCountViolation(ConstraintViolation<?> violation) {
+        return "urls".equals(violation.getPropertyPath().toString())
+                && violation.getConstraintDescriptor().getAnnotation() instanceof Size;
     }
 
     private void addConstraintIssue(Map<String, CompetitionSubmissionFieldIssue> issues, ConstraintViolation<?> violation) {
