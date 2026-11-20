@@ -134,9 +134,10 @@ class TeamApplicationAvailabilityPersistenceTest {
                 .andExpect(jsonPath("$.applications[0].meetingTimeSlots").isEmpty());
     }
 
-    @Test
-    void olderRequestCanOmitBothFields() throws Exception {
-        submit("").andExpect(status().isCreated())
+    @ParameterizedTest
+    @ValueSource(strings = {"", ",\"meetingTimeSlots\":[]"})
+    void requestWithoutSelectedAvailabilityDoesNotRequireHours(String fields) throws Exception {
+        submit(fields).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.weeklyAvailableHours").isEmpty())
                 .andExpect(jsonPath("$.meetingTimeSlots").isEmpty());
         mvc.perform(as(leader, get(teamApplications))).andExpect(status().isOk())
@@ -164,6 +165,13 @@ class TeamApplicationAvailabilityPersistenceTest {
                 TeamApplication.createInvitation(team.getId(), applicant.getId(), ROLE_CODE, null)
         );
         assertThat(applications.findById(invitation.getId()).orElseThrow().getWeeklyAvailableHours()).isNull();
+    }
+
+    @Test
+    void applicationFactoryAcceptsNullMeetingTimeSlots() {
+        TeamApplication application = TeamApplication.create(team.getId(), applicant.getId(), ROLE_CODE, null, 4, null);
+        assertThat(application.getWeeklyAvailableHours()).isEqualTo(4);
+        assertThat(application.getMeetingTimeSlots()).isNull();
     }
 
     private ResultActions submit(String availabilityFields) throws Exception {

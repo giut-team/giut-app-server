@@ -110,7 +110,8 @@ public class TeamApplication extends BaseTimeEntity {
         application.type = Type.APPLICATION;
         application.appliedAt = Instant.now();
         application.weeklyAvailableHours = weeklyAvailableHours;
-        application.meetingTimeSlots = meetingTimeSlots.isEmpty() ? null : List.copyOf(meetingTimeSlots);
+        application.meetingTimeSlots = meetingTimeSlots == null || meetingTimeSlots.isEmpty()
+                ? null : meetingTimeSlots.stream().sorted().toList();
         return application;
     }
 

@@ -316,7 +316,6 @@ public class TeamService {
 
     @Transactional
     public TeamApplicationResponse applyTeam(Long userId, Long teamId, ApplyTeamRequest request) {
-        List<TeamApplication.MeetingTimeSlot> meetingTimeSlots = validateMeetingTimeSlots(request);
         User user = findActiveUser(userId, "신청자를 찾을 수 없습니다.");
         Team team = findTeamForUpdate(teamId);
 
@@ -343,28 +342,13 @@ public class TeamService {
 
         TeamApplication application = teamApplicationRepository.save(
                 TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message(),
-                        request.weeklyAvailableHours(), meetingTimeSlots)
+                        request.weeklyAvailableHours(), request.meetingTimeSlots())
         );
 
         List<TeamApplicationQuestion> questions = findActiveQuestions(team.getId());
         List<TeamApplicationAnswer> answers = saveApplicationAnswers(application.getId(), questions, request.answers());
 
         return TeamApplicationResponse.of(application, toAnswerResponses(questions, answers));
-    }
-
-    private List<TeamApplication.MeetingTimeSlot> validateMeetingTimeSlots(ApplyTeamRequest request) {
-        List<TeamApplication.MeetingTimeSlot> slots = request.meetingTimeSlots();
-        if (slots == null) {
-            return List.of();
-        }
-        if (request.weeklyAvailableHours() == null) {
-            throw new IllegalArgumentException("회의 가능 시간대 필드를 보내려면 주간 투자 가능 시간도 입력해야 합니다.");
-        }
-        Set<TeamApplication.MeetingTimeSlot> distinctSlots = new HashSet<>(slots);
-        if (distinctSlots.contains(null) || distinctSlots.size() != slots.size()) {
-            throw new IllegalArgumentException("회의 가능 시간대는 빈 값 없이 한 번씩만 선택할 수 있습니다.");
-        }
-        return distinctSlots.stream().sorted().toList();
     }
 
     @Transactional
