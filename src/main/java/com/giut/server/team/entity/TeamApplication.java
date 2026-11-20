@@ -13,8 +13,11 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.List;
 
 @Entity
 @Table(
@@ -65,6 +68,19 @@ public class TeamApplication extends BaseTimeEntity {
     @Column(name = "decided_at")
     private Instant decidedAt;
 
+    @Column(name = "weekly_available_hours")
+    private Integer weeklyAvailableHours;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "meeting_time_slots", columnDefinition = "json")
+    private List<MeetingTimeSlot> meetingTimeSlots;
+
+    public enum MeetingTimeSlot {
+        MORNING,
+        AFTERNOON,
+        EVENING
+    }
+
     public enum Type {
         APPLICATION, // 사용자가 팀에 지원
         INVITATION // 팀장이 팀원에게 제안
@@ -78,6 +94,13 @@ public class TeamApplication extends BaseTimeEntity {
     }
 
     public static TeamApplication create(Long teamId, Long userId, String roleCode, String message) {
+        return create(teamId, userId, roleCode, message, null, List.of());
+    }
+
+    public static TeamApplication create(
+            Long teamId, Long userId, String roleCode, String message,
+            Integer weeklyAvailableHours, List<MeetingTimeSlot> meetingTimeSlots
+    ) {
         TeamApplication application = new TeamApplication();
         application.teamId = teamId;
         application.userId = userId;
@@ -86,6 +109,8 @@ public class TeamApplication extends BaseTimeEntity {
         application.status = Status.PENDING;
         application.type = Type.APPLICATION;
         application.appliedAt = Instant.now();
+        application.weeklyAvailableHours = weeklyAvailableHours;
+        application.meetingTimeSlots = meetingTimeSlots.isEmpty() ? null : List.copyOf(meetingTimeSlots);
         return application;
     }
 
