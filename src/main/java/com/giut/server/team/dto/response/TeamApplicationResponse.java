@@ -1,5 +1,6 @@
 package com.giut.server.team.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.giut.server.team.entity.TeamApplication;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -39,12 +40,29 @@ public record TeamApplicationResponse(
         Instant decidedAt,
 
         @Schema(description = "지원서 답변 목록")
-        List<TeamApplicationAnswerResponse> answers
+        List<TeamApplicationAnswerResponse> answers,
+
+        @Schema(description = "내 지원 목록에 표시할 팀 요약")
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        AppliedTeamResponse team,
+
+        @Schema(description = "팀장용 지원 목록에 표시하는 활성 지원자의 닉네임")
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String applicantNickname
 ) {
 
     public static TeamApplicationResponse of(
             TeamApplication application,
             List<TeamApplicationAnswerResponse> answers
+    ) {
+        return of(application, answers, null, null);
+    }
+
+    public static TeamApplicationResponse of(
+            TeamApplication application,
+            List<TeamApplicationAnswerResponse> answers,
+            AppliedTeamResponse team,
+            String applicantNickname
     ) {
         return new TeamApplicationResponse(
                 application.getId(),
@@ -57,7 +75,9 @@ public record TeamApplicationResponse(
                 application.getStatus(),
                 application.getAppliedAt(),
                 application.getDecidedAt(),
-                answers
+                answers,
+                team,
+                applicantNickname
         );
     }
 }
