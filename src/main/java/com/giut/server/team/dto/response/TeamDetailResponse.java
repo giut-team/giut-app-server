@@ -51,6 +51,12 @@ public record TeamDetailResponse(
         List<TeamApplicationQuestionResponse> applicationQuestions,
 
         @Schema(description = "현재 사용자의 팀 북마크 여부", example = "true")
-        boolean scrapped
+        boolean scrapped,
+
+        @Schema(description = "팀장 담당 분야 코드. 기존 팀은 비어 있을 수 있습니다.", nullable = true)
+        String leaderRoleCode,
+
+        @Schema(description = "협업 도구 코드 목록")
+        List<Team.CollaborationTool> collaborationTools
 ) {
 }

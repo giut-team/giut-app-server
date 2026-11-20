@@ -237,7 +237,8 @@ class AdminCompetitionDeletePersistenceTest {
         mvc.perform(as(student, post("/api/teams")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"competitionId\":" + target.getId() + ",\"name\":\"새 팀\","
                                 + "\"activityMode\":\"ONLINE\",\"maxMemberCount\":4,\"weeklyMeetingCount\":1,"
-                                + "\"meetingPlace\":\"ANYWHERE\",\"recruitments\":[],\"applicationQuestions\":[]}"))
+                                + "\"leaderRoleCode\":\"BACKEND_DEVELOPER\",\"collaborationTools\":[\"DISCORD\"],"
+                                + "\"recruitments\":[],\"applicationQuestions\":[]}"))
                 .andExpect(status().isNotFound());
         assertThat(teams.count()).isZero();
         assertThat(members.count()).isZero();

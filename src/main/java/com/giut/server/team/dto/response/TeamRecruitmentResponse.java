@@ -27,12 +27,4 @@ public record TeamRecruitmentResponse(
         );
     }
 
-    public static TeamRecruitmentResponse from(TeamRecruitment recruitment, long filledCount) {
-        return new TeamRecruitmentResponse(
-                recruitment.getId(),
-                recruitment.getRoleCode(),
-                recruitment.getRequiredCount(),
-                filledCount
-        );
-    }
 }

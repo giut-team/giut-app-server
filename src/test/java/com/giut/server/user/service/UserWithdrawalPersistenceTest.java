@@ -147,17 +147,22 @@ class UserWithdrawalPersistenceTest {
     }
 
     @Test
-    void oldBearerAndCookieCannotReachApisAndRepeatedWithdrawalDoesNotWriteAgain() throws Exception {
+    void oldBearerAndCookieCannotReachProtectedApisAndRepeatedWithdrawalDoesNotWriteAgain() throws Exception {
         String token = jwt.generateAccessToken(target);
         mvc.perform(as(target, delete(PATH))).andExpect(status().isNoContent());
         LocalDateTime deletedAt = users.findById(target.getId()).orElseThrow().getUpdatedAt();
         for (String route : new String[]{"/api/userprofile/me/profile", "/api/competitions",
-                "/api/members/university-email/status", "/api/chat-rooms", "/api/profile/shares/any-token"}) {
+                "/api/members/university-email/status", "/api/chat-rooms"}) {
             mvc.perform(path(get(route)).header("Authorization", "Bearer " + token))
                     .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(403));
             mvc.perform(path(get(route)).cookie(new Cookie("giut_access_token", token)))
                     .andExpect(status().isForbidden());
         }
+        String publicShare = "/api/profile/shares/any-token";
+        mvc.perform(path(get(publicShare)).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+        mvc.perform(path(get(publicShare)).cookie(new Cookie("giut_access_token", token)))
+                .andExpect(status().isNotFound());
         mvc.perform(path(delete(PATH)).header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
         assertThat(users.findById(target.getId()).orElseThrow().getUpdatedAt()).isEqualTo(deletedAt);
         mvc.perform(path(get("/actuator/health"))).andExpect(status().isOk());

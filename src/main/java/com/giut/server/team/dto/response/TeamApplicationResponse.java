@@ -39,12 +39,35 @@ public record TeamApplicationResponse(
         Instant decidedAt,
 
         @Schema(description = "지원서 답변 목록")
-        List<TeamApplicationAnswerResponse> answers
+        List<TeamApplicationAnswerResponse> answers,
+
+        @Schema(description = "내 지원 목록에 표시할 팀 요약. 팀 요약을 제공하지 않는 응답은 null입니다.", nullable = true)
+        AppliedTeamResponse team,
+
+        @Schema(description = "팀장용 지원 목록에 표시하는 지원자 닉네임. 다른 응답은 null입니다.", nullable = true)
+        String applicantNickname,
+
+        @Schema(description = "주간 투자 가능 시간. 20은 20시간 이상이며, 기존 지원서나 합류 제안은 비어 있을 수 있습니다.",
+                example = "20", nullable = true)
+        Integer weeklyAvailableHours,
+
+        @Schema(description = "회의 가능 시간대. 선택하지 않았으면 빈 배열입니다.",
+                example = "[\"MORNING\",\"EVENING\"]")
+        List<TeamApplication.MeetingTimeSlot> meetingTimeSlots
 ) {
 
     public static TeamApplicationResponse of(
             TeamApplication application,
             List<TeamApplicationAnswerResponse> answers
+    ) {
+        return of(application, answers, null, null);
+    }
+
+    public static TeamApplicationResponse of(
+            TeamApplication application,
+            List<TeamApplicationAnswerResponse> answers,
+            AppliedTeamResponse team,
+            String applicantNickname
     ) {
         return new TeamApplicationResponse(
                 application.getId(),
@@ -57,7 +80,11 @@ public record TeamApplicationResponse(
                 application.getStatus(),
                 application.getAppliedAt(),
                 application.getDecidedAt(),
-                answers
+                answers,
+                team,
+                applicantNickname,
+                application.getWeeklyAvailableHours(),
+                application.getMeetingTimeSlots() == null ? List.of() : List.copyOf(application.getMeetingTimeSlots())
         );
     }
 }

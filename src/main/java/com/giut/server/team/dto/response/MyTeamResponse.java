@@ -20,12 +20,17 @@ public record MyTeamResponse(
         @Schema(description = "현재 사용자의 팀 내 역할", example = "LEADER")
         TeamMember.Role myRole,
         @Schema(description = "현재 사용자의 담당 분야 코드", example = "BACKEND_DEVELOPER")
-        String myRoleCode
+        String myRoleCode,
+        @Schema(description = "공모전 이름")
+        String competitionTitle,
+        @Schema(description = "활성 사용자가 제출한 미처리 참가 신청 수. 팀장이 아닌 경우 0입니다.", example = "2")
+        long pendingApplicationCount
 ) {
     public static MyTeamResponse of(
             Team team,
             TeamMember membership,
-            long currentMemberCount
+            long currentMemberCount,
+            long pendingApplicationCount
     ) {
         return new MyTeamResponse(
                 team.getId(),
@@ -38,7 +43,9 @@ public record MyTeamResponse(
                 team.getStatus(),
                 team.getCreatedAt(),
                 membership.getRole(),
-                membership.getRoleCode()
+                membership.getRoleCode(),
+                team.getCompetition().getTitle(),
+                pendingApplicationCount
         );
     }
 }

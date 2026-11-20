@@ -8,12 +8,17 @@ import com.giut.server.team.dto.request.TeamApplicationAnswerRequest;
 import com.giut.server.team.dto.request.CreateTeamRecruitmentRequest;
 import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
+import com.giut.server.team.dto.response.AppliedTeamResponse;
 import com.giut.server.team.dto.response.CreateTeamResponse;
 import com.giut.server.team.dto.response.TeamApplicationAnswerResponse;
 import com.giut.server.team.dto.response.TeamApplicationListResponse;
 import com.giut.server.team.dto.response.TeamApplicationQuestionResponse;
 import com.giut.server.team.dto.response.TeamApplicationResponse;
 import com.giut.server.team.dto.response.TeamDetailResponse;
+import com.giut.server.team.dto.response.TeamInviteJoinResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkSummaryResponse;
+import com.giut.server.team.dto.response.TeamInvitePreviewResponse;
 import com.giut.server.team.dto.response.TeamMemberListResponse;
 import com.giut.server.team.dto.response.TeamMemberResponse;
 import com.giut.server.team.dto.response.TeamRecruitmentResponse;
@@ -28,6 +33,7 @@ import com.giut.server.team.entity.Team;
 import com.giut.server.team.entity.TeamApplicationAnswer;
 import com.giut.server.team.entity.TeamApplicationQuestion;
 import com.giut.server.team.entity.TeamApplication;
+import com.giut.server.team.entity.TeamInviteLink;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.team.entity.TeamRecruitment;
 import com.giut.server.user.entity.User;
@@ -38,6 +44,7 @@ import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.team.repository.TeamApplicationAnswerRepository;
 import com.giut.server.team.repository.TeamApplicationQuestionRepository;
 import com.giut.server.team.repository.TeamApplicationRepository;
+import com.giut.server.team.repository.TeamInviteLinkRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamRepository;
 import com.giut.server.team.repository.TeamRecruitmentRepository;
@@ -51,10 +58,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,11 +80,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TeamService {
 
+    private static final Duration INVITE_LINK_TTL = Duration.ofHours(24);
+    private static final int MAX_ACTIVE_INVITE_LINKS = 10;
+    private static final int MAX_INVITE_LINKS_PER_24_HOURS = 30;
+    private static final SecureRandom INVITE_LINK_RANDOM = new SecureRandom();
+
     private final TeamRepository teamRepository;
     private final TeamRecruitmentRepository teamRecruitmentRepository;
     private final TeamScrapRepository teamScrapRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
+    private final TeamInviteLinkRepository teamInviteLinkRepository;
+    private final TeamInviteLinkUrl teamInviteLinkUrl;
     private final TeamApplicationQuestionRepository teamApplicationQuestionRepository;
     private final TeamApplicationAnswerRepository teamApplicationAnswerRepository;
     private final CompetitionRepository competitionRepository;
@@ -120,17 +141,36 @@ public class TeamService {
                 .toList();
         Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
 
-        List<MyTeamResponse> teams = teamRepository
-                .findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED)
-                .stream()
+        List<Team> activeTeams = teamRepository.findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED);
+        List<Long> ledTeamIds = activeTeams.stream()
+                .filter(team -> userId.equals(team.getLeader().getId()))
+                .filter(team -> membershipByTeamId.get(team.getId()).getRole() == TeamMember.Role.LEADER)
+                .map(Team::getId)
+                .toList();
+        Map<Long, Long> pendingCountByTeamId = countPendingApplicationsByTeamId(ledTeamIds);
+        List<MyTeamResponse> teams = activeTeams.stream()
                 .map(team -> MyTeamResponse.of(
                         team,
                         membershipByTeamId.get(team.getId()),
-                        memberCountByTeamId.getOrDefault(team.getId(), 0L)
+                        memberCountByTeamId.getOrDefault(team.getId(), 0L),
+                        pendingCountByTeamId.getOrDefault(team.getId(), 0L)
                 ))
                 .toList();
 
         return new MyTeamListResponse(teams);
+    }
+
+    private Map<Long, Long> countPendingApplicationsByTeamId(List<Long> teamIds) {
+        if (teamIds.isEmpty()) {
+            return Map.of();
+        }
+        return teamApplicationRepository.countByTeamIdsAndTypeAndStatusAndUserStatus(
+                        teamIds, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING, User.Status.ACTIVE
+                ).stream()
+                .collect(Collectors.toMap(
+                        TeamApplicationRepository.TeamApplicationCount::getTeamId,
+                        TeamApplicationRepository.TeamApplicationCount::getApplicationCount
+                ));
     }
 
     private Map<Long, Long> countActiveMembersByTeamId(List<Long> teamIds) {
@@ -156,12 +196,22 @@ public class TeamService {
 
         validateCompetitionRecruitmentOpen(competition);
 
+        boolean legacyRequest = request.leaderRoleCode() == null
+                && request.collaborationTools() == null && request.meetingPlace() != null;
+        if (!legacyRequest) {
+            validateLeaderRole(request.leaderRoleCode());
+        }
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), request.collaborationTools(),
+                legacyRequest, legacyRequest
+        );
+
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
             throw new ConflictException("이 공모전에 이미 모집 중인 팀이 있습니다.");
         }
 
-        Team team = teamRepository.save(Team.create(
+        Team newTeam = Team.create(
                 competition,
                 leader,
                 request.name(),
@@ -169,10 +219,12 @@ public class TeamService {
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
-        ));
+                activity.meetingPlace()
+        );
+        newTeam.replaceCollaborationTools(activity.tools());
+        Team team = teamRepository.save(newTeam);
 
-        teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId()));
+        teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId(), request.leaderRoleCode()));
 
         List<TeamRecruitmentResponse> recruitments = saveRecruitments(
                 team.getId(),
@@ -184,7 +236,46 @@ public class TeamService {
                 request.applicationQuestions()
         );
 
-        return CreateTeamResponse.of(team, recruitments, applicationQuestions);
+        return CreateTeamResponse.of(team, recruitments, applicationQuestions, request.leaderRoleCode());
+    }
+
+    private void validateLeaderRole(String roleCode) {
+        if (roleCode == null || roleCode.isBlank()) {
+            throw new IllegalArgumentException("팀장의 담당 분야는 필수입니다.");
+        }
+        if (profileRoleRepository.findAllByCodeIn(List.of(roleCode)).stream()
+                .noneMatch(role -> roleCode.equals(role.getCode()))) {
+            throw new IllegalArgumentException("존재하지 않는 팀장 담당 분야 코드입니다.");
+        }
+    }
+
+    private record ActivitySettings(Team.MeetingPlace meetingPlace, Set<Team.CollaborationTool> tools) {}
+
+    private ActivitySettings validateActivitySettings(
+            Team.ActivityMode activityMode,
+            Team.MeetingPlace meetingPlace,
+            List<Team.CollaborationTool> collaborationTools,
+            boolean legacyRequest,
+            boolean allowMissingTools
+    ) {
+        List<Team.CollaborationTool> tools = collaborationTools == null ? List.of() : collaborationTools;
+        if (activityMode == Team.ActivityMode.ONLINE && meetingPlace != null && !legacyRequest) {
+            throw new IllegalArgumentException("온라인 팀에는 회의 장소를 지정할 수 없습니다.");
+        }
+        if (activityMode != Team.ActivityMode.ONLINE && meetingPlace == null) {
+            throw new IllegalArgumentException("오프라인·혼합 팀은 회의 장소가 필수입니다.");
+        }
+        if (activityMode == Team.ActivityMode.OFFLINE && !tools.isEmpty()) {
+            throw new IllegalArgumentException("오프라인 팀에는 협업 도구를 지정할 수 없습니다.");
+        }
+        if (activityMode != Team.ActivityMode.OFFLINE && tools.isEmpty() && !allowMissingTools) {
+            throw new IllegalArgumentException("온라인·혼합 팀은 협업 도구를 1개 이상 선택해야 합니다.");
+        }
+        Set<Team.CollaborationTool> distinctTools = new HashSet<>(tools);
+        if (distinctTools.contains(null) || distinctTools.size() != tools.size()) {
+            throw new IllegalArgumentException("협업 도구는 빈 값 없이 한 번씩만 선택할 수 있습니다.");
+        }
+        return new ActivitySettings(activityMode == Team.ActivityMode.ONLINE ? null : meetingPlace, distinctTools);
     }
 
     private void validateCompetitionRecruitmentOpen(Competition competition) {
@@ -206,14 +297,32 @@ public class TeamService {
             throw new ConflictException("최대 팀원 수를 현재 팀원 수보다 작게 설정할 수 없습니다.");
         }
 
+        // Older clients always sent a place and had no field for collaboration tools.
+        boolean legacyRequest = request.collaborationTools() == null && request.meetingPlace() != null;
+        boolean preserveTools = request.collaborationTools() == null
+                && (legacyRequest || request.activityMode() == team.getActivityMode());
+        List<Team.CollaborationTool> tools = preserveTools && request.activityMode() != Team.ActivityMode.OFFLINE
+                ? team.collaborationToolCodes() : request.collaborationTools();
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), tools, legacyRequest, preserveTools
+        );
+        if (request.leaderRoleCode() != null) {
+            validateLeaderRole(request.leaderRoleCode());
+            TeamMember leaderMembership = teamMemberRepository.findByTeamIdAndUserId(teamId, leaderUserId)
+                    .filter(member -> member.getRole() == TeamMember.Role.LEADER
+                            && member.getStatus() == TeamMember.Status.ACTIVE)
+                    .orElseThrow(() -> new ConflictException("활성 팀장 정보를 찾을 수 없습니다."));
+            leaderMembership.updateRoleCode(request.leaderRoleCode());
+        }
         team.updateInfo(
                 request.name(),
                 request.description(),
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
+                activity.meetingPlace()
         );
+        team.replaceCollaborationTools(activity.tools());
         if (team.getStatus() == Team.Status.RECRUITING
                 && activeMemberCount >= request.maxMemberCount()) {
             team.closeRecruitment();
@@ -234,7 +343,9 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public TeamDetailResponse getTeamDetail(Long teamId, Long userId) {
-        Team team = findTeam(teamId);
+        Team team = teamRepository.findWithCollaborationToolsById(teamId)
+                .map(this::requireAvailableTeam)
+                .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
         List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
                 teamId,
                 TeamMember.Status.ACTIVE
@@ -242,14 +353,11 @@ public class TeamService {
         List<TeamApplicationQuestionResponse> applicationQuestions = findActiveQuestions(teamId).stream()
                 .map(TeamApplicationQuestionResponse::from)
                 .toList();
-        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE)
-                .stream()
-                .map(recruitment -> new TeamRecruitmentResponse(
-                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
-                        recruitment.getRequiredCount(), recruitment.getFilledCount()
-                ))
-                .toList();
+        String leaderRoleCode = activeMembers.stream()
+                .filter(member -> member.getRole() == TeamMember.Role.LEADER)
+                .findFirst()
+                .map(TeamMember::getRoleCode)
+                .orElse(null);
 
         return new TeamDetailResponse(
                 team.getId(),
@@ -261,12 +369,14 @@ public class TeamService {
                 team.getMaxMemberCount(),
                 activeMembers.size(),
                 team.getWeeklyMeetingCount(),
-                team.getMeetingPlace(),
-                recruitments,
+                team.getActivityMode() == Team.ActivityMode.ONLINE ? null : team.getMeetingPlace(),
+                findRecruitmentResponses(teamId),
                 team.getStatus(),
                 team.getCreatedAt(),
                 applicationQuestions,
-                teamScrapRepository.existsByUser_IdAndTeam_Id(userId, teamId)
+                teamScrapRepository.existsByUser_IdAndTeam_Id(userId, teamId),
+                leaderRoleCode,
+                team.collaborationToolCodes()
         );
     }
 
@@ -274,27 +384,20 @@ public class TeamService {
     public TeamMemberListResponse getTeamMembers(Long teamId) {
         findTeam(teamId);
 
-        List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
-                teamId,
-                TeamMember.Status.ACTIVE
-        );
-        List<Long> userIds = activeMembers.stream()
-                .map(TeamMember::getUserId)
-                .toList();
-        Map<Long, String> nicknamesByUserId = userRepository.findNicknamesByIdInAndStatus(userIds, User.Status.ACTIVE)
+        List<TeamMemberResponse> members = teamMemberRepository
+                .findMemberDetails(teamId, TeamMember.Status.ACTIVE, User.Status.ACTIVE)
                 .stream()
-                .collect(Collectors.toMap(UserRepository.UserNickname::getId, UserRepository.UserNickname::getNickname));
-
-        List<TeamMemberResponse> members = activeMembers.stream()
-                .filter(teamMember -> nicknamesByUserId.containsKey(teamMember.getUserId()))
                 .map(teamMember -> new TeamMemberResponse(
-                        teamMember.getId(),
+                        teamMember.getTeamMemberId(),
                         teamMember.getUserId(),
-                        nicknamesByUserId.get(teamMember.getUserId()),
+                        teamMember.getNickname(),
                         teamMember.getRole(),
                         teamMember.getRoleCode(),
                         teamMember.getStatus(),
-                        teamMember.getJoinedAt()
+                        teamMember.getJoinedAt(),
+                        teamMember.getRoleName(),
+                        teamMember.getPrimaryRole(),
+                        teamMember.getPrimaryRole() == null ? null : teamMember.getPrimaryRole().getDisplayName()
                 ))
                 .toList();
 
@@ -304,14 +407,18 @@ public class TeamService {
     @Transactional(readOnly = true)
     public TeamRecruitmentListResponse getTeamRecruitments(Long teamId) {
         findTeam(teamId);
+        return new TeamRecruitmentListResponse(teamId, findRecruitmentResponses(teamId));
+    }
 
-        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllByTeamIdOrderByIdAsc(teamId)
+    private List<TeamRecruitmentResponse> findRecruitmentResponses(Long teamId) {
+        return teamRecruitmentRepository
+                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)
                 .stream()
-                .map(recruitment -> toRecruitmentResponse(recruitment))
+                .map(recruitment -> new TeamRecruitmentResponse(
+                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
+                        recruitment.getRequiredCount(), recruitment.getFilledCount()
+                ))
                 .toList();
-
-        return new TeamRecruitmentListResponse(teamId, recruitments);
     }
 
     @Transactional
@@ -341,7 +448,8 @@ public class TeamService {
         }
 
         TeamApplication application = teamApplicationRepository.save(
-                TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message())
+                TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message(),
+                        request.weeklyAvailableHours(), request.meetingTimeSlots())
         );
 
         List<TeamApplicationQuestion> questions = findActiveQuestions(team.getId());
@@ -388,28 +496,23 @@ public class TeamService {
         Team team = findTeam(teamId);
         validateTeamLeader(team, leaderUserId);
 
-        List<TeamApplication> applications = teamApplicationRepository.findAllByTeamIdAndStatus(
-                teamId,
-                TeamApplication.Status.PENDING
+        List<TeamApplicationRepository.PendingApplicationDetails> applications =
+                teamApplicationRepository.findPendingApplicationDetails(
+                        teamId, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING, User.Status.ACTIVE
+                );
+        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId = findAnswersByApplicationId(
+                applications.stream().map(details -> details.getApplication().getId()).toList()
         );
-        List<Long> applicationIds = applications.stream()
-                .map(TeamApplication::getId)
-                .toList();
-
-        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId = applicationIds.isEmpty()
-                ? Map.of()
-                : teamApplicationAnswerRepository.findAllByApplicationIdIn(applicationIds)
-                        .stream()
-                        .collect(Collectors.groupingBy(TeamApplicationAnswer::getApplicationId));
-
-        List<TeamApplicationQuestion> questions = findActiveQuestions(teamId);
+        List<TeamApplicationQuestion> questions = applications.isEmpty() ? List.of() : findActiveQuestions(teamId);
         List<TeamApplicationResponse> responses = applications.stream()
-                .map(application -> TeamApplicationResponse.of(
-                        application,
+                .map(details -> TeamApplicationResponse.of(
+                        details.getApplication(),
                         toAnswerResponses(
                                 questions,
-                                answersByApplicationId.getOrDefault(application.getId(), List.of())
-                        )
+                                answersByApplicationId.getOrDefault(details.getApplication().getId(), List.of())
+                        ),
+                        null,
+                        details.getApplicantNickname()
                 ))
                 .toList();
 
@@ -418,12 +521,52 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public MyTeamApplicationListResponse getMyApplications(Long userId) {
-        List<TeamApplicationResponse> applications = teamApplicationRepository
-                .findAllByUserIdOrderByAppliedAtDesc(userId)
+        return getMyApplicationHistory(userId, TeamApplication.Type.APPLICATION);
+    }
+
+    @Transactional(readOnly = true)
+    public MyTeamApplicationListResponse getMyInvitations(Long userId) {
+        return getMyApplicationHistory(userId, TeamApplication.Type.INVITATION);
+    }
+
+    private MyTeamApplicationListResponse getMyApplicationHistory(Long userId, TeamApplication.Type type) {
+        List<TeamApplication> applications =
+                teamApplicationRepository.findAllByUserIdAndTypeOrderByAppliedAtDesc(userId, type);
+        if (applications.isEmpty()) {
+            return new MyTeamApplicationListResponse(List.of());
+        }
+        List<Long> teamIds = applications.stream().map(TeamApplication::getTeamId).distinct().toList();
+        Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
+        Map<Long, AppliedTeamResponse> appliedTeamById = teamRepository.findAllWithCompetitionByIdIn(teamIds).stream()
+                .collect(Collectors.toMap(Team::getId,
+                        team -> AppliedTeamResponse.of(team, memberCountByTeamId.getOrDefault(team.getId(), 0L))));
+        Map<Long, List<TeamApplicationQuestion>> questionsByTeamId = teamApplicationQuestionRepository
+                .findAllByTeamIdInAndStatus(teamIds, TeamApplicationQuestion.Status.ACTIVE)
                 .stream()
-                .map(application -> TeamApplicationResponse.of(application, findAnswerResponses(application)))
+                .collect(Collectors.groupingBy(TeamApplicationQuestion::getTeamId));
+        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId =
+                findAnswersByApplicationId(applications.stream().map(TeamApplication::getId).toList());
+
+        List<TeamApplicationResponse> responses = applications.stream()
+                .map(application -> TeamApplicationResponse.of(
+                        application,
+                        toAnswerResponses(
+                                questionsByTeamId.getOrDefault(application.getTeamId(), List.of()),
+                                answersByApplicationId.getOrDefault(application.getId(), List.of())
+                        ),
+                        appliedTeamById.get(application.getTeamId()),
+                        null
+                ))
                 .toList();
-        return new MyTeamApplicationListResponse(applications);
+        return new MyTeamApplicationListResponse(responses);
+    }
+
+    private Map<Long, List<TeamApplicationAnswer>> findAnswersByApplicationId(List<Long> applicationIds) {
+        if (applicationIds.isEmpty()) {
+            return Map.of();
+        }
+        return teamApplicationAnswerRepository.findAllByApplicationIdIn(applicationIds).stream()
+                .collect(Collectors.groupingBy(TeamApplicationAnswer::getApplicationId));
     }
 
     @Transactional
@@ -493,6 +636,106 @@ public class TeamService {
         return TeamApplicationResponse.of(invitation, List.of());
     }
 
+    @Transactional
+    public TeamInviteLinkResponse createInviteLink(Long userId, Long teamId, String roleCode) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, userId);
+        requireRecruiting(team);
+        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
+        validateJoinCapacity(team, recruitment);
+
+        Instant now = clock.instant();
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNull(teamId, now)
+                >= MAX_ACTIVE_INVITE_LINKS) {
+            throw new ConflictException("팀당 활성 초대 링크는 최대 10개까지 발급할 수 있습니다.");
+        }
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfter(teamId, now) >= MAX_INVITE_LINKS_PER_24_HOURS) {
+            throw new ConflictException("팀당 최근 24시간 동안 초대 링크는 최대 30개까지 발급할 수 있습니다.");
+        }
+
+        byte[] randomBytes = new byte[32];
+        INVITE_LINK_RANDOM.nextBytes(randomBytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String inviteUrl = teamInviteLinkUrl.build(teamId, token);
+        Instant expiresAt = now.plus(INVITE_LINK_TTL);
+        TeamInviteLink link = teamInviteLinkRepository.save(
+                TeamInviteLink.create(teamId, recruitment.getRoleCode(), hashInviteToken(token), expiresAt)
+        );
+        return new TeamInviteLinkResponse(link.getId(), link.getRoleCode(), link.getExpiresAt(), inviteUrl);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TeamInviteLinkSummaryResponse> getActiveInviteLinks(Long userId, Long teamId) {
+        Team team = findTeam(teamId);
+        validateTeamLeader(team, userId);
+        return teamInviteLinkRepository
+                .findAllByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNullOrderByIdDesc(teamId, clock.instant())
+                .stream()
+                .map(link -> new TeamInviteLinkSummaryResponse(link.getId(), link.getRoleCode(), link.getExpiresAt()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public TeamInvitePreviewResponse previewInviteLink(Long userId, Long teamId, String token) {
+        Team team = findTeam(teamId);
+        TeamInviteLink link = findUsableInviteLink(teamId, token, clock.instant());
+        boolean joinable = team.getStatus() == Team.Status.RECRUITING
+                && teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isEmpty()
+                && !isTeamFull(team, teamMemberRepository.countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE))
+                && teamRecruitmentRepository.findByTeamIdAndRoleCode(teamId, link.getRoleCode())
+                        .filter(recruitment -> !isRecruitmentFull(recruitment))
+                        .isPresent();
+        return new TeamInvitePreviewResponse(teamId, team.getName(), link.getRoleCode(), link.getExpiresAt(), joinable);
+    }
+
+    @Transactional
+    public TeamInviteJoinResponse joinViaInviteLink(Long userId, Long teamId, String token) {
+        // Use the same team lock as application approval and direct invitations.
+        Team team = findTeamForUpdate(teamId);
+        Instant now = clock.instant();
+        TeamInviteLink link = findUsableInviteLink(teamId, token, now);
+        requireRecruiting(team);
+        TeamRecruitment recruitment = findRecruitment(teamId, link.getRoleCode());
+        findActiveUser(userId, "사용자를 찾을 수 없습니다.");
+        if (teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isPresent()) {
+            throw new ConflictException("이미 이 팀에 참여한 이력이 있습니다.");
+        }
+        long activeMemberCount = validateJoinCapacity(team, recruitment);
+        TeamMember member = addMember(team, userId, link.getRoleCode(), activeMemberCount);
+        link.use(now);
+        return new TeamInviteJoinResponse(teamId, member.getId(), link.getRoleCode());
+    }
+
+    @Transactional
+    public void revokeInviteLink(Long userId, Long teamId, Long inviteLinkId) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, userId);
+        TeamInviteLink link = teamInviteLinkRepository.findByIdAndTeamId(inviteLinkId, teamId)
+                .orElseThrow(() -> new ResourceNotFoundException("팀 초대 링크를 찾을 수 없습니다."));
+        Instant now = clock.instant();
+        if (link.isUsableAt(now)) {
+            link.revoke(now);
+        }
+    }
+
+    private TeamInviteLink findUsableInviteLink(Long teamId, String token, Instant now) {
+        TeamInviteLink link = teamInviteLinkRepository.findByTeamIdAndTokenHash(teamId, hashInviteToken(token))
+                .orElseThrow(() -> new ResourceNotFoundException("팀 초대 링크를 찾을 수 없습니다."));
+        if (!link.isUsableAt(now)) {
+            throw new ConflictException("만료, 폐기 또는 사용 완료된 팀 초대 링크입니다.");
+        }
+        return link;
+    }
+
+    private String hashInviteToken(String token) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", e);
+        }
+    }
+
     private ApproveTeamApplicationResponse registerTeamMember(
             Team team,
             TeamApplication application,
@@ -500,10 +743,7 @@ public class TeamService {
     ) {
         Long teamId = team.getId();
 
-        if (team.getStatus() != Team.Status.RECRUITING) {
-            throw new ConflictException("모집 중인 팀이 아닙니다.");
-        }
-
+        requireRecruiting(team);
         TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
 
         if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(
@@ -511,31 +751,9 @@ public class TeamService {
             throw new ConflictException("이미 참여 중인 사용자입니다.");
         }
 
-        long activeMemberCount = teamMemberRepository
-                .countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE);
-
-        if (team.getMaxMemberCount() != null
-                && activeMemberCount >= team.getMaxMemberCount()) {
-            throw new ConflictException("팀 정원이 마감되었습니다.");
-        }
-
-        if (countFilledRecruitment(recruitment)
-                >= recruitment.getRequiredCount()) {
-            throw new ConflictException("모집 분야 정원이 마감되었습니다.");
-        }
-
+        long activeMemberCount = validateJoinCapacity(team, recruitment);
         application.approve(roleCode);
-
-        TeamMember member = teamMemberRepository.save(
-                TeamMember.createMember(
-                        teamId, application.getUserId(), roleCode
-                )
-        );
-
-        if (team.getMaxMemberCount() != null
-                && activeMemberCount + 1 >= team.getMaxMemberCount()) {
-            team.closeRecruitment();
-        }
+        TeamMember member = addMember(team, application.getUserId(), roleCode, activeMemberCount);
 
         return new ApproveTeamApplicationResponse(
                 application.getId(),
@@ -545,6 +763,48 @@ public class TeamService {
                 roleCode,
                 member.getId()
         );
+    }
+
+    private void requireRecruiting(Team team) {
+        if (team.getStatus() != Team.Status.RECRUITING) {
+            throw new ConflictException("모집 중인 팀이 아닙니다.");
+        }
+    }
+
+    private long validateJoinCapacity(Team team, TeamRecruitment recruitment) {
+        long activeMemberCount = teamMemberRepository
+                .countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE);
+
+        if (isTeamFull(team, activeMemberCount)) {
+            throw new ConflictException("팀 정원이 마감되었습니다.");
+        }
+
+        if (isRecruitmentFull(recruitment)) {
+            throw new ConflictException("모집 분야 정원이 마감되었습니다.");
+        }
+
+        return activeMemberCount;
+    }
+
+    private boolean isTeamFull(Team team, long activeMemberCount) {
+        return team.getMaxMemberCount() != null && activeMemberCount >= team.getMaxMemberCount();
+    }
+
+    private boolean isRecruitmentFull(TeamRecruitment recruitment) {
+        return countFilledRecruitment(recruitment) >= recruitment.getRequiredCount();
+    }
+
+    private TeamMember addMember(Team team, Long userId, String roleCode, long activeMemberCount) {
+        TeamMember member = teamMemberRepository.save(
+                TeamMember.createMember(team.getId(), userId, roleCode)
+        );
+
+        if (team.getMaxMemberCount() != null
+                && activeMemberCount + 1 >= team.getMaxMemberCount()) {
+            team.closeRecruitment();
+        }
+
+        return member;
     }
 
     @Transactional
@@ -653,13 +913,9 @@ public class TeamService {
     }
 
     private long countFilledRecruitment(TeamRecruitment recruitment) {
-        return teamMemberRepository.countByTeamIdAndRoleCodeAndStatus(
-                recruitment.getTeamId(), recruitment.getRoleCode(), TeamMember.Status.ACTIVE
+        return teamMemberRepository.countByTeamIdAndRoleCodeAndStatusAndRole(
+                recruitment.getTeamId(), recruitment.getRoleCode(), TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER
         );
-    }
-
-    private TeamRecruitmentResponse toRecruitmentResponse(TeamRecruitment recruitment) {
-        return TeamRecruitmentResponse.from(recruitment, countFilledRecruitment(recruitment));
     }
 
     private TeamApplication findPendingApplication(Long teamId, Long applicationId) {

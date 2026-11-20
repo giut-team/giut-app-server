@@ -11,22 +11,21 @@ import java.util.Optional;
 
 public interface TeamRecruitmentRepository extends JpaRepository<TeamRecruitment, Long> {
 
-    List<TeamRecruitment> findAllByTeamIdOrderByIdAsc(Long teamId);
-
     @Query("""
             select recruitment.id as recruitmentId, recruitment.roleCode as roleCode,
                    recruitment.requiredCount as requiredCount, count(member.id) as filledCount
             from TeamRecruitment recruitment
             left join TeamMember member
               on member.teamId = recruitment.teamId and member.roleCode = recruitment.roleCode
-             and member.status = :status
+             and member.status = :status and member.role = :role
             where recruitment.teamId = :teamId
             group by recruitment.id, recruitment.roleCode, recruitment.requiredCount
             order by recruitment.id
             """)
     List<RecruitmentWithFilledCount> findAllWithFilledCount(
             @Param("teamId") Long teamId,
-            @Param("status") TeamMember.Status status
+            @Param("status") TeamMember.Status status,
+            @Param("role") TeamMember.Role role
     );
 
     Optional<TeamRecruitment> findByTeamIdAndRoleCode(Long teamId, String roleCode);
