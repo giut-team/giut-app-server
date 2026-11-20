@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -137,6 +138,45 @@ class TeamInviteLinkPersistenceTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void onlyLeaderCanListActiveLinksWithoutTokens() throws Exception {
+        when(clock.instant()).thenReturn(NOW.minus(24, ChronoUnit.HOURS));
+        issueLink();
+        when(clock.instant()).thenReturn(NOW);
+        TeamInviteLinkResponse used = issueLink();
+        TeamInviteLinkResponse revoked = issueLink();
+        TeamInviteLinkResponse firstActive = issueLink();
+        TeamInviteLinkResponse latestActive = issueLink();
+        teamService.revokeInviteLink(leader.getId(), team.getId(), revoked.inviteLinkId());
+        teamService.joinViaInviteLink(createUser().getId(), team.getId(), tokenFrom(used));
+
+        String path = "/api/teams/" + team.getId() + "/invite-links";
+        mvc.perform(get(path).servletPath(path)).andExpect(status().isUnauthorized());
+        mvc.perform(as(createStudent(true), get(path).servletPath(path))).andExpect(status().isForbidden());
+        mvc.perform(as(leader, get(path).servletPath(path)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].inviteLinkId").value(latestActive.inviteLinkId()))
+                .andExpect(jsonPath("$[1].inviteLinkId").value(firstActive.inviteLinkId()))
+                .andExpect(jsonPath("$[0].roleCode").value(ROLE_CODE))
+                .andExpect(jsonPath("$[0].expiresAt").exists())
+                .andExpect(jsonPath("$[0].inviteUrl").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$[0].tokenHash").doesNotHaveJsonPath());
+    }
+
+    @Test
+    void previewShowsWhetherCurrentUserCanJoin() throws Exception {
+        TeamInviteLinkResponse link = issueLink();
+        String body = "{\"token\":\"" + tokenFrom(link) + "\"}";
+        mvc.perform(as(createStudent(true), jsonRequest("/preview", body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.joinable").value(true));
+        mvc.perform(as(leader, jsonRequest("/preview", body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.joinable").value(false));
+        assertThat(inviteLinkRepository.findById(link.inviteLinkId()).orElseThrow().getUsedAt()).isNull();
+    }
+
     @ParameterizedTest
     @EnumSource(TeamMember.Status.class)
     void previousMembershipRejectsAcceptanceWithoutUsingLink(TeamMember.Status membershipStatus) throws Exception {
@@ -149,6 +189,7 @@ class TeamInviteLinkPersistenceTest {
             case KICKED -> member.kick();
         }
         teamMemberRepository.save(member);
+        assertThat(teamService.previewInviteLink(invitee.getId(), team.getId(), tokenFrom(link)).joinable()).isFalse();
         mvc.perform(as(invitee, jsonRequest("/accept", "{\"token\":\"" + tokenFrom(link) + "\"}")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("이미 이 팀에 참여한 이력이 있습니다."));
@@ -164,12 +205,14 @@ class TeamInviteLinkPersistenceTest {
         User invitee = createUser();
         teamMemberRepository.save(TeamMember.createMember(team.getId(), createUser().getId(), ROLE_CODE));
 
+        assertThat(teamService.previewInviteLink(invitee.getId(), team.getId(), tokenFrom(link)).joinable()).isFalse();
         assertThatThrownBy(() -> teamService.joinViaInviteLink(invitee.getId(), team.getId(), tokenFrom(link)))
                 .isInstanceOf(ConflictException.class).hasMessage("모집 분야 정원이 마감되었습니다.");
         assertThat(inviteLinkRepository.findById(link.inviteLinkId()).orElseThrow().getUsedAt()).isNull();
 
         team.closeRecruitment();
         teamRepository.save(team);
+        assertThat(teamService.previewInviteLink(invitee.getId(), team.getId(), tokenFrom(link)).joinable()).isFalse();
         assertThatThrownBy(() -> teamService.joinViaInviteLink(invitee.getId(), team.getId(), tokenFrom(link)))
                 .isInstanceOf(ConflictException.class).hasMessage("모집 중인 팀이 아닙니다.");
         assertThat(inviteLinkRepository.findById(link.inviteLinkId()).orElseThrow().getUsedAt()).isNull();
@@ -182,7 +225,8 @@ class TeamInviteLinkPersistenceTest {
             issueLink();
         }
         assertThatThrownBy(this::issueLink).isInstanceOf(ConflictException.class).hasMessageContaining("10개");
-        assertThat(teamService.previewInviteLink(team.getId(), tokenFrom(oldest)).roleCode()).isEqualTo(ROLE_CODE);
+        assertThat(teamService.previewInviteLink(leader.getId(), team.getId(), tokenFrom(oldest)).roleCode())
+                .isEqualTo(ROLE_CODE);
 
         teamService.revokeInviteLink(leader.getId(), team.getId(), oldest.inviteLinkId());
         assertThat(issueLink().inviteLinkId()).isNotEqualTo(oldest.inviteLinkId());
@@ -215,7 +259,7 @@ class TeamInviteLinkPersistenceTest {
         assertThat(link.expiresAt()).isEqualTo(NOW.plus(24, ChronoUnit.HOURS));
         assertThat(inviteLinkRepository.findById(link.inviteLinkId()).orElseThrow().getTokenHash())
                 .hasSize(64).isNotEqualTo(token);
-        assertThat(teamService.previewInviteLink(team.getId(), token).roleCode()).isEqualTo(ROLE_CODE);
+        assertThat(teamService.previewInviteLink(invitee.getId(), team.getId(), token).roleCode()).isEqualTo(ROLE_CODE);
 
         var joined = teamService.joinViaInviteLink(invitee.getId(), team.getId(), token);
         assertThat(teamMemberRepository.findById(joined.teamMemberId()).orElseThrow().getRoleCode())
@@ -231,6 +275,7 @@ class TeamInviteLinkPersistenceTest {
         User invitee = createUser();
         teamMemberRepository.save(TeamMember.createMember(team.getId(), createUser().getId(), ROLE_CODE));
 
+        assertThat(teamService.previewInviteLink(invitee.getId(), team.getId(), token).joinable()).isFalse();
         assertThatThrownBy(() -> teamService.joinViaInviteLink(invitee.getId(), team.getId(), token))
                 .isInstanceOf(ConflictException.class).hasMessage("팀 정원이 마감되었습니다.");
         assertThat(inviteLinkRepository.findById(link.inviteLinkId()).orElseThrow().getUsedAt()).isNull();
@@ -238,7 +283,7 @@ class TeamInviteLinkPersistenceTest {
         assertThatThrownBy(() -> teamService.revokeInviteLink(invitee.getId(), team.getId(), link.inviteLinkId()))
                 .isInstanceOf(ForbiddenException.class);
         teamService.revokeInviteLink(leader.getId(), team.getId(), link.inviteLinkId());
-        assertThatThrownBy(() -> teamService.previewInviteLink(team.getId(), token))
+        assertThatThrownBy(() -> teamService.previewInviteLink(invitee.getId(), team.getId(), token))
                 .isInstanceOf(ConflictException.class).hasMessageContaining("폐기");
     }
 

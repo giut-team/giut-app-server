@@ -4,6 +4,7 @@ import com.giut.server.team.dto.request.CreateTeamInviteLinkRequest;
 import com.giut.server.team.dto.request.TeamInviteTokenRequest;
 import com.giut.server.team.dto.response.TeamInviteJoinResponse;
 import com.giut.server.team.dto.response.TeamInviteLinkResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkSummaryResponse;
 import com.giut.server.team.dto.response.TeamInvitePreviewResponse;
 import com.giut.server.team.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "Team", description = "팀 생성 및 관리")
 @SecurityRequirement(name = "JWT")
 @RestController
@@ -26,6 +29,21 @@ import org.springframework.web.bind.annotation.*;
 public class TeamInviteLinkController {
 
     private final TeamService teamService;
+
+    @GetMapping
+    @Operation(summary = "활성 팀 초대 링크 목록 조회",
+            description = "팀장이 사용되지 않고 만료·폐기되지 않은 링크의 ID, 모집 분야, 만료 시각을 조회합니다.")
+    @ApiResponse(responseCode = "200", description = "활성 링크 목록 조회 성공")
+    @ApiResponse(responseCode = "401", description = "인증 필요")
+    @ApiResponse(responseCode = "403", description = "팀장 권한 또는 학교 인증 필요")
+    @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음")
+    public ResponseEntity<List<TeamInviteLinkSummaryResponse>> list(
+            Authentication authentication,
+            @PathVariable Long teamId
+    ) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(teamService.getActiveInviteLinks(Long.valueOf(authentication.getName()), teamId));
+    }
 
     @PostMapping
     @Operation(summary = "팀 초대 링크 발급", description = "팀장이 모집 분야를 지정해 24시간 유효한 일회용 링크를 발급합니다.")
@@ -48,7 +66,8 @@ public class TeamInviteLinkController {
     }
 
     @PostMapping("/preview")
-    @Operation(summary = "팀 초대 링크 미리보기", description = "공유 URL의 토큰으로 팀 이름과 지정된 모집 분야를 조회합니다.")
+    @Operation(summary = "팀 초대 링크 미리보기",
+            description = "팀 이름과 모집 분야, 현재 사용자의 합류 가능 여부(joinable)를 조회합니다. 수락 시 모집 상태·정원·참여 이력을 다시 검사합니다.")
     @ApiResponse(responseCode = "200", description = "미리보기 성공")
     @ApiResponse(responseCode = "400", description = "잘못된 토큰 형식")
     @ApiResponse(responseCode = "401", description = "인증 필요")
@@ -56,11 +75,12 @@ public class TeamInviteLinkController {
     @ApiResponse(responseCode = "404", description = "팀 또는 링크를 찾을 수 없음")
     @ApiResponse(responseCode = "409", description = "만료·폐기·사용된 링크")
     public ResponseEntity<TeamInvitePreviewResponse> preview(
+            Authentication authentication,
             @PathVariable Long teamId,
             @Valid @RequestBody TeamInviteTokenRequest request
     ) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(teamService.previewInviteLink(teamId, request.token()));
+                .body(teamService.previewInviteLink(Long.valueOf(authentication.getName()), teamId, request.token()));
     }
 
     @PostMapping("/accept")

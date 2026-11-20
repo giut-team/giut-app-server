@@ -1,5 +1,7 @@
 package com.giut.server.team.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -12,12 +14,16 @@ import java.util.Locale;
 @Component
 class TeamInviteLinkUrl {
 
+    private static final Logger log = LoggerFactory.getLogger(TeamInviteLinkUrl.class);
     private final URI frontendBaseUrl;
 
     TeamInviteLinkUrl(@Value("${app.team-invite.frontend-base-url:}") String configuredUrl, Environment environment) {
         boolean local = environment.matchesProfiles("local");
         if (configuredUrl.isBlank()) {
             frontendBaseUrl = local ? URI.create("http://localhost:3000") : null;
+            if (!local) {
+                log.warn("APP_TEAM_INVITE_FRONTEND_BASE_URL is not configured. Team invite link issuance is unavailable.");
+            }
             return;
         }
         frontendBaseUrl = validate(configuredUrl.trim(), local);

@@ -16,6 +16,7 @@ import com.giut.server.team.dto.response.TeamApplicationResponse;
 import com.giut.server.team.dto.response.TeamDetailResponse;
 import com.giut.server.team.dto.response.TeamInviteJoinResponse;
 import com.giut.server.team.dto.response.TeamInviteLinkResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkSummaryResponse;
 import com.giut.server.team.dto.response.TeamInvitePreviewResponse;
 import com.giut.server.team.dto.response.TeamMemberListResponse;
 import com.giut.server.team.dto.response.TeamMemberResponse;
@@ -541,10 +542,27 @@ public class TeamService {
     }
 
     @Transactional(readOnly = true)
-    public TeamInvitePreviewResponse previewInviteLink(Long teamId, String token) {
+    public List<TeamInviteLinkSummaryResponse> getActiveInviteLinks(Long userId, Long teamId) {
+        Team team = findTeam(teamId);
+        validateTeamLeader(team, userId);
+        return teamInviteLinkRepository
+                .findAllByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNullOrderByIdDesc(teamId, clock.instant())
+                .stream()
+                .map(link -> new TeamInviteLinkSummaryResponse(link.getId(), link.getRoleCode(), link.getExpiresAt()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public TeamInvitePreviewResponse previewInviteLink(Long userId, Long teamId, String token) {
         Team team = findTeam(teamId);
         TeamInviteLink link = findUsableInviteLink(teamId, token, clock.instant());
-        return new TeamInvitePreviewResponse(teamId, team.getName(), link.getRoleCode(), link.getExpiresAt());
+        boolean joinable = team.getStatus() == Team.Status.RECRUITING
+                && teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isEmpty()
+                && !isTeamFull(team, teamMemberRepository.countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE))
+                && teamRecruitmentRepository.findByTeamIdAndRoleCode(teamId, link.getRoleCode())
+                        .filter(recruitment -> !isRecruitmentFull(recruitment))
+                        .isPresent();
+        return new TeamInvitePreviewResponse(teamId, team.getName(), link.getRoleCode(), link.getExpiresAt(), joinable);
     }
 
     @Transactional
@@ -634,17 +652,23 @@ public class TeamService {
         long activeMemberCount = teamMemberRepository
                 .countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE);
 
-        if (team.getMaxMemberCount() != null
-                && activeMemberCount >= team.getMaxMemberCount()) {
+        if (isTeamFull(team, activeMemberCount)) {
             throw new ConflictException("팀 정원이 마감되었습니다.");
         }
 
-        if (countFilledRecruitment(recruitment)
-                >= recruitment.getRequiredCount()) {
+        if (isRecruitmentFull(recruitment)) {
             throw new ConflictException("모집 분야 정원이 마감되었습니다.");
         }
 
         return activeMemberCount;
+    }
+
+    private boolean isTeamFull(Team team, long activeMemberCount) {
+        return team.getMaxMemberCount() != null && activeMemberCount >= team.getMaxMemberCount();
+    }
+
+    private boolean isRecruitmentFull(TeamRecruitment recruitment) {
+        return countFilledRecruitment(recruitment) >= recruitment.getRequiredCount();
     }
 
     private TeamMember addMember(Team team, Long userId, String roleCode, long activeMemberCount) {
