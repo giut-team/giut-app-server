@@ -428,7 +428,8 @@ public class TeamService {
         }
 
         TeamApplication application = teamApplicationRepository.save(
-                TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message())
+                TeamApplication.create(team.getId(), user.getId(), request.roleCode(), request.message(),
+                        request.weeklyAvailableHours(), request.meetingTimeSlots())
         );
 
         List<TeamApplicationQuestion> questions = findActiveQuestions(team.getId());
