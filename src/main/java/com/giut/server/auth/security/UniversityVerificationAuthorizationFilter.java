@@ -62,9 +62,9 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // 남아 있는 학생 토큰이 OAuth·관리자 로그인을 막아서는 안 되고, 가입 직후·인증 해제된 사용자도
-        // 공유 기기에서 로그아웃(토큰 폐기·쿠키 삭제)할 수 있어야 한다.
-        if (SessionRoutes.MATCHER.matches(request)) {
+        // 로그인 없이 쓸 수 있는 경로는 학교 인증도 요구하지 않는다. 남아 있는 학생 토큰이 OAuth·관리자 로그인이나
+        // 공유 프로필 조회를 막아서는 안 되고, 가입 직후·인증 해제된 사용자도 로그아웃할 수 있어야 한다.
+        if (PublicRoutes.ALL.matches(request)) {
             return false;
         }
 
@@ -77,7 +77,7 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
         if (HttpMethod.GET.matches(method)
-                && (isPublicCompetitionRead(path) || path.matches("/api/profile/shares/[^/]+"))) {
+                && isPublicCompetitionRead(path)) {
             return false;
         }
         if (HttpMethod.POST.matches(method)

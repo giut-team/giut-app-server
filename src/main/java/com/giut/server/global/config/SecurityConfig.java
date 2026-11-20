@@ -5,11 +5,10 @@ import com.giut.server.auth.security.ActiveUserAuthorizationFilter;
 import com.giut.server.auth.security.JwtAuthenticationEntryPoint;
 import com.giut.server.auth.security.JwtAccessDeniedHandler;
 import com.giut.server.auth.security.JwtProvider;
-import com.giut.server.auth.security.SessionRoutes;
+import com.giut.server.auth.security.PublicRoutes;
 import com.giut.server.auth.security.UniversityVerificationAuthorizationFilter;
 import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -56,18 +55,8 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/",
-                                "/actuator/health",
-                                "/actuator/health/**",
-                                "/swagger-ui",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**",
-                                "/v3/api-docs",
-                                "/v3/api-docs/**"
-                        ).permitAll()
-                        .requestMatchers(SessionRoutes.MATCHER).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/profile/shares/{token}").permitAll()
+                        // permitAll 경로는 PublicRoutes에만 정의한다. 인가 필터들도 같은 매처를 쓴다.
+                        .requestMatchers(PublicRoutes.ALL).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
