@@ -42,6 +42,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CompetitionSubmissionService {
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    /** CreateCompetitionRequest의 urls 상한과 같다. 저장되는 링크 총합(자동으로 더해지는 원본 링크 포함) 기준이다. */
+    private static final int MAX_URLS = 10;
 
     private final CompetitionRepository competitionRepository;
     private final CompetitionUrlRepository urlRepository;
@@ -241,6 +243,10 @@ public class CompetitionSubmissionService {
         validator.validate(form.toRegistrationRequest()).stream()
                 .sorted(Comparator.comparing(violation -> violation.getPropertyPath().toString()))
                 .forEach(violation -> addConstraintIssue(issues, violation));
+        if (form.urls().size() > MAX_URLS) {
+            // 원본 링크는 prepareForm에서 자동으로 더해진다. 10개를 입력해도 거부될 수 있으므로 원본 포함 기준임을 알린다.
+            issues.put("urls", issue("urls", "INVALID_VALUE", "공고 링크는 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다."));
+        }
         if (form.activityType() == null || form.activityType() == Competition.ActivityType.NOT_ACTIVITY) {
             issues.put("activityType", issue("activityType", "INVALID_ACTIVITY_TYPE", "등록할 활동 유형을 선택해 주세요."));
         }

@@ -217,6 +217,21 @@ class CompetitionSubmissionPersistenceTest {
     }
 
     @Test
+    void urlLimitCountsTheAutomaticallyAddedSourceLink() throws Exception {
+        // 원본이 아닌 링크 10개를 입력하면 원본 링크가 더해져 11개가 되므로, 원본 포함 기준이라고 안내하며 거부한다.
+        mvc.perform(json(post(SUBMISSIONS), member, submission(formWithRecruitmentLinks(10))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.requiredInputs[?(@.field == 'urls')].message",
+                        hasItem("공고 링크는 원본 링크를 포함해 최대 10개까지 등록할 수 있습니다.")));
+        assertThat(competitions.count()).isZero();
+
+        // 9개를 입력하면 원본 링크를 더해 10개로 등록된다.
+        mvc.perform(json(post(SUBMISSIONS), member, submission(formWithRecruitmentLinks(9))))
+                .andExpect(status().isCreated());
+        assertThat(urls.count()).isEqualTo(10);
+    }
+
+    @Test
     void submissionRequiresUniversityVerification() throws Exception {
         mvc.perform(json(post(SUBMISSIONS), unverified, submission(FORM))).andExpect(status().isForbidden());
         verifyNoInteractions(extractor);
@@ -263,6 +278,13 @@ class CompetitionSubmissionPersistenceTest {
                  "applicationEndAt":"2099-01-01T00:00:00Z",
                  "urls":[{"type":"OFFICIAL","url":"https://official.example.com/contest/","primary":false}]}
                 """;
+    }
+
+    private String formWithRecruitmentLinks(int count) {
+        String links = java.util.stream.IntStream.rangeClosed(1, count)
+                .mapToObj(i -> "{\"type\":\"RECRUITMENT\",\"url\":\"https://recruit.example.com/" + i + "\"}")
+                .collect(java.util.stream.Collectors.joining(","));
+        return FORM.strip().replaceFirst("\\{", "{\"urls\":[" + links + "],");
     }
 
     private String submission(String form) {
