@@ -1,6 +1,5 @@
 package com.giut.server.auth.security;
 
-import com.giut.server.auth.service.OAuthCookieService;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -29,7 +28,6 @@ class ActiveUserAuthorizationFilterTest {
 
     @Mock UserRepository users;
     @Mock JwtProvider jwtProvider;
-    @Mock OAuthCookieService cookies;
 
     @AfterEach void clearContext() { SecurityContextHolder.clearContext(); }
 
@@ -100,7 +98,7 @@ class ActiveUserAuthorizationFilterTest {
     }
 
     @Test
-    void revokedTokenDoesNotBlockLoginRoutesAndContinuesAnonymously() throws Exception {
+    void revokedTokenDoesNotBlockSessionRoutesAndContinuesAnonymously() throws Exception {
         User user = activeUser();
         user.bumpTokenVersion();
         when(users.findById(42L)).thenReturn(Optional.of(user));
@@ -111,14 +109,14 @@ class ActiveUserAuthorizationFilterTest {
                 new String[]{"GET", "/api/oauth/kakao/callback"},
                 new String[]{"GET", "/api/oauth/apple/authorization"},
                 new String[]{"POST", "/api/oauth/apple/callback"},
-                new String[]{"POST", "/api/admin/auth/login"})) {
+                new String[]{"POST", "/api/admin/auth/login"},
+                new String[]{"POST", "/api/auth/logout"})) {
             authenticate("42", "ROLE_STUDENT");
             var result = invoke(cookieRequest(route[0], route[1]));
             assertThat(result.continued()).as(route[1]).isTrue();
             assertThat(result.response().getStatus()).as(route[1]).isEqualTo(200);
             assertThat(SecurityContextHolder.getContext().getAuthentication()).as(route[1]).isNull();
         }
-        verifyNoInteractions(cookies);
     }
 
     @Test
@@ -134,7 +132,7 @@ class ActiveUserAuthorizationFilterTest {
     }
 
     @Test
-    void loginRouteExceptionIsExact() throws Exception {
+    void sessionRouteExceptionIsExact() throws Exception {
         User user = activeUser();
         user.bumpTokenVersion();
         when(users.findById(42L)).thenReturn(Optional.of(user));
@@ -144,7 +142,9 @@ class ActiveUserAuthorizationFilterTest {
                 new String[]{"GET", "/api/admin/auth/login"},
                 new String[]{"POST", "/api/admin/auth/login/extra"},
                 new String[]{"POST", "/api/admin/auth/signup"},
-                new String[]{"GET", "/api/oauthx/kakao"})) {
+                new String[]{"GET", "/api/oauthx/kakao"},
+                new String[]{"GET", "/api/auth/logout"},
+                new String[]{"POST", "/api/auth/logout/extra"})) {
             authenticate("42", "ROLE_STUDENT");
             var result = invoke(cookieRequest(route[0], route[1]));
             assertThat(result.continued()).as(route[1]).isFalse();
@@ -153,68 +153,23 @@ class ActiveUserAuthorizationFilterTest {
     }
 
     @Test
-    void revokedCookieOnProtectedRouteIsForbiddenAndClearsLoginCookies() throws Exception {
-        authenticate("42", "ROLE_STUDENT");
+    void revokedTokenOnProtectedRouteIsForbiddenWithoutClearingCookies() throws Exception {
+        // 늦게 도착한 403이 방금 로그인해 받은 같은 이름의 쿠키를 지우지 않도록, 403 응답에는 Set-Cookie가 없어야 한다.
         User user = activeUser();
         user.bumpTokenVersion();
         when(users.findById(42L)).thenReturn(Optional.of(user));
         when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
+        var bearerRequest = new MockHttpServletRequest("GET", "/api/profile");
+        bearerRequest.setServletPath("/api/profile");
+        bearerRequest.addHeader("Authorization", "Bearer " + TOKEN);
 
-        var result = invoke(cookieRequest("GET", "/api/profile"));
-
-        assertThat(result.continued()).isFalse();
-        assertThat(result.response().getStatus()).isEqualTo(403);
-        verify(cookies).clearLoginCookies(result.response());
-    }
-
-    @Test
-    void revokedCookieResponseCarriesExpiredLoginCookiesBeforeDenialIsWritten() throws Exception {
-        authenticate("42", "ROLE_STUDENT");
-        User user = activeUser();
-        user.bumpTokenVersion();
-        when(users.findById(42L)).thenReturn(Optional.of(user));
-        when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
-        // 403 핸들러가 응답을 커밋할 수 있으므로, 핸들러가 불리는 시점에 Set-Cookie가 이미 있어야 한다.
-        List<String> setCookieAtDenial = new java.util.ArrayList<>();
-        var handler = new JwtAccessDeniedHandler() {
-            @Override
-            public void handle(jakarta.servlet.http.HttpServletRequest request,
-                               jakarta.servlet.http.HttpServletResponse response,
-                               org.springframework.security.access.AccessDeniedException exception)
-                    throws java.io.IOException {
-                setCookieAtDenial.addAll(response.getHeaders(HttpHeaders.SET_COOKIE));
-                super.handle(request, response, exception);
-            }
-        };
-        var response = new MockHttpServletResponse();
-
-        new ActiveUserAuthorizationFilter(users, handler, jwtProvider, new OAuthCookieService())
-                .doFilter(cookieRequest("GET", "/api/profile"), response, (req, res) -> {});
-
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"code\":403");
-        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE))
-                .hasSize(2)
-                .anySatisfy(header -> assertThat(header).startsWith("giut_access_token=;").contains("Max-Age=0"))
-                .anySatisfy(header -> assertThat(header).startsWith("giut_refresh_token=;").contains("Max-Age=0"));
-        assertThat(setCookieAtDenial).containsExactlyElementsOf(response.getHeaders(HttpHeaders.SET_COOKIE));
-    }
-
-    @Test
-    void revokedBearerTokenOnProtectedRouteIsForbiddenWithoutTouchingCookies() throws Exception {
-        authenticate("42", "ROLE_STUDENT");
-        User user = activeUser();
-        user.bumpTokenVersion();
-        when(users.findById(42L)).thenReturn(Optional.of(user));
-        when(jwtProvider.getTokenVersion(TOKEN)).thenReturn(0L);
-
-        var request = new MockHttpServletRequest("GET", "/api/profile");
-        request.setServletPath("/api/profile");
-        request.addHeader("Authorization", "Bearer " + TOKEN);
-        var result = invoke(request);
-
-        assertThat(result.response().getStatus()).isEqualTo(403);
-        verifyNoInteractions(cookies);
+        for (var request : List.of(cookieRequest("GET", "/api/profile"), bearerRequest)) {
+            authenticate("42", "ROLE_STUDENT");
+            var result = invoke(request);
+            assertThat(result.continued()).isFalse();
+            assertThat(result.response().getStatus()).isEqualTo(403);
+            assertThat(result.response().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
+        }
     }
 
     private MockHttpServletRequest cookieRequest(String method, String path) {
@@ -242,7 +197,7 @@ class ActiveUserAuthorizationFilterTest {
     private Result invoke(MockHttpServletRequest request) throws Exception {
         var response = new MockHttpServletResponse();
         var continued = new AtomicBoolean();
-        new ActiveUserAuthorizationFilter(users, new JwtAccessDeniedHandler(), jwtProvider, cookies)
+        new ActiveUserAuthorizationFilter(users, new JwtAccessDeniedHandler(), jwtProvider)
                 .doFilter(request, response, (req, res) -> continued.set(true));
         return new Result(continued.get(), response);
     }

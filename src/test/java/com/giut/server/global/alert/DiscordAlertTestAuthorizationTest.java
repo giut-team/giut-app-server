@@ -121,11 +121,6 @@ class DiscordAlertTestAuthorizationTest {
             DiscordAlertTestController.class
     })
     static class TestConfig {
-        @Bean
-        com.giut.server.auth.service.OAuthCookieService oAuthCookieService() {
-            return org.mockito.Mockito.mock(com.giut.server.auth.service.OAuthCookieService.class);
-        }
-
 
         @Bean
         JwtProvider jwtProvider() {

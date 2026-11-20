@@ -232,8 +232,5 @@ class ProfileShareAuthorizationTest {
         @Bean UserProfileRepository userProfileRepository() { return mock(UserProfileRepository.class); }
         @Bean UserProfileService userProfileService() { return mock(UserProfileService.class); }
         @Bean DiscordAlertService discordAlertService() { return mock(DiscordAlertService.class); }
-        @Bean com.giut.server.auth.service.OAuthCookieService oAuthCookieService() {
-            return mock(com.giut.server.auth.service.OAuthCookieService.class);
-        }
     }
 }

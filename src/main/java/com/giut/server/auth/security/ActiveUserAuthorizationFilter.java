@@ -1,6 +1,5 @@
 package com.giut.server.auth.security;
 
-import com.giut.server.auth.service.OAuthCookieService;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -18,8 +17,12 @@ import java.io.IOException;
 
 /**
  * A valid JWT does not grant access to a withdrawn, suspended or missing account.
- * 로그인·OAuth 요청에서는 그런 토큰을 거부하지 않고 무시한다. 다른 기기에서 전체 로그아웃해 폐기된 쿠키가
- * 남아 있어도(HttpOnly라 프런트가 지울 수 없다) 다시 로그인할 수 있어야 하기 때문이다.
+ * 로그인·로그아웃 요청({@link SessionRoutes})에서는 그런 토큰을 거부하지 않고 무시한다. 다른 기기에서 전체
+ * 로그아웃해 폐기된 쿠키가 남아 있어도(HttpOnly라 프런트가 지울 수 없다) 다시 로그인하거나 로그아웃으로
+ * 쿠키를 정리할 수 있어야 하기 때문이다.
+ *
+ * <p>보호 API의 403 응답에서는 쿠키를 지우지 않는다. 폐기된 쿠키로 보낸 요청의 403이 새 로그인 응답보다
+ * 늦게 도착하면, 방금 발급된 같은 이름의 쿠키까지 지워 버리기 때문이다.
  */
 @RequiredArgsConstructor
 public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
@@ -27,7 +30,6 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
     private final UserRepository userRepository;
     private final JwtAccessDeniedHandler accessDeniedHandler;
     private final JwtProvider jwtProvider;
-    private final OAuthCookieService oAuthCookieService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -46,16 +48,12 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
         boolean tokenVersionMatches = user != null && token != null
                 && user.getTokenVersion() == jwtProvider.getTokenVersion(token);
         if (user == null || user.getStatus() != User.Status.ACTIVE || !tokenVersionMatches) {
-            if (LoginRoutes.MATCHER.matches(request)) {
-                // 로그인 경로는 SecurityConfig에서 같은 매처로 permitAll이라 인증 없이 진행해도 된다.
-                // 성공하면 새 쿠키가 덮어쓴다.
+            if (SessionRoutes.MATCHER.matches(request)) {
+                // SecurityConfig에서 같은 매처로 permitAll이라 인증 없이 진행해도 된다.
+                // 로그인은 성공하면 새 쿠키가 덮어쓰고, 로그아웃은 쿠키만 지운다.
                 SecurityContextHolder.clearContext();
                 chain.doFilter(request, response);
                 return;
-            }
-            if (bearerToken == null && token != null) {
-                // 쿠키로 온 토큰만 지운다. 쓸 수 없는 쿠키를 계속 보내 403만 받는 상태를 끝낸다.
-                oAuthCookieService.clearLoginCookies(response);
             }
             accessDeniedHandler.handle(request, response, new AccessDeniedException("비활성 계정입니다."));
             return;

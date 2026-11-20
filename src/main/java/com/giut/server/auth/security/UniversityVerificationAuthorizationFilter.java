@@ -62,18 +62,14 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // 남아 있는 학생 토큰이 OAuth 로그인이나 관리자 로그인을 막아서는 안 된다.
-        if (LoginRoutes.MATCHER.matches(request)) {
+        // 남아 있는 학생 토큰이 OAuth·관리자 로그인을 막아서는 안 되고, 가입 직후·인증 해제된 사용자도
+        // 공유 기기에서 로그아웃(토큰 폐기·쿠키 삭제)할 수 있어야 한다.
+        if (SessionRoutes.MATCHER.matches(request)) {
             return false;
         }
 
         // 학교 인증을 안 끝낸 사용자도 탈퇴 자체는 막지 않는다.
         if (HttpMethod.DELETE.matches(method) && "/api/users/me".equals(path)) {
-            return false;
-        }
-
-        // 가입 직후·인증 해제된 사용자도 공유 기기에서 세션을 끝낼 수 있어야 한다(토큰 폐기·쿠키 삭제).
-        if (HttpMethod.POST.matches(method) && "/api/auth/logout".equals(path)) {
             return false;
         }
 

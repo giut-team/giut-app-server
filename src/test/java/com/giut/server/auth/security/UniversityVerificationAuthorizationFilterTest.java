@@ -205,7 +205,7 @@ class UniversityVerificationAuthorizationFilterTest {
     private FilterResult invoke(String method, String path) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod(method);
-        // 실제 요청처럼 URI도 채운다. 로그인 경로 매처(LoginRoutes)는 URI 기준으로 판단한다.
+        // 실제 요청처럼 URI도 채운다. 로그인 경로 매처(SessionRoutes)는 URI 기준으로 판단한다.
         request.setRequestURI(path);
         request.setServletPath(path);
         MockHttpServletResponse response = new MockHttpServletResponse();
