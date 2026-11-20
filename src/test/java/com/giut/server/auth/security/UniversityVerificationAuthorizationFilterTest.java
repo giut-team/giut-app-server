@@ -184,6 +184,16 @@ class UniversityVerificationAuthorizationFilterTest {
         assertDenied(invoke("DELETE", "/api/users/43"));
     }
 
+    @Test
+    void unverifiedAccountCanLogoutOnlyThroughTheExactPostRoute() throws Exception {
+        authenticateAsStudent("42");
+        assertThat(invoke("POST", "/api/auth/logout").continued()).isTrue();
+        verifyNoInteractions(userRepository);
+        assertDenied(invoke("GET", "/api/auth/logout"));
+        assertDenied(invoke("POST", "/api/auth/logout/extra"));
+        assertDenied(invoke("POST", "/api/auth/logout-all"));
+    }
+
     private void authenticateAsStudent(String userId) {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(
@@ -195,6 +205,8 @@ class UniversityVerificationAuthorizationFilterTest {
     private FilterResult invoke(String method, String path) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod(method);
+        // 실제 요청처럼 URI도 채운다. 공개 경로 매처(PublicRoutes)는 URI 기준으로 판단한다.
+        request.setRequestURI(path);
         request.setServletPath(path);
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean continued = new AtomicBoolean(false);

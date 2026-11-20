@@ -62,8 +62,9 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // A leftover student token must not prevent a fresh credential-based admin login.
-        if (HttpMethod.POST.matches(method) && "/api/admin/auth/login".equals(path)) {
+        // 로그인 없이 쓸 수 있는 경로는 학교 인증도 요구하지 않는다. 남아 있는 학생 토큰이 OAuth·관리자 로그인이나
+        // 공유 프로필 조회를 막아서는 안 되고, 가입 직후·인증 해제된 사용자도 로그아웃할 수 있어야 한다.
+        if (PublicRoutes.ALL.matches(request)) {
             return false;
         }
 
@@ -72,11 +73,11 @@ public class UniversityVerificationAuthorizationFilter extends OncePerRequestFil
             return false;
         }
 
-        if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method) || path.startsWith("/api/oauth/")) {
+        if (!path.startsWith("/api/") || HttpMethod.OPTIONS.matches(method)) {
             return false;
         }
         if (HttpMethod.GET.matches(method)
-                && (isPublicCompetitionRead(path) || path.matches("/api/profile/shares/[^/]+"))) {
+                && isPublicCompetitionRead(path)) {
             return false;
         }
         if (HttpMethod.POST.matches(method)

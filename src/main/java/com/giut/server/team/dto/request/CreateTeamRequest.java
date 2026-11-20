@@ -1,6 +1,7 @@
 package com.giut.server.team.dto.request;
 
 import com.giut.server.team.entity.Team;
+import com.giut.server.team.entity.Team.CollaborationTool;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.Valid;
@@ -36,14 +37,13 @@ public record CreateTeamRequest(
         @Max(value = 20, message = "최대 팀원 수는 20명 이하여야 합니다.")
         Short maxMemberCount,
 
-        @Schema(description = "주간 회의 횟수", example = "1")
+        @Schema(description = "주간 회의 횟수. 새 화면은 4회 이상 선택 시 4를 전송합니다.", example = "1")
         @NotNull(message = "주간 회의 횟수는 필수입니다.")
         @Min(value = 0, message = "주간 회의 횟수는 0회 이상이어야 합니다.")
         @Max(value = 7, message = "주간 회의 횟수는 7회 이하여야 합니다.")
         Short weeklyMeetingCount,
 
-        @Schema(description = "주로 만나는 곳", example = "CAMPUS", allowableValues = {"CAMPUS", "SEOUL", "METROPOLITAN_AREA", "ANYWHERE"})
-        @NotNull(message = "주로 만나는 곳은 필수입니다.")
+        @Schema(description = "회의 장소. 오프라인·혼합일 때 필수이며 온라인은 생략합니다.", example = "CAMPUS")
         Team.MeetingPlace meetingPlace,
 
         @Schema(description = "팀 모집 분야 목록", example = "[{\"roleCode\":\"BACKEND_DEVELOPER\",\"requiredCount\":1}]")
@@ -52,6 +52,16 @@ public record CreateTeamRequest(
 
         @Schema(description = "팀장이 설정한 지원서 질문 목록", example = "[{\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"required\":true}]")
         @Size(max = 5, message = "지원서 질문은 최대 5개까지 등록할 수 있습니다.")
-        List<@Valid CreateTeamQuestionRequest> applicationQuestions
+        List<@Valid CreateTeamQuestionRequest> applicationQuestions,
+
+        @Schema(description = "팀장의 세부 역할 코드. 기존 요청 형식으로 생성할 때만 생략할 수 있습니다.",
+                example = "BACKEND_DEVELOPER")
+        @Size(max = 40, message = "팀장의 담당 분야 코드는 40자 이하여야 합니다.")
+        String leaderRoleCode,
+
+        @Schema(description = "협업 도구. 온라인·혼합일 때 1개 이상 선택하며 오프라인은 생략합니다.",
+                example = "[\"DISCORD\", \"NOTION\"]")
+        @Size(max = 5, message = "협업 도구는 최대 5개까지 선택할 수 있습니다.")
+        List<@NotNull(message = "협업 도구 코드는 필수입니다.") CollaborationTool> collaborationTools
 ) {
 }

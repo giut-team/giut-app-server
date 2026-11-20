@@ -123,9 +123,11 @@ class TeamCreationDeadlinePersistenceTest {
                 Team.ActivityMode.ONLINE,
                 (short) 4,
                 (short) 1,
-                Team.MeetingPlace.CAMPUS,
+                null,
                 List.of(),
-                List.of()
+                List.of(),
+                "BACKEND_DEVELOPER",
+                List.of(Team.CollaborationTool.DISCORD)
         );
     }
 }

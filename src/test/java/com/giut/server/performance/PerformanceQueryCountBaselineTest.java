@@ -104,8 +104,8 @@ class PerformanceQueryCountBaselineTest {
                 .isLessThanOrEqualTo(5L);
         assertThat(teamMembers.result().members()).hasSize(dataset.teamMembersPerTeam());
         assertThat(teamMembers.measurement().sqlStatementCount())
-                .as("팀원 목록은 사용자 엔티티와 프로필을 로딩하지 않고 닉네임을 한 번에 조회한다")
-                .isEqualTo(3L);
+                .as("팀원 목록은 닉네임과 담당 분야를 한 번에 조회한다")
+                .isLessThanOrEqualTo(2L);
         assertThat(chatRoomList.result().chatRooms()).hasSize(dataset.chatRoomCount());
         assertThat(messageList.result().messages()).hasSize(30);
         assertThat(chatRoomList.measurement().sqlStatementCount())
