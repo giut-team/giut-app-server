@@ -69,7 +69,13 @@ public class TeamMember extends BaseTimeEntity {
     }
 
     public static TeamMember createLeader(Long teamId, Long userId) {
-        return create(teamId, userId, Role.LEADER);
+        return createLeader(teamId, userId, null);
+    }
+
+    public static TeamMember createLeader(Long teamId, Long userId, String roleCode) {
+        TeamMember leader = create(teamId, userId, Role.LEADER);
+        leader.roleCode = roleCode;
+        return leader;
     }
 
     public static TeamMember createMember(Long teamId, Long userId, String roleCode) {

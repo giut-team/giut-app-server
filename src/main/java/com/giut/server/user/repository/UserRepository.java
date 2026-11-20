@@ -38,16 +38,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findAllByIdInAndStatus(Collection<Long> ids, User.Status status);
 
-    @Query("""
-            select u.id as id, u.nickname as nickname
-            from User u
-            where u.id in :ids and u.status = :status
-            """)
-    List<UserNickname> findNicknamesByIdInAndStatus(@Param("ids") Collection<Long> ids,
-                                                  @Param("status") User.Status status);
-
-    interface UserNickname {
-        Long getId();
-        String getNickname();
-    }
 }

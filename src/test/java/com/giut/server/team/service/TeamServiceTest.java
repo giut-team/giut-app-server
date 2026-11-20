@@ -18,6 +18,7 @@ import com.giut.server.team.entity.TeamRecruitment;
 import com.giut.server.team.entity.TeamApplicationQuestion;
 import com.giut.server.user.entity.User;
 import com.giut.server.competition.repository.CompetitionRepository;
+import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.team.repository.TeamApplicationAnswerRepository;
 import com.giut.server.team.repository.TeamApplicationQuestionRepository;
@@ -93,6 +94,7 @@ class TeamServiceTest {
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
         when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        stubLeaderRole();
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
             Team team = invocation.getArgument(0);
             ReflectionTestUtils.setField(team, "id", 10L);
@@ -171,6 +173,7 @@ class TeamServiceTest {
         when(clock.instant()).thenReturn(now);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
         when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        stubLeaderRole();
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
             Team team = invocation.getArgument(0);
             ReflectionTestUtils.setField(team, "id", 10L);
@@ -191,6 +194,7 @@ class TeamServiceTest {
         when(competition.getApplicationEndAt()).thenReturn(null);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
         when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        stubLeaderRole();
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
             Team team = invocation.getArgument(0);
             ReflectionTestUtils.setField(team, "id", 10L);
@@ -270,12 +274,12 @@ class TeamServiceTest {
     @Test
     void detailShowsCurrentUsersBookmarkStatus() {
         Team team = team(12L);
-        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(teamRepository.findWithCollaborationToolsById(1L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findAllByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)).thenReturn(List.of());
         when(teamScrapRepository.existsByUser_IdAndTeam_Id(15L, 1L)).thenReturn(true);
 
         TeamDetailResponse response = teamService.getTeamDetail(1L, 15L);
@@ -287,14 +291,14 @@ class TeamServiceTest {
     void leaderUpdatesTeamInformation() {
         Team team = team(10L);
         when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(team));
-        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(teamRepository.findWithCollaborationToolsById(1L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.countByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
                 .thenReturn(2L);
         when(teamMemberRepository.findAllByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)).thenReturn(List.of());
 
         TeamDetailResponse response = teamService.updateTeam(
                 10L,
@@ -305,7 +309,8 @@ class TeamServiceTest {
                         Team.ActivityMode.HYBRID,
                         (short) 5,
                         (short) 2,
-                        Team.MeetingPlace.SEOUL
+                        Team.MeetingPlace.SEOUL,
+                        List.of(Team.CollaborationTool.DISCORD)
                 )
         );
 
@@ -333,7 +338,8 @@ class TeamServiceTest {
                         Team.ActivityMode.ONLINE,
                         (short) 3,
                         (short) 1,
-                        Team.MeetingPlace.CAMPUS
+                        null,
+                        List.of(Team.CollaborationTool.DISCORD)
                 )
         ));
     }
@@ -352,7 +358,8 @@ class TeamServiceTest {
                         Team.ActivityMode.ONLINE,
                         (short) 4,
                         (short) 1,
-                        Team.MeetingPlace.CAMPUS
+                        null,
+                        List.of(Team.CollaborationTool.DISCORD)
                 )
         ));
     }
@@ -372,7 +379,7 @@ class TeamServiceTest {
         assertEquals(TeamApplication.Status.CANCELED, first.getStatus());
         assertEquals(TeamApplication.Status.CANCELED, second.getStatus());
 
-        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(teamRepository.findWithCollaborationToolsById(1L)).thenReturn(Optional.of(team));
         assertThrows(ResourceNotFoundException.class, () -> teamService.getTeamDetail(1L, 10L));
     }
 
@@ -437,8 +444,8 @@ class TeamServiceTest {
         when(teamApplicationRepository.findByIdAndTeamId(2L, 1L)).thenReturn(Optional.of(application));
         when(teamRecruitmentRepository.findByTeamIdAndRoleCode(1L, "BACKEND"))
                 .thenReturn(Optional.of(TeamRecruitment.create(1L, "BACKEND", (short) 1)));
-        when(teamMemberRepository.countByTeamIdAndRoleCodeAndStatus(
-                1L, "BACKEND", TeamMember.Status.ACTIVE)).thenReturn(1L);
+        when(teamMemberRepository.countByTeamIdAndRoleCodeAndStatusAndRole(
+                1L, "BACKEND", TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)).thenReturn(1L);
 
         assertThrows(ConflictException.class,
                 () -> teamService.approveApplication(10L, 1L, 2L, "BACKEND"));
@@ -467,12 +474,12 @@ class TeamServiceTest {
         assertThrows(ForbiddenException.class, () -> teamService.closeRecruitment(11L, 1L));
         assertEquals(Team.Status.RECRUITING, team.getStatus());
 
-        when(teamRepository.findById(1L)).thenReturn(Optional.of(team));
+        when(teamRepository.findWithCollaborationToolsById(1L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findAllByTeamIdAndStatus(1L, TeamMember.Status.ACTIVE))
                 .thenReturn(List.of());
         when(teamApplicationQuestionRepository.findAllByTeamIdAndStatusOrderByDisplayOrderAsc(
                 1L, TeamApplicationQuestion.Status.ACTIVE)).thenReturn(List.of());
-        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE)).thenReturn(List.of());
+        when(teamRecruitmentRepository.findAllWithFilledCount(1L, TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)).thenReturn(List.of());
 
         assertEquals(Team.Status.CLOSED, teamService.closeRecruitment(10L, 1L).status());
     }
@@ -494,9 +501,15 @@ class TeamServiceTest {
         return projection;
     }
 
+    private void stubLeaderRole() {
+        ProfileRole role = mock(ProfileRole.class);
+        when(role.getCode()).thenReturn("BACKEND_DEVELOPER");
+        when(profileRoleRepository.findAllByCodeIn(List.of("BACKEND_DEVELOPER"))).thenReturn(List.of(role));
+    }
+
     private CreateTeamRequest createRequest(Long competitionId) {
         return new CreateTeamRequest(competitionId, "테스트 팀", null,
                 Team.ActivityMode.ONLINE, (short) 4, (short) 1,
-                Team.MeetingPlace.CAMPUS, List.of(), List.of());
+                null, List.of(), List.of(), "BACKEND_DEVELOPER", List.of(Team.CollaborationTool.DISCORD));
     }
 }
