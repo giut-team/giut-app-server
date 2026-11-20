@@ -156,12 +156,22 @@ public class TeamService {
 
         validateCompetitionRecruitmentOpen(competition);
 
+        boolean legacyRequest = request.leaderRoleCode() == null
+                && request.collaborationTools() == null && request.meetingPlace() != null;
+        if (!legacyRequest) {
+            validateLeaderRole(request.leaderRoleCode());
+        }
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), request.collaborationTools(),
+                legacyRequest, legacyRequest
+        );
+
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
             throw new ConflictException("이 공모전에 이미 모집 중인 팀이 있습니다.");
         }
 
-        Team team = teamRepository.save(Team.create(
+        Team newTeam = Team.create(
                 competition,
                 leader,
                 request.name(),
@@ -169,10 +179,12 @@ public class TeamService {
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
-        ));
+                activity.meetingPlace()
+        );
+        newTeam.replaceCollaborationTools(activity.tools());
+        Team team = teamRepository.save(newTeam);
 
-        teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId()));
+        teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId(), request.leaderRoleCode()));
 
         List<TeamRecruitmentResponse> recruitments = saveRecruitments(
                 team.getId(),
@@ -184,7 +196,46 @@ public class TeamService {
                 request.applicationQuestions()
         );
 
-        return CreateTeamResponse.of(team, recruitments, applicationQuestions);
+        return CreateTeamResponse.of(team, recruitments, applicationQuestions, request.leaderRoleCode());
+    }
+
+    private void validateLeaderRole(String roleCode) {
+        if (roleCode == null || roleCode.isBlank()) {
+            throw new IllegalArgumentException("팀장의 담당 분야는 필수입니다.");
+        }
+        if (profileRoleRepository.findAllByCodeIn(List.of(roleCode)).stream()
+                .noneMatch(role -> roleCode.equals(role.getCode()))) {
+            throw new IllegalArgumentException("존재하지 않는 팀장 담당 분야 코드입니다.");
+        }
+    }
+
+    private record ActivitySettings(Team.MeetingPlace meetingPlace, Set<Team.CollaborationTool> tools) {}
+
+    private ActivitySettings validateActivitySettings(
+            Team.ActivityMode activityMode,
+            Team.MeetingPlace meetingPlace,
+            List<Team.CollaborationTool> collaborationTools,
+            boolean legacyRequest,
+            boolean allowMissingTools
+    ) {
+        List<Team.CollaborationTool> tools = collaborationTools == null ? List.of() : collaborationTools;
+        if (activityMode == Team.ActivityMode.ONLINE && meetingPlace != null && !legacyRequest) {
+            throw new IllegalArgumentException("온라인 팀에는 회의 장소를 지정할 수 없습니다.");
+        }
+        if (activityMode != Team.ActivityMode.ONLINE && meetingPlace == null) {
+            throw new IllegalArgumentException("오프라인·혼합 팀은 회의 장소가 필수입니다.");
+        }
+        if (activityMode == Team.ActivityMode.OFFLINE && !tools.isEmpty()) {
+            throw new IllegalArgumentException("오프라인 팀에는 협업 도구를 지정할 수 없습니다.");
+        }
+        if (activityMode != Team.ActivityMode.OFFLINE && tools.isEmpty() && !allowMissingTools) {
+            throw new IllegalArgumentException("온라인·혼합 팀은 협업 도구를 1개 이상 선택해야 합니다.");
+        }
+        Set<Team.CollaborationTool> distinctTools = new HashSet<>(tools);
+        if (distinctTools.contains(null) || distinctTools.size() != tools.size()) {
+            throw new IllegalArgumentException("협업 도구는 빈 값 없이 한 번씩만 선택할 수 있습니다.");
+        }
+        return new ActivitySettings(activityMode == Team.ActivityMode.ONLINE ? null : meetingPlace, distinctTools);
     }
 
     private void validateCompetitionRecruitmentOpen(Competition competition) {
@@ -206,14 +257,32 @@ public class TeamService {
             throw new ConflictException("최대 팀원 수를 현재 팀원 수보다 작게 설정할 수 없습니다.");
         }
 
+        // Older clients always sent a place and had no field for collaboration tools.
+        boolean legacyRequest = request.collaborationTools() == null && request.meetingPlace() != null;
+        boolean preserveTools = request.collaborationTools() == null
+                && (legacyRequest || request.activityMode() == team.getActivityMode());
+        List<Team.CollaborationTool> tools = preserveTools && request.activityMode() != Team.ActivityMode.OFFLINE
+                ? team.collaborationToolCodes() : request.collaborationTools();
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), tools, legacyRequest, preserveTools
+        );
+        if (request.leaderRoleCode() != null) {
+            validateLeaderRole(request.leaderRoleCode());
+            TeamMember leaderMembership = teamMemberRepository.findByTeamIdAndUserId(teamId, leaderUserId)
+                    .filter(member -> member.getRole() == TeamMember.Role.LEADER
+                            && member.getStatus() == TeamMember.Status.ACTIVE)
+                    .orElseThrow(() -> new ConflictException("활성 팀장 정보를 찾을 수 없습니다."));
+            leaderMembership.updateRoleCode(request.leaderRoleCode());
+        }
         team.updateInfo(
                 request.name(),
                 request.description(),
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
+                activity.meetingPlace()
         );
+        team.replaceCollaborationTools(activity.tools());
         if (team.getStatus() == Team.Status.RECRUITING
                 && activeMemberCount >= request.maxMemberCount()) {
             team.closeRecruitment();
@@ -234,7 +303,9 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public TeamDetailResponse getTeamDetail(Long teamId, Long userId) {
-        Team team = findTeam(teamId);
+        Team team = teamRepository.findWithCollaborationToolsById(teamId)
+                .map(this::requireAvailableTeam)
+                .orElseThrow(() -> new ResourceNotFoundException("팀을 찾을 수 없습니다."));
         List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
                 teamId,
                 TeamMember.Status.ACTIVE
@@ -242,14 +313,11 @@ public class TeamService {
         List<TeamApplicationQuestionResponse> applicationQuestions = findActiveQuestions(teamId).stream()
                 .map(TeamApplicationQuestionResponse::from)
                 .toList();
-        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE)
-                .stream()
-                .map(recruitment -> new TeamRecruitmentResponse(
-                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
-                        recruitment.getRequiredCount(), recruitment.getFilledCount()
-                ))
-                .toList();
+        String leaderRoleCode = activeMembers.stream()
+                .filter(member -> member.getRole() == TeamMember.Role.LEADER)
+                .findFirst()
+                .map(TeamMember::getRoleCode)
+                .orElse(null);
 
         return new TeamDetailResponse(
                 team.getId(),
@@ -261,12 +329,14 @@ public class TeamService {
                 team.getMaxMemberCount(),
                 activeMembers.size(),
                 team.getWeeklyMeetingCount(),
-                team.getMeetingPlace(),
-                recruitments,
+                team.getActivityMode() == Team.ActivityMode.ONLINE ? null : team.getMeetingPlace(),
+                findRecruitmentResponses(teamId),
                 team.getStatus(),
                 team.getCreatedAt(),
                 applicationQuestions,
-                teamScrapRepository.existsByUser_IdAndTeam_Id(userId, teamId)
+                teamScrapRepository.existsByUser_IdAndTeam_Id(userId, teamId),
+                leaderRoleCode,
+                team.collaborationToolCodes()
         );
     }
 
@@ -274,27 +344,20 @@ public class TeamService {
     public TeamMemberListResponse getTeamMembers(Long teamId) {
         findTeam(teamId);
 
-        List<TeamMember> activeMembers = teamMemberRepository.findAllByTeamIdAndStatus(
-                teamId,
-                TeamMember.Status.ACTIVE
-        );
-        List<Long> userIds = activeMembers.stream()
-                .map(TeamMember::getUserId)
-                .toList();
-        Map<Long, String> nicknamesByUserId = userRepository.findNicknamesByIdInAndStatus(userIds, User.Status.ACTIVE)
+        List<TeamMemberResponse> members = teamMemberRepository
+                .findMemberDetails(teamId, TeamMember.Status.ACTIVE, User.Status.ACTIVE)
                 .stream()
-                .collect(Collectors.toMap(UserRepository.UserNickname::getId, UserRepository.UserNickname::getNickname));
-
-        List<TeamMemberResponse> members = activeMembers.stream()
-                .filter(teamMember -> nicknamesByUserId.containsKey(teamMember.getUserId()))
                 .map(teamMember -> new TeamMemberResponse(
-                        teamMember.getId(),
+                        teamMember.getTeamMemberId(),
                         teamMember.getUserId(),
-                        nicknamesByUserId.get(teamMember.getUserId()),
+                        teamMember.getNickname(),
                         teamMember.getRole(),
                         teamMember.getRoleCode(),
                         teamMember.getStatus(),
-                        teamMember.getJoinedAt()
+                        teamMember.getJoinedAt(),
+                        teamMember.getRoleName(),
+                        teamMember.getPrimaryRole(),
+                        teamMember.getPrimaryRole() == null ? null : teamMember.getPrimaryRole().getDisplayName()
                 ))
                 .toList();
 
@@ -304,14 +367,18 @@ public class TeamService {
     @Transactional(readOnly = true)
     public TeamRecruitmentListResponse getTeamRecruitments(Long teamId) {
         findTeam(teamId);
+        return new TeamRecruitmentListResponse(teamId, findRecruitmentResponses(teamId));
+    }
 
-        List<TeamRecruitmentResponse> recruitments = teamRecruitmentRepository
-                .findAllByTeamIdOrderByIdAsc(teamId)
+    private List<TeamRecruitmentResponse> findRecruitmentResponses(Long teamId) {
+        return teamRecruitmentRepository
+                .findAllWithFilledCount(teamId, TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER)
                 .stream()
-                .map(recruitment -> toRecruitmentResponse(recruitment))
+                .map(recruitment -> new TeamRecruitmentResponse(
+                        recruitment.getRecruitmentId(), recruitment.getRoleCode(),
+                        recruitment.getRequiredCount(), recruitment.getFilledCount()
+                ))
                 .toList();
-
-        return new TeamRecruitmentListResponse(teamId, recruitments);
     }
 
     @Transactional
@@ -653,13 +720,9 @@ public class TeamService {
     }
 
     private long countFilledRecruitment(TeamRecruitment recruitment) {
-        return teamMemberRepository.countByTeamIdAndRoleCodeAndStatus(
-                recruitment.getTeamId(), recruitment.getRoleCode(), TeamMember.Status.ACTIVE
+        return teamMemberRepository.countByTeamIdAndRoleCodeAndStatusAndRole(
+                recruitment.getTeamId(), recruitment.getRoleCode(), TeamMember.Status.ACTIVE, TeamMember.Role.MEMBER
         );
-    }
-
-    private TeamRecruitmentResponse toRecruitmentResponse(TeamRecruitment recruitment) {
-        return TeamRecruitmentResponse.from(recruitment, countFilledRecruitment(recruitment));
     }
 
     private TeamApplication findPendingApplication(Long teamId, Long applicationId) {
