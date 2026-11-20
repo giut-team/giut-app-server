@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -120,6 +121,8 @@ class MyTeamDashboardPersistenceTest {
         readAs(applicant, "/applications/me").andExpect(status().isOk())
                 .andExpect(jsonPath("$.applications.length()").value(1))
                 .andExpect(jsonPath("$.applications[0].applicationId").value(submitted.getId()))
+                .andExpect(jsonPath("$.applications[0].applicantNickname").hasJsonPath())
+                .andExpect(jsonPath("$.applications[0].applicantNickname").value(nullValue()))
                 .andExpect(jsonPath("$.applications[0].team.name").value("지원한 팀"))
                 .andExpect(jsonPath("$.applications[0].team.status").value("ARCHIVED"))
                 .andExpect(jsonPath("$.applications[0].team.currentMemberCount").value(1))
@@ -148,10 +151,37 @@ class MyTeamDashboardPersistenceTest {
                 .andExpect(jsonPath("$.applications.length()").value(1))
                 .andExpect(jsonPath("$.applications[0].applicationId").value(submitted.getId()))
                 .andExpect(jsonPath("$.applications[0].applicantNickname").value("지원자"))
+                .andExpect(jsonPath("$.applications[0].team").hasJsonPath())
+                .andExpect(jsonPath("$.applications[0].team").value(nullValue()))
                 .andExpect(jsonPath("$.applications[0].roleCode").value("BACKEND_DEVELOPER"))
                 .andExpect(jsonPath("$.applications[0].appliedAt").exists())
                 .andExpect(jsonPath("$.applications[0].answers[0].answer").value("지원서 답변"));
         readAs(teammate, path).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void withdrawalRemovesPendingApplicationFromBothListAndCount() throws Exception {
+        Team team = team("받은 지원 팀");
+        User withdrawn = user("탈퇴할 지원자");
+        TeamApplication application = applications.save(application(team, withdrawn));
+        TeamApplication active = applications.save(application(team, applicant));
+        String path = "/" + team.getId() + "/applications";
+
+        readAs(leader, "/me").andExpect(status().isOk())
+                .andExpect(jsonPath("$.teams[0].pendingApplicationCount").value(2));
+        readAs(leader, path).andExpect(status().isOk())
+                .andExpect(jsonPath("$.applications.length()").value(2));
+
+        withdrawn.withdraw();
+        users.save(withdrawn);
+
+        readAs(leader, "/me").andExpect(status().isOk())
+                .andExpect(jsonPath("$.teams[0].pendingApplicationCount").value(1));
+        readAs(leader, path).andExpect(status().isOk())
+                .andExpect(jsonPath("$.applications.length()").value(1))
+                .andExpect(jsonPath("$.applications[0].applicationId").value(active.getId()));
+        assertThat(applications.findById(application.getId()).orElseThrow().getStatus())
+                .isEqualTo(TeamApplication.Status.PENDING);
     }
 
     @Test

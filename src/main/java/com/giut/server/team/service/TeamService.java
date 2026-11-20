@@ -144,8 +144,8 @@ public class TeamService {
         if (teamIds.isEmpty()) {
             return Map.of();
         }
-        return teamApplicationRepository.countByTeamIdsAndTypeAndStatus(
-                        teamIds, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING
+        return teamApplicationRepository.countByTeamIdsAndTypeAndStatusAndUserStatus(
+                        teamIds, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING, User.Status.ACTIVE
                 ).stream()
                 .collect(Collectors.toMap(
                         TeamApplicationRepository.TeamApplicationCount::getTeamId,

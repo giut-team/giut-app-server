@@ -21,13 +21,15 @@ public interface TeamApplicationRepository extends JpaRepository<TeamApplication
     @Query("""
             select application.teamId as teamId, count(application.id) as applicationCount
             from TeamApplication application
+            join User account on account.id = application.userId and account.status = :userStatus
             where application.teamId in :teamIds and application.type = :type and application.status = :status
             group by application.teamId
             """)
-    List<TeamApplicationCount> countByTeamIdsAndTypeAndStatus(
+    List<TeamApplicationCount> countByTeamIdsAndTypeAndStatusAndUserStatus(
             @Param("teamIds") Collection<Long> teamIds,
             @Param("type") TeamApplication.Type type,
-            @Param("status") TeamApplication.Status status
+            @Param("status") TeamApplication.Status status,
+            @Param("userStatus") User.Status userStatus
     );
 
     interface TeamApplicationCount {
@@ -38,7 +40,7 @@ public interface TeamApplicationRepository extends JpaRepository<TeamApplication
     @Query("""
             select application as application, account.nickname as applicantNickname
             from TeamApplication application
-            left join User account on account.id = application.userId and account.status = :userStatus
+            join User account on account.id = application.userId and account.status = :userStatus
             where application.teamId = :teamId and application.type = :type and application.status = :status
             order by application.appliedAt desc, application.id desc
             """)

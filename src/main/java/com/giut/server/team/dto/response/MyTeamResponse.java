@@ -23,7 +23,7 @@ public record MyTeamResponse(
         String myRoleCode,
         @Schema(description = "공모전 이름")
         String competitionTitle,
-        @Schema(description = "미처리 참가 신청 수. 팀장이 아닌 경우 0입니다.", example = "2")
+        @Schema(description = "활성 사용자가 제출한 미처리 참가 신청 수. 팀장이 아닌 경우 0입니다.", example = "2")
         long pendingApplicationCount
 ) {
     public static MyTeamResponse of(
