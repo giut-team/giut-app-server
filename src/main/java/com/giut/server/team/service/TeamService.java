@@ -156,15 +156,21 @@ public class TeamService {
 
         validateCompetitionRecruitmentOpen(competition);
 
+        boolean legacyRequest = request.leaderRoleCode() == null
+                && request.collaborationTools() == null && request.meetingPlace() != null;
+        if (!legacyRequest) {
+            validateLeaderRole(request.leaderRoleCode());
+        }
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), request.collaborationTools(),
+                legacyRequest, legacyRequest
+        );
+
         if (teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 competition.getId(), leaderUserId, Team.Status.RECRUITING)) {
             throw new ConflictException("이 공모전에 이미 모집 중인 팀이 있습니다.");
         }
 
-        validateLeaderRole(request.leaderRoleCode());
-        Set<Team.CollaborationTool> collaborationTools = validateActivitySettings(
-                request.activityMode(), request.meetingPlace(), request.collaborationTools()
-        );
         Team newTeam = Team.create(
                 competition,
                 leader,
@@ -173,9 +179,9 @@ public class TeamService {
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
+                activity.meetingPlace()
         );
-        newTeam.replaceCollaborationTools(collaborationTools);
+        newTeam.replaceCollaborationTools(activity.tools());
         Team team = teamRepository.save(newTeam);
 
         teamMemberRepository.save(TeamMember.createLeader(team.getId(), leader.getId(), request.leaderRoleCode()));
@@ -203,13 +209,17 @@ public class TeamService {
         }
     }
 
-    private Set<Team.CollaborationTool> validateActivitySettings(
+    private record ActivitySettings(Team.MeetingPlace meetingPlace, Set<Team.CollaborationTool> tools) {}
+
+    private ActivitySettings validateActivitySettings(
             Team.ActivityMode activityMode,
             Team.MeetingPlace meetingPlace,
-            List<Team.CollaborationTool> collaborationTools
+            List<Team.CollaborationTool> collaborationTools,
+            boolean legacyRequest,
+            boolean allowMissingTools
     ) {
         List<Team.CollaborationTool> tools = collaborationTools == null ? List.of() : collaborationTools;
-        if (activityMode == Team.ActivityMode.ONLINE && meetingPlace != null) {
+        if (activityMode == Team.ActivityMode.ONLINE && meetingPlace != null && !legacyRequest) {
             throw new IllegalArgumentException("온라인 팀에는 회의 장소를 지정할 수 없습니다.");
         }
         if (activityMode != Team.ActivityMode.ONLINE && meetingPlace == null) {
@@ -218,14 +228,14 @@ public class TeamService {
         if (activityMode == Team.ActivityMode.OFFLINE && !tools.isEmpty()) {
             throw new IllegalArgumentException("오프라인 팀에는 협업 도구를 지정할 수 없습니다.");
         }
-        if (activityMode != Team.ActivityMode.OFFLINE && tools.isEmpty()) {
+        if (activityMode != Team.ActivityMode.OFFLINE && tools.isEmpty() && !allowMissingTools) {
             throw new IllegalArgumentException("온라인·혼합 팀은 협업 도구를 1개 이상 선택해야 합니다.");
         }
         Set<Team.CollaborationTool> distinctTools = new HashSet<>(tools);
         if (distinctTools.contains(null) || distinctTools.size() != tools.size()) {
             throw new IllegalArgumentException("협업 도구는 빈 값 없이 한 번씩만 선택할 수 있습니다.");
         }
-        return distinctTools;
+        return new ActivitySettings(activityMode == Team.ActivityMode.ONLINE ? null : meetingPlace, distinctTools);
     }
 
     private void validateCompetitionRecruitmentOpen(Competition competition) {
@@ -247,8 +257,14 @@ public class TeamService {
             throw new ConflictException("최대 팀원 수를 현재 팀원 수보다 작게 설정할 수 없습니다.");
         }
 
-        Set<Team.CollaborationTool> collaborationTools = validateActivitySettings(
-                request.activityMode(), request.meetingPlace(), request.collaborationTools()
+        // Older clients always sent a place and had no field for collaboration tools.
+        boolean legacyRequest = request.collaborationTools() == null && request.meetingPlace() != null;
+        boolean preserveTools = request.collaborationTools() == null
+                && (legacyRequest || request.activityMode() == team.getActivityMode());
+        List<Team.CollaborationTool> tools = preserveTools && request.activityMode() != Team.ActivityMode.OFFLINE
+                ? team.collaborationToolCodes() : request.collaborationTools();
+        ActivitySettings activity = validateActivitySettings(
+                request.activityMode(), request.meetingPlace(), tools, legacyRequest, preserveTools
         );
         team.updateInfo(
                 request.name(),
@@ -256,9 +272,9 @@ public class TeamService {
                 request.activityMode(),
                 request.maxMemberCount(),
                 request.weeklyMeetingCount(),
-                request.meetingPlace()
+                activity.meetingPlace()
         );
-        team.replaceCollaborationTools(collaborationTools);
+        team.replaceCollaborationTools(activity.tools());
         if (team.getStatus() == Team.Status.RECRUITING
                 && activeMemberCount >= request.maxMemberCount()) {
             team.closeRecruitment();

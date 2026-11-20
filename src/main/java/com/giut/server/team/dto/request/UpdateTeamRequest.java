@@ -41,7 +41,7 @@ public record UpdateTeamRequest(
         @Schema(description = "회의 장소. 오프라인·혼합일 때 필수이며 온라인은 생략합니다.", example = "SEOUL")
         Team.MeetingPlace meetingPlace,
 
-        @Schema(description = "협업 도구. 온라인·혼합일 때 1개 이상 선택하며 오프라인은 생략합니다.",
+        @Schema(description = "협업 도구. 새 화면에서 온라인·혼합일 때 1개 이상 선택합니다. 같은 활동 방식으로 수정할 때 생략하면 기존 선택을 유지합니다. 오프라인은 생략합니다.",
                 example = "[\"DISCORD\", \"NOTION\"]")
         @Size(max = 5, message = "협업 도구는 최대 5개까지 선택할 수 있습니다.")
         List<@NotNull(message = "협업 도구 코드는 필수입니다.") CollaborationTool> collaborationTools

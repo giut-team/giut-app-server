@@ -4,12 +4,16 @@ import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.competition.entity.Competition;
 import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.profile.service.DefaultProfileRoleService;
+import com.giut.server.team.entity.Team;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.team.repository.TeamMemberRepository;
+import com.giut.server.team.repository.TeamRepository;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -53,6 +57,7 @@ class TeamCreationDetailsPersistenceTest {
     @Autowired UserRepository users;
     @Autowired CompetitionRepository competitions;
     @Autowired TeamMemberRepository members;
+    @Autowired TeamRepository teams;
     @Autowired DefaultProfileRoleService profileRoles;
     @Autowired JwtProvider jwt;
     @Autowired ObjectMapper objectMapper;
@@ -159,6 +164,69 @@ class TeamCreationDetailsPersistenceTest {
         createOnlineTeam();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"ONLINE", "OFFLINE", "HYBRID"})
+    void oldClientCanCreateTeamWithoutNewFields(String mode) throws Exception {
+        String request = createPayload(mode, ",\"meetingPlace\":\"CAMPUS\"")
+                .replace("\"leaderRoleCode\":\"BACKEND_DEVELOPER\",", "");
+        var result = mvc.perform(as(leader, json(post(TEAMS), request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.leaderRoleCode").isEmpty())
+                .andExpect(jsonPath("$.collaborationTools.length()").value(0))
+                .andReturn();
+        long teamId = objectMapper.readTree(result.getResponse().getContentAsString()).get("teamId").asLong();
+        Team saved = teams.findById(teamId).orElseThrow();
+        assertThat(saved.getMeetingPlace())
+                .isEqualTo("ONLINE".equals(mode) ? null : Team.MeetingPlace.CAMPUS);
+    }
+
+    @Test
+    void invalidNewFieldsReturnBadRequestEvenWithExistingRecruitingTeam() throws Exception {
+        createOnlineTeam();
+        mvc.perform(as(leader, json(post(TEAMS), createPayload("ONLINE", ""))))
+                .andExpect(status().isBadRequest());
+        String invalidRole = createPayload("ONLINE", ",\"collaborationTools\":[\"DISCORD\"]")
+                .replace("\"BACKEND_DEVELOPER\"", "\"UNKNOWN\"");
+        mvc.perform(as(leader, json(post(TEAMS), invalidRole)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(leader, json(post(TEAMS), createPayload("ONLINE", ",\"collaborationTools\":[\"DISCORD\"]"))))
+                .andExpect(status().isConflict());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ONLINE", "OFFLINE", "HYBRID"})
+    void oldClientCanEditExistingTeamWithoutTools(String mode) throws Exception {
+        Team team = teams.save(Team.create(competition, leader, "기존 팀", null,
+                Team.ActivityMode.valueOf(mode), (short) 4, (short) 1, Team.MeetingPlace.CAMPUS));
+        String path = TEAMS + "/" + team.getId();
+
+        updateActivity(path, mode, ",\"meetingPlace\":\"SEOUL\"")
+                .andExpect(jsonPath("$.collaborationTools.length()").value(0));
+        Team updated = teams.findById(team.getId()).orElseThrow();
+        assertThat(updated.getMeetingPlace())
+                .isEqualTo("ONLINE".equals(mode) ? null : Team.MeetingPlace.SEOUL);
+    }
+
+    @Test
+    void oldClientUpdatePreservesSelectedToolsWhileExplicitInvalidToolsAreRejected() throws Exception {
+        String path = TEAMS + "/" + createOnlineTeam();
+        updateActivity(path, "ONLINE", ",\"meetingPlace\":\"CAMPUS\"")
+                .andExpect(jsonPath("$.meetingPlace").isEmpty())
+                .andExpect(jsonPath("$.collaborationTools.length()").value(2));
+        mvc.perform(as(leader, json(put(path), updatePayload("ONLINE", ",\"collaborationTools\":[]"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(leader, json(put(path), updatePayload("HYBRID", ",\"collaborationTools\":[\"DISCORD\"]"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(leader, json(put(path), updatePayload(
+                "OFFLINE", ",\"meetingPlace\":\"SEOUL\",\"collaborationTools\":[\"DISCORD\"]"
+        )))).andExpect(status().isBadRequest());
+
+        mvc.perform(as(leader, get(path)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activityMode").value("ONLINE"))
+                .andExpect(jsonPath("$.collaborationTools.length()").value(2));
+    }
+
     private Long createOnlineTeam() throws Exception {
         var response = mvc.perform(as(leader, json(post(TEAMS),
                         createPayload("ONLINE", ",\"collaborationTools\":[\"DISCORD\",\"NOTION\"]"))))
@@ -173,11 +241,15 @@ class TeamCreationDetailsPersistenceTest {
     private ResultActions updateActivity(
             String path, String mode, String activityDetails
     ) throws Exception {
-        return mvc.perform(as(leader, json(put(path), """
-                        {"name":"팀","activityMode":"%s","maxMemberCount":4,"weeklyMeetingCount":4%s}
-                        """.formatted(mode, activityDetails))))
+        return mvc.perform(as(leader, json(put(path), updatePayload(mode, activityDetails))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.weeklyMeetingCount").value(4));
+    }
+
+    private String updatePayload(String mode, String activityDetails) {
+        return """
+                {"name":"팀","activityMode":"%s","maxMemberCount":4,"weeklyMeetingCount":4%s}
+                """.formatted(mode, activityDetails);
     }
 
     private String createPayload(String mode, String activityDetails) {

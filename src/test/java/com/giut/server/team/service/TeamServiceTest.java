@@ -78,6 +78,7 @@ class TeamServiceTest {
         when(competition.getId()).thenReturn(1L);
         when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(leader));
         when(competitionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(competition));
+        stubLeaderRole();
         when(teamRepository.existsByCompetition_IdAndLeader_IdAndStatus(
                 1L, 12L, Team.Status.RECRUITING)).thenReturn(true);
 

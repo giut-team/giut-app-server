@@ -38,7 +38,7 @@ public record CreateTeamResponse(
         @Schema(description = "지원서 질문 목록")
         List<TeamApplicationQuestionResponse> applicationQuestions,
 
-        @Schema(description = "팀장 담당 분야 코드", example = "BACKEND_DEVELOPER")
+        @Schema(description = "팀장 담당 분야 코드", example = "BACKEND_DEVELOPER", nullable = true)
         String leaderRoleCode,
 
         @Schema(description = "협업 도구 코드 목록")

@@ -54,8 +54,8 @@ public record CreateTeamRequest(
         @Size(max = 5, message = "지원서 질문은 최대 5개까지 등록할 수 있습니다.")
         List<@Valid CreateTeamQuestionRequest> applicationQuestions,
 
-        @Schema(description = "팀장의 세부 역할 코드", example = "BACKEND_DEVELOPER")
-        @NotBlank(message = "팀장의 담당 분야는 필수입니다.")
+        @Schema(description = "팀장의 세부 역할 코드. 기존 요청 형식으로 생성할 때만 생략할 수 있습니다.",
+                example = "BACKEND_DEVELOPER")
         @Size(max = 40, message = "팀장의 담당 분야 코드는 40자 이하여야 합니다.")
         String leaderRoleCode,
 
