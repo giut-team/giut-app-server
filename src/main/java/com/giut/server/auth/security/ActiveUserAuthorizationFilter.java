@@ -17,9 +17,9 @@ import java.io.IOException;
 
 /**
  * A valid JWT does not grant access to a withdrawn, suspended or missing account.
- * 로그인 없이 쓸 수 있는 경로({@link PublicRoutes#ALL})에서는 그런 토큰을 거부하지 않고 익명으로 진행한다.
- * 다른 기기에서 전체 로그아웃해 폐기된 쿠키가 남아 있어도(HttpOnly라 프런트가 지울 수 없다) 다시 로그인하거나,
- * 로그아웃으로 쿠키를 정리하거나, 공유 프로필처럼 공개된 화면을 볼 수 있어야 하기 때문이다.
+ * 로그인 없이 쓸 수 있는 경로({@link PublicRoutes#ALL}: 로그인·인프라 경로)에서만 그런 토큰을 거부하지 않고
+ * 익명으로 진행한다. 다른 기기에서 전체 로그아웃해 폐기된 쿠키가 남아 있어도(HttpOnly라 프런트가 지울 수 없다)
+ * 로그인은 항상 진행돼야 하기 때문이다. 그 밖의 모든 API는 로그인이 필요하므로 403으로 거절한다.
  *
  * <p>보호 API의 403 응답에서는 쿠키를 지우지 않는다. 폐기된 쿠키로 보낸 요청의 403이 새 로그인 응답보다
  * 늦게 도착하면, 방금 발급된 같은 이름의 쿠키까지 지워 버리기 때문이다.
@@ -50,7 +50,7 @@ public class ActiveUserAuthorizationFilter extends OncePerRequestFilter {
         if (user == null || user.getStatus() != User.Status.ACTIVE || !tokenVersionMatches) {
             if (PublicRoutes.ALL.matches(request)) {
                 // SecurityConfig에서 같은 매처로 permitAll이라 인증 없이 진행해도 된다.
-                // 로그인은 성공하면 새 쿠키가 덮어쓰고, 로그아웃은 쿠키만 지운다.
+                // 로그인에 성공하면 새 쿠키가 남은 쿠키를 덮어쓴다.
                 SecurityContextHolder.clearContext();
                 chain.doFilter(request, response);
                 return;

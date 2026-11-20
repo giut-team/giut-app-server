@@ -24,8 +24,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 폐기된 쿠키 정리는 로그아웃 API에서만 한다. 보호 API의 403은 쿠키를 건드리지 않는다.
- * 실제 보안 필터, JWT, 격리된 H2 DB를 쓴다.
+ * 로그아웃은 로그인이 필요한 API다. 쓸 수 없는 토큰이나 토큰 없는 요청은 거절하고 쿠키를 건드리지 않는다.
+ * 보호 API의 403도 쿠키를 지우지 않는다. 실제 보안 필터, JWT, 격리된 H2 DB를 쓴다.
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:giut_auth_logout;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -75,26 +75,26 @@ class AuthLogoutSessionTest {
     }
 
     @Test
-    void logoutWithRevokedCookieClearsCookiesWithoutTouchingTokenVersion() throws Exception {
+    void logoutWithRevokedCookieIsForbiddenWithoutSetCookie() throws Exception {
         User student = saveStudent();
         String revoked = revokedTokenOf(student);
         long versionBefore = users.findById(student.getId()).orElseThrow().getTokenVersion();
 
         MvcResult result = mvc.perform(post(LOGOUT).cookie(new Cookie(ACCESS_COOKIE, revoked)))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isForbidden())
                 .andReturn();
 
-        assertLoginCookiesCleared(result);
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
         assertThat(users.findById(student.getId()).orElseThrow().getTokenVersion()).isEqualTo(versionBefore);
     }
 
     @Test
-    void logoutWithoutTokenOnlyClearsCookies() throws Exception {
+    void logoutWithoutTokenIsUnauthorizedWithoutSetCookie() throws Exception {
         MvcResult result = mvc.perform(post(LOGOUT))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isUnauthorized())
                 .andReturn();
 
-        assertLoginCookiesCleared(result);
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
     }
 
     @Test

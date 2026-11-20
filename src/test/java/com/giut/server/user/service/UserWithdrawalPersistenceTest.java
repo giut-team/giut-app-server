@@ -202,12 +202,14 @@ class UserWithdrawalPersistenceTest {
         String share = "/api/profile/shares/" + sharing.createLink(target.getId()).token();
         mvc.perform(as(viewer, get("/api/profile"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
-        mvc.perform(path(get(share))).andExpect(status().isOk());
+        // 공유 카드는 로그인이 필요하다.
+        mvc.perform(path(get(share))).andExpect(status().isUnauthorized());
+        mvc.perform(as(viewer, get(share))).andExpect(status().isOk());
         mvc.perform(as(target, delete(PATH))).andExpect(status().isNoContent());
         mvc.perform(as(viewer, get("/api/profile"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0)).andExpect(jsonPath("$.profiles").isEmpty());
         mvc.perform(as(viewer, get("/api/profile/" + target.getId()))).andExpect(status().isNotFound());
-        mvc.perform(path(get(share))).andExpect(status().isNotFound());
+        mvc.perform(as(viewer, get(share))).andExpect(status().isNotFound());
         mvc.perform(as(viewer, get(share + "/target"))).andExpect(status().isNotFound());
         assertThat(profiles.existsById(target.getId())).isTrue();
         assertThat(links.count()).isEqualTo(1);
