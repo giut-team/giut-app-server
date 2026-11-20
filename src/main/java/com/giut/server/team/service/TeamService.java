@@ -14,6 +14,10 @@ import com.giut.server.team.dto.response.TeamApplicationListResponse;
 import com.giut.server.team.dto.response.TeamApplicationQuestionResponse;
 import com.giut.server.team.dto.response.TeamApplicationResponse;
 import com.giut.server.team.dto.response.TeamDetailResponse;
+import com.giut.server.team.dto.response.TeamInviteJoinResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkResponse;
+import com.giut.server.team.dto.response.TeamInviteLinkSummaryResponse;
+import com.giut.server.team.dto.response.TeamInvitePreviewResponse;
 import com.giut.server.team.dto.response.TeamMemberListResponse;
 import com.giut.server.team.dto.response.TeamMemberResponse;
 import com.giut.server.team.dto.response.TeamRecruitmentResponse;
@@ -28,6 +32,7 @@ import com.giut.server.team.entity.Team;
 import com.giut.server.team.entity.TeamApplicationAnswer;
 import com.giut.server.team.entity.TeamApplicationQuestion;
 import com.giut.server.team.entity.TeamApplication;
+import com.giut.server.team.entity.TeamInviteLink;
 import com.giut.server.team.entity.TeamMember;
 import com.giut.server.team.entity.TeamRecruitment;
 import com.giut.server.user.entity.User;
@@ -38,6 +43,7 @@ import com.giut.server.competition.repository.CompetitionRepository;
 import com.giut.server.team.repository.TeamApplicationAnswerRepository;
 import com.giut.server.team.repository.TeamApplicationQuestionRepository;
 import com.giut.server.team.repository.TeamApplicationRepository;
+import com.giut.server.team.repository.TeamInviteLinkRepository;
 import com.giut.server.team.repository.TeamMemberRepository;
 import com.giut.server.team.repository.TeamRepository;
 import com.giut.server.team.repository.TeamRecruitmentRepository;
@@ -51,10 +57,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,11 +79,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TeamService {
 
+    private static final Duration INVITE_LINK_TTL = Duration.ofHours(24);
+    private static final int MAX_ACTIVE_INVITE_LINKS = 10;
+    private static final int MAX_INVITE_LINKS_PER_24_HOURS = 30;
+    private static final SecureRandom INVITE_LINK_RANDOM = new SecureRandom();
+
     private final TeamRepository teamRepository;
     private final TeamRecruitmentRepository teamRecruitmentRepository;
     private final TeamScrapRepository teamScrapRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamApplicationRepository teamApplicationRepository;
+    private final TeamInviteLinkRepository teamInviteLinkRepository;
+    private final TeamInviteLinkUrl teamInviteLinkUrl;
     private final TeamApplicationQuestionRepository teamApplicationQuestionRepository;
     private final TeamApplicationAnswerRepository teamApplicationAnswerRepository;
     private final CompetitionRepository competitionRepository;
@@ -560,6 +580,106 @@ public class TeamService {
         return TeamApplicationResponse.of(invitation, List.of());
     }
 
+    @Transactional
+    public TeamInviteLinkResponse createInviteLink(Long userId, Long teamId, String roleCode) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, userId);
+        requireRecruiting(team);
+        TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
+        validateJoinCapacity(team, recruitment);
+
+        Instant now = clock.instant();
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNull(teamId, now)
+                >= MAX_ACTIVE_INVITE_LINKS) {
+            throw new ConflictException("팀당 활성 초대 링크는 최대 10개까지 발급할 수 있습니다.");
+        }
+        if (teamInviteLinkRepository.countByTeamIdAndExpiresAtAfter(teamId, now) >= MAX_INVITE_LINKS_PER_24_HOURS) {
+            throw new ConflictException("팀당 최근 24시간 동안 초대 링크는 최대 30개까지 발급할 수 있습니다.");
+        }
+
+        byte[] randomBytes = new byte[32];
+        INVITE_LINK_RANDOM.nextBytes(randomBytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String inviteUrl = teamInviteLinkUrl.build(teamId, token);
+        Instant expiresAt = now.plus(INVITE_LINK_TTL);
+        TeamInviteLink link = teamInviteLinkRepository.save(
+                TeamInviteLink.create(teamId, recruitment.getRoleCode(), hashInviteToken(token), expiresAt)
+        );
+        return new TeamInviteLinkResponse(link.getId(), link.getRoleCode(), link.getExpiresAt(), inviteUrl);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TeamInviteLinkSummaryResponse> getActiveInviteLinks(Long userId, Long teamId) {
+        Team team = findTeam(teamId);
+        validateTeamLeader(team, userId);
+        return teamInviteLinkRepository
+                .findAllByTeamIdAndExpiresAtAfterAndUsedAtIsNullAndRevokedAtIsNullOrderByIdDesc(teamId, clock.instant())
+                .stream()
+                .map(link -> new TeamInviteLinkSummaryResponse(link.getId(), link.getRoleCode(), link.getExpiresAt()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public TeamInvitePreviewResponse previewInviteLink(Long userId, Long teamId, String token) {
+        Team team = findTeam(teamId);
+        TeamInviteLink link = findUsableInviteLink(teamId, token, clock.instant());
+        boolean joinable = team.getStatus() == Team.Status.RECRUITING
+                && teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isEmpty()
+                && !isTeamFull(team, teamMemberRepository.countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE))
+                && teamRecruitmentRepository.findByTeamIdAndRoleCode(teamId, link.getRoleCode())
+                        .filter(recruitment -> !isRecruitmentFull(recruitment))
+                        .isPresent();
+        return new TeamInvitePreviewResponse(teamId, team.getName(), link.getRoleCode(), link.getExpiresAt(), joinable);
+    }
+
+    @Transactional
+    public TeamInviteJoinResponse joinViaInviteLink(Long userId, Long teamId, String token) {
+        // Use the same team lock as application approval and direct invitations.
+        Team team = findTeamForUpdate(teamId);
+        Instant now = clock.instant();
+        TeamInviteLink link = findUsableInviteLink(teamId, token, now);
+        requireRecruiting(team);
+        TeamRecruitment recruitment = findRecruitment(teamId, link.getRoleCode());
+        findActiveUser(userId, "사용자를 찾을 수 없습니다.");
+        if (teamMemberRepository.findByTeamIdAndUserId(teamId, userId).isPresent()) {
+            throw new ConflictException("이미 이 팀에 참여한 이력이 있습니다.");
+        }
+        long activeMemberCount = validateJoinCapacity(team, recruitment);
+        TeamMember member = addMember(team, userId, link.getRoleCode(), activeMemberCount);
+        link.use(now);
+        return new TeamInviteJoinResponse(teamId, member.getId(), link.getRoleCode());
+    }
+
+    @Transactional
+    public void revokeInviteLink(Long userId, Long teamId, Long inviteLinkId) {
+        Team team = findTeamForUpdate(teamId);
+        validateTeamLeader(team, userId);
+        TeamInviteLink link = teamInviteLinkRepository.findByIdAndTeamId(inviteLinkId, teamId)
+                .orElseThrow(() -> new ResourceNotFoundException("팀 초대 링크를 찾을 수 없습니다."));
+        Instant now = clock.instant();
+        if (link.isUsableAt(now)) {
+            link.revoke(now);
+        }
+    }
+
+    private TeamInviteLink findUsableInviteLink(Long teamId, String token, Instant now) {
+        TeamInviteLink link = teamInviteLinkRepository.findByTeamIdAndTokenHash(teamId, hashInviteToken(token))
+                .orElseThrow(() -> new ResourceNotFoundException("팀 초대 링크를 찾을 수 없습니다."));
+        if (!link.isUsableAt(now)) {
+            throw new ConflictException("만료, 폐기 또는 사용 완료된 팀 초대 링크입니다.");
+        }
+        return link;
+    }
+
+    private String hashInviteToken(String token) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", e);
+        }
+    }
+
     private ApproveTeamApplicationResponse registerTeamMember(
             Team team,
             TeamApplication application,
@@ -567,10 +687,7 @@ public class TeamService {
     ) {
         Long teamId = team.getId();
 
-        if (team.getStatus() != Team.Status.RECRUITING) {
-            throw new ConflictException("모집 중인 팀이 아닙니다.");
-        }
-
+        requireRecruiting(team);
         TeamRecruitment recruitment = findRecruitment(teamId, roleCode);
 
         if (teamMemberRepository.existsByTeamIdAndUserIdAndStatus(
@@ -578,31 +695,9 @@ public class TeamService {
             throw new ConflictException("이미 참여 중인 사용자입니다.");
         }
 
-        long activeMemberCount = teamMemberRepository
-                .countByTeamIdAndStatus(teamId, TeamMember.Status.ACTIVE);
-
-        if (team.getMaxMemberCount() != null
-                && activeMemberCount >= team.getMaxMemberCount()) {
-            throw new ConflictException("팀 정원이 마감되었습니다.");
-        }
-
-        if (countFilledRecruitment(recruitment)
-                >= recruitment.getRequiredCount()) {
-            throw new ConflictException("모집 분야 정원이 마감되었습니다.");
-        }
-
+        long activeMemberCount = validateJoinCapacity(team, recruitment);
         application.approve(roleCode);
-
-        TeamMember member = teamMemberRepository.save(
-                TeamMember.createMember(
-                        teamId, application.getUserId(), roleCode
-                )
-        );
-
-        if (team.getMaxMemberCount() != null
-                && activeMemberCount + 1 >= team.getMaxMemberCount()) {
-            team.closeRecruitment();
-        }
+        TeamMember member = addMember(team, application.getUserId(), roleCode, activeMemberCount);
 
         return new ApproveTeamApplicationResponse(
                 application.getId(),
@@ -612,6 +707,48 @@ public class TeamService {
                 roleCode,
                 member.getId()
         );
+    }
+
+    private void requireRecruiting(Team team) {
+        if (team.getStatus() != Team.Status.RECRUITING) {
+            throw new ConflictException("모집 중인 팀이 아닙니다.");
+        }
+    }
+
+    private long validateJoinCapacity(Team team, TeamRecruitment recruitment) {
+        long activeMemberCount = teamMemberRepository
+                .countByTeamIdAndStatus(team.getId(), TeamMember.Status.ACTIVE);
+
+        if (isTeamFull(team, activeMemberCount)) {
+            throw new ConflictException("팀 정원이 마감되었습니다.");
+        }
+
+        if (isRecruitmentFull(recruitment)) {
+            throw new ConflictException("모집 분야 정원이 마감되었습니다.");
+        }
+
+        return activeMemberCount;
+    }
+
+    private boolean isTeamFull(Team team, long activeMemberCount) {
+        return team.getMaxMemberCount() != null && activeMemberCount >= team.getMaxMemberCount();
+    }
+
+    private boolean isRecruitmentFull(TeamRecruitment recruitment) {
+        return countFilledRecruitment(recruitment) >= recruitment.getRequiredCount();
+    }
+
+    private TeamMember addMember(Team team, Long userId, String roleCode, long activeMemberCount) {
+        TeamMember member = teamMemberRepository.save(
+                TeamMember.createMember(team.getId(), userId, roleCode)
+        );
+
+        if (team.getMaxMemberCount() != null
+                && activeMemberCount + 1 >= team.getMaxMemberCount()) {
+            team.closeRecruitment();
+        }
+
+        return member;
     }
 
     @Transactional

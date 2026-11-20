@@ -119,4 +119,4 @@ temp/
 !/src/main/resources/db/manual/V26__add_competition_enrollment_and_team_flags.sql
 !/src/main/resources/db/manual/V28__add_competition_member_submissions.sql
 !/src/main/resources/db/manual/V29__create_competition_extraction_jobs.sql
-!/src/main/resources/db/manual/V33__add_team_collaboration_tools.sql
+!/src/main/resources/db/manual/V32__create_team_invite_links.sql
