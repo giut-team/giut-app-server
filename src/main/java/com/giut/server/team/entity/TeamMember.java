@@ -101,4 +101,8 @@ public class TeamMember extends BaseTimeEntity {
     public void kick() {
         this.status = Status.KICKED;
     }
+
+    public void updateRoleCode(String roleCode) {
+        this.roleCode = roleCode;
+    }
 }

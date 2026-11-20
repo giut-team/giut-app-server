@@ -311,7 +311,8 @@ class TeamServiceTest {
                         (short) 5,
                         (short) 2,
                         Team.MeetingPlace.SEOUL,
-                        List.of(Team.CollaborationTool.DISCORD)
+                        List.of(Team.CollaborationTool.DISCORD),
+                        null
                 )
         );
 
@@ -340,7 +341,8 @@ class TeamServiceTest {
                         (short) 3,
                         (short) 1,
                         null,
-                        List.of(Team.CollaborationTool.DISCORD)
+                        List.of(Team.CollaborationTool.DISCORD),
+                        null
                 )
         ));
     }
@@ -360,7 +362,8 @@ class TeamServiceTest {
                         (short) 4,
                         (short) 1,
                         null,
-                        List.of(Team.CollaborationTool.DISCORD)
+                        List.of(Team.CollaborationTool.DISCORD),
+                        null
                 )
         ));
     }

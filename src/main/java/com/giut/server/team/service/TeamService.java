@@ -266,6 +266,14 @@ public class TeamService {
         ActivitySettings activity = validateActivitySettings(
                 request.activityMode(), request.meetingPlace(), tools, legacyRequest, preserveTools
         );
+        if (request.leaderRoleCode() != null) {
+            validateLeaderRole(request.leaderRoleCode());
+            TeamMember leaderMembership = teamMemberRepository.findByTeamIdAndUserId(teamId, leaderUserId)
+                    .filter(member -> member.getRole() == TeamMember.Role.LEADER
+                            && member.getStatus() == TeamMember.Status.ACTIVE)
+                    .orElseThrow(() -> new ConflictException("활성 팀장 정보를 찾을 수 없습니다."));
+            leaderMembership.updateRoleCode(request.leaderRoleCode());
+        }
         team.updateInfo(
                 request.name(),
                 request.description(),

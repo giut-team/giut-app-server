@@ -44,6 +44,11 @@ public record UpdateTeamRequest(
         @Schema(description = "협업 도구. 새 화면에서 온라인·혼합일 때 1개 이상 선택합니다. 같은 활동 방식으로 수정할 때 생략하면 기존 선택을 유지합니다. 오프라인은 생략합니다.",
                 example = "[\"DISCORD\", \"NOTION\"]")
         @Size(max = 5, message = "협업 도구는 최대 5개까지 선택할 수 있습니다.")
-        List<@NotNull(message = "협업 도구 코드는 필수입니다.") CollaborationTool> collaborationTools
+        List<@NotNull(message = "협업 도구 코드는 필수입니다.") CollaborationTool> collaborationTools,
+
+        @Schema(description = "변경할 팀장 담당 분야 코드. 생략하면 기존 값을 유지합니다.",
+                example = "BACKEND_DEVELOPER")
+        @Size(max = 40, message = "팀장의 담당 분야 코드는 40자 이하여야 합니다.")
+        String leaderRoleCode
 ) {
 }

@@ -146,6 +146,47 @@ class TeamCreationDetailsPersistenceTest {
     }
 
     @Test
+    void leaderCanFillAnExistingTeamRoleAndKeepItWhenOmitted() throws Exception {
+        Team existing = teams.save(Team.create(competition, leader, "기존 팀", null,
+                Team.ActivityMode.OFFLINE, (short) 4, (short) 1, Team.MeetingPlace.CAMPUS));
+        members.save(TeamMember.createLeader(existing.getId(), leader.getId()));
+        String path = TEAMS + "/" + existing.getId();
+        String place = ",\"meetingPlace\":\"CAMPUS\"";
+
+        updateActivity(path, "OFFLINE", place + ",\"leaderRoleCode\":\"FRONTEND_DEVELOPER\"")
+                .andExpect(jsonPath("$.leaderRoleCode").value("FRONTEND_DEVELOPER"));
+        updateActivity(path, "OFFLINE", place)
+                .andExpect(jsonPath("$.leaderRoleCode").value("FRONTEND_DEVELOPER"));
+        mvc.perform(as(leader, get(path + "/members")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[0].role").value("LEADER"))
+                .andExpect(jsonPath("$.members[0].roleCode").value("FRONTEND_DEVELOPER"));
+    }
+
+    @Test
+    void changingLeaderRoleDoesNotFillRecruitmentSlots() throws Exception {
+        String recruitingTeam = TEAMS + "/" + createOnlineTeam();
+        updateActivity(recruitingTeam, "ONLINE", ",\"leaderRoleCode\":\"FRONTEND_DEVELOPER\"")
+                .andExpect(jsonPath("$.leaderRoleCode").value("FRONTEND_DEVELOPER"));
+        updateActivity(recruitingTeam, "ONLINE", ",\"leaderRoleCode\":\"BACKEND_DEVELOPER\"")
+                .andExpect(jsonPath("$.leaderRoleCode").value("BACKEND_DEVELOPER"))
+                .andExpect(jsonPath("$.recruitments[0].filledCount").value(0));
+    }
+
+    @Test
+    void invalidRoleAndNonLeaderCannotChangeLeaderRole() throws Exception {
+        long teamId = createOnlineTeam();
+        String path = TEAMS + "/" + teamId;
+        mvc.perform(as(leader, json(put(path), updatePayload("ONLINE", ",\"leaderRoleCode\":\"INVALID\""))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(createUser(), json(put(path),
+                        updatePayload("ONLINE", ",\"leaderRoleCode\":\"FRONTEND_DEVELOPER\""))))
+                .andExpect(status().isForbidden());
+        assertThat(members.findByTeamIdAndUserId(teamId, leader.getId()).orElseThrow().getRoleCode())
+                .isEqualTo("BACKEND_DEVELOPER");
+    }
+
+    @Test
     void invalidRoleAndActivitySettingsReturnBadRequest() throws Exception {
         String online = createPayload("ONLINE", ",\"collaborationTools\":[\"DISCORD\"]");
         for (String payload : new String[]{

@@ -151,7 +151,7 @@ public class TeamController {
     @PutMapping("/{teamId}")
     @Operation(
             summary = "팀 정보 수정",
-            description = "팀장이 팀 이름, 소개, 활동 방식, 최대 팀원 수, 주간 회의 횟수, 협업 도구와 회의 장소를 수정합니다. 온라인은 협업 도구, 오프라인은 회의 장소, 혼합은 둘 다 필요합니다."
+            description = "팀장이 팀 이름, 소개, 활동 방식, 최대 팀원 수, 주간 회의 횟수, 협업 도구와 회의 장소를 수정합니다. leaderRoleCode를 보내면 팀장의 담당 분야도 변경합니다. 온라인은 협업 도구, 오프라인은 회의 장소, 혼합은 둘 다 필요합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -160,7 +160,7 @@ public class TeamController {
             @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락"),
             @ApiResponse(responseCode = "403", description = "팀장이 아닌 사용자의 수정 요청"),
             @ApiResponse(responseCode = "404", description = "팀을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "최대 팀원 수가 현재 팀원 수보다 작음")
+            @ApiResponse(responseCode = "409", description = "최대 팀원 수가 현재 팀원 수보다 작거나 활성 팀장 정보가 없음")
     })
     public ResponseEntity<TeamDetailResponse> updateTeam(
             Authentication authentication,

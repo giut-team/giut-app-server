@@ -5,6 +5,8 @@ import com.giut.server.global.entity.BaseTimeEntity;
 import com.giut.server.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.HashSet;
 import java.util.List;
@@ -45,6 +47,7 @@ public class Team extends BaseTimeEntity {
             joinColumns = @JoinColumn(name = "team_id", nullable = false),
             foreignKey = @ForeignKey(name = "fk_team_collaboration_tools_team"))
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "tool_code", nullable = false, length = 30)
     private Set<CollaborationTool> collaborationTools = new HashSet<>();
 
