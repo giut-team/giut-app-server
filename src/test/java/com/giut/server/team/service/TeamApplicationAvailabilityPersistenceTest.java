@@ -22,6 +22,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -74,6 +76,29 @@ class TeamApplicationAvailabilityPersistenceTest {
     private TeamApplicationQuestion question;
     private String teamApplications;
 
+    /**
+     * 기본은 H2. GIUT_TEAM_APPLICATION_MYSQL_TEST=true이면 TLS가 활성화된
+     * 127.0.0.1:33470/giut_team_application_test의 일회용 스키마에서 같은 테스트를 실행한다.
+     * create-drop을 위해 이 스키마에만 권한이 있는 giut_team_application_test 계정과
+     * GIUT_TEAM_APPLICATION_MYSQL_PASSWORD를 준비해야 한다.
+     */
+    @DynamicPropertySource
+    static void useDisposableMySql(DynamicPropertyRegistry properties) {
+        if (!"true".equals(System.getenv("GIUT_TEAM_APPLICATION_MYSQL_TEST"))) {
+            return;
+        }
+        String password = System.getenv("GIUT_TEAM_APPLICATION_MYSQL_PASSWORD");
+        if (password == null || password.isBlank()) {
+            throw new IllegalStateException("GIUT_TEAM_APPLICATION_MYSQL_PASSWORD is required for the MySQL test.");
+        }
+        properties.add("spring.datasource.url", () ->
+                "jdbc:mysql://127.0.0.1:33470/giut_team_application_test?sslMode=REQUIRED");
+        properties.add("spring.datasource.username", () -> "giut_team_application_test");
+        properties.add("spring.datasource.password", () -> password);
+        properties.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
+        properties.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.MySQLDialect");
+    }
+
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
@@ -101,6 +126,14 @@ class TeamApplicationAvailabilityPersistenceTest {
                 .andExpect(jsonPath("$.weeklyAvailableHours").value(20))
                 .andExpect(jsonPath("$.meetingTimeSlots[0]").value("MORNING"))
                 .andExpect(jsonPath("$.meetingTimeSlots[1]").value("EVENING"));
+
+        assertThat(applications.findAllByUserIdOrderByAppliedAtDesc(applicant.getId()))
+                .singleElement()
+                .satisfies(application -> {
+                    assertThat(application.getWeeklyAvailableHours()).isEqualTo(20);
+                    assertThat(application.getMeetingTimeSlots()).containsExactly(
+                            TeamApplication.MeetingTimeSlot.MORNING, TeamApplication.MeetingTimeSlot.EVENING);
+                });
 
         for (ResultActions response : new ResultActions[]{
                 mvc.perform(as(applicant, get(MY_APPLICATIONS))),

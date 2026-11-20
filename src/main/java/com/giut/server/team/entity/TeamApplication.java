@@ -71,6 +71,7 @@ public class TeamApplication extends BaseTimeEntity {
     @Column(name = "weekly_available_hours")
     private Integer weeklyAvailableHours;
 
+    // 지원서와 함께 읽는 소수의 선택값이라 별도 조인 없이 한 행에 저장한다.
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "meeting_time_slots", columnDefinition = "json")
     private List<MeetingTimeSlot> meetingTimeSlots;
