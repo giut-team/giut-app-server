@@ -8,6 +8,7 @@ import com.giut.server.team.dto.request.TeamApplicationAnswerRequest;
 import com.giut.server.team.dto.request.CreateTeamRecruitmentRequest;
 import com.giut.server.team.dto.request.UpdateTeamRequest;
 import com.giut.server.team.dto.response.ApproveTeamApplicationResponse;
+import com.giut.server.team.dto.response.AppliedTeamResponse;
 import com.giut.server.team.dto.response.CreateTeamResponse;
 import com.giut.server.team.dto.response.TeamApplicationAnswerResponse;
 import com.giut.server.team.dto.response.TeamApplicationListResponse;
@@ -140,17 +141,36 @@ public class TeamService {
                 .toList();
         Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
 
-        List<MyTeamResponse> teams = teamRepository
-                .findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED)
-                .stream()
+        List<Team> activeTeams = teamRepository.findAllByIdsExcludingStatusOrderByIdDesc(teamIds, Team.Status.ARCHIVED);
+        List<Long> ledTeamIds = activeTeams.stream()
+                .filter(team -> userId.equals(team.getLeader().getId()))
+                .filter(team -> membershipByTeamId.get(team.getId()).getRole() == TeamMember.Role.LEADER)
+                .map(Team::getId)
+                .toList();
+        Map<Long, Long> pendingCountByTeamId = countPendingApplicationsByTeamId(ledTeamIds);
+        List<MyTeamResponse> teams = activeTeams.stream()
                 .map(team -> MyTeamResponse.of(
                         team,
                         membershipByTeamId.get(team.getId()),
-                        memberCountByTeamId.getOrDefault(team.getId(), 0L)
+                        memberCountByTeamId.getOrDefault(team.getId(), 0L),
+                        pendingCountByTeamId.getOrDefault(team.getId(), 0L)
                 ))
                 .toList();
 
         return new MyTeamListResponse(teams);
+    }
+
+    private Map<Long, Long> countPendingApplicationsByTeamId(List<Long> teamIds) {
+        if (teamIds.isEmpty()) {
+            return Map.of();
+        }
+        return teamApplicationRepository.countByTeamIdsAndTypeAndStatusAndUserStatus(
+                        teamIds, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING, User.Status.ACTIVE
+                ).stream()
+                .collect(Collectors.toMap(
+                        TeamApplicationRepository.TeamApplicationCount::getTeamId,
+                        TeamApplicationRepository.TeamApplicationCount::getApplicationCount
+                ));
     }
 
     private Map<Long, Long> countActiveMembersByTeamId(List<Long> teamIds) {
@@ -476,28 +496,23 @@ public class TeamService {
         Team team = findTeam(teamId);
         validateTeamLeader(team, leaderUserId);
 
-        List<TeamApplication> applications = teamApplicationRepository.findAllByTeamIdAndStatus(
-                teamId,
-                TeamApplication.Status.PENDING
+        List<TeamApplicationRepository.PendingApplicationDetails> applications =
+                teamApplicationRepository.findPendingApplicationDetails(
+                        teamId, TeamApplication.Type.APPLICATION, TeamApplication.Status.PENDING, User.Status.ACTIVE
+                );
+        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId = findAnswersByApplicationId(
+                applications.stream().map(details -> details.getApplication().getId()).toList()
         );
-        List<Long> applicationIds = applications.stream()
-                .map(TeamApplication::getId)
-                .toList();
-
-        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId = applicationIds.isEmpty()
-                ? Map.of()
-                : teamApplicationAnswerRepository.findAllByApplicationIdIn(applicationIds)
-                        .stream()
-                        .collect(Collectors.groupingBy(TeamApplicationAnswer::getApplicationId));
-
-        List<TeamApplicationQuestion> questions = findActiveQuestions(teamId);
+        List<TeamApplicationQuestion> questions = applications.isEmpty() ? List.of() : findActiveQuestions(teamId);
         List<TeamApplicationResponse> responses = applications.stream()
-                .map(application -> TeamApplicationResponse.of(
-                        application,
+                .map(details -> TeamApplicationResponse.of(
+                        details.getApplication(),
                         toAnswerResponses(
                                 questions,
-                                answersByApplicationId.getOrDefault(application.getId(), List.of())
-                        )
+                                answersByApplicationId.getOrDefault(details.getApplication().getId(), List.of())
+                        ),
+                        null,
+                        details.getApplicantNickname()
                 ))
                 .toList();
 
@@ -506,12 +521,52 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public MyTeamApplicationListResponse getMyApplications(Long userId) {
-        List<TeamApplicationResponse> applications = teamApplicationRepository
-                .findAllByUserIdOrderByAppliedAtDesc(userId)
+        return getMyApplicationHistory(userId, TeamApplication.Type.APPLICATION);
+    }
+
+    @Transactional(readOnly = true)
+    public MyTeamApplicationListResponse getMyInvitations(Long userId) {
+        return getMyApplicationHistory(userId, TeamApplication.Type.INVITATION);
+    }
+
+    private MyTeamApplicationListResponse getMyApplicationHistory(Long userId, TeamApplication.Type type) {
+        List<TeamApplication> applications =
+                teamApplicationRepository.findAllByUserIdAndTypeOrderByAppliedAtDesc(userId, type);
+        if (applications.isEmpty()) {
+            return new MyTeamApplicationListResponse(List.of());
+        }
+        List<Long> teamIds = applications.stream().map(TeamApplication::getTeamId).distinct().toList();
+        Map<Long, Long> memberCountByTeamId = countActiveMembersByTeamId(teamIds);
+        Map<Long, AppliedTeamResponse> appliedTeamById = teamRepository.findAllWithCompetitionByIdIn(teamIds).stream()
+                .collect(Collectors.toMap(Team::getId,
+                        team -> AppliedTeamResponse.of(team, memberCountByTeamId.getOrDefault(team.getId(), 0L))));
+        Map<Long, List<TeamApplicationQuestion>> questionsByTeamId = teamApplicationQuestionRepository
+                .findAllByTeamIdInAndStatus(teamIds, TeamApplicationQuestion.Status.ACTIVE)
                 .stream()
-                .map(application -> TeamApplicationResponse.of(application, findAnswerResponses(application)))
+                .collect(Collectors.groupingBy(TeamApplicationQuestion::getTeamId));
+        Map<Long, List<TeamApplicationAnswer>> answersByApplicationId =
+                findAnswersByApplicationId(applications.stream().map(TeamApplication::getId).toList());
+
+        List<TeamApplicationResponse> responses = applications.stream()
+                .map(application -> TeamApplicationResponse.of(
+                        application,
+                        toAnswerResponses(
+                                questionsByTeamId.getOrDefault(application.getTeamId(), List.of()),
+                                answersByApplicationId.getOrDefault(application.getId(), List.of())
+                        ),
+                        appliedTeamById.get(application.getTeamId()),
+                        null
+                ))
                 .toList();
-        return new MyTeamApplicationListResponse(applications);
+        return new MyTeamApplicationListResponse(responses);
+    }
+
+    private Map<Long, List<TeamApplicationAnswer>> findAnswersByApplicationId(List<Long> applicationIds) {
+        if (applicationIds.isEmpty()) {
+            return Map.of();
+        }
+        return teamApplicationAnswerRepository.findAllByApplicationIdIn(applicationIds).stream()
+                .collect(Collectors.groupingBy(TeamApplicationAnswer::getApplicationId));
     }
 
     @Transactional

@@ -43,7 +43,6 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
             select team
             from Team team
             join fetch team.competition
-            join fetch team.leader
             where team.id in :teamIds and team.status <> :excludedStatus
             order by team.id desc
             """)
@@ -51,6 +50,13 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
             @Param("teamIds") Collection<Long> teamIds,
             @Param("excludedStatus") Team.Status excludedStatus
     );
+
+    @Query("""
+            select team from Team team
+            join fetch team.competition
+            where team.id in :teamIds
+            """)
+    List<Team> findAllWithCompetitionByIdIn(@Param("teamIds") Collection<Long> teamIds);
 
     boolean existsByCompetition_IdAndLeader_IdAndStatus(
             Long competitionId, Long leaderUserId, Team.Status status);

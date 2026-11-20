@@ -62,7 +62,7 @@ public class TeamController {
     @GetMapping("/me")
     @Operation(
             summary = "내 소속 팀 목록 조회",
-            description = "현재 사용자가 팀장 또는 팀원으로 활동 중인 팀을 최신순으로 조회합니다. myRole로 팀장 여부를 확인할 수 있습니다."
+            description = "내 소속 팀과 공모전 이름을 조회합니다. 팀장인 팀의 pendingApplicationCount는 활성 사용자가 제출한 미처리 지원서 수입니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -75,12 +75,23 @@ public class TeamController {
     }
 
     @GetMapping("/applications/me")
-    @Operation(summary = "내 팀 참가 신청 조회", description = "내가 제출한 신청, 주간 투자 가능 시간, 회의 가능 시간대와 처리 상태를 최신순으로 조회합니다.")
+    @Operation(summary = "내 팀 참가 신청 조회",
+            description = "내가 제출한 지원서, 처리 상태, 주간 투자 가능 시간, 회의 가능 시간대와 팀 요약을 최신순으로 조회합니다. 받은 합류 제안은 GET /api/teams/invitations/me에서 조회합니다.")
     @SecurityRequirement(name = "JWT")
     @ApiResponse(responseCode = "200", description = "내 신청 목록 조회 성공")
     public ResponseEntity<MyTeamApplicationListResponse> getMyApplications(Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(teamService.getMyApplications(userId));
+    }
+
+    @GetMapping("/invitations/me")
+    @Operation(summary = "내가 받은 팀 합류 제안 조회", description = "나에게 온 팀 합류 제안과 처리 상태를 최신순으로 조회합니다.")
+    @SecurityRequirement(name = "JWT")
+    @ApiResponse(responseCode = "200", description = "받은 합류 제안 조회 성공")
+    @ApiResponse(responseCode = "401", description = "인증 실패 또는 토큰 누락")
+    public ResponseEntity<MyTeamApplicationListResponse> getMyInvitations(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        return ResponseEntity.ok(teamService.getMyInvitations(userId));
     }
 
     @PostMapping
@@ -278,7 +289,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamApplicationResponse.class),
-                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"roleCode\":\"BACKEND_DEVELOPER\",\"assignedRoleCode\":null,\"rejectionReason\":null,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
+                            examples = @ExampleObject(value = "{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"roleCode\":\"BACKEND_DEVELOPER\",\"assignedRoleCode\":null,\"rejectionReason\":null,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"team\":null,\"applicantNickname\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}")
                     )
             ),
             @ApiResponse(responseCode = "400", description = "잘못된 지원 분야, 답변 또는 시간 정보"),
@@ -310,7 +321,7 @@ public class TeamController {
     @GetMapping("/{teamId}/applications")
     @Operation(
             summary = "팀 참가 신청 목록 조회",
-            description = "팀장이 승인 대기 중인 참가 신청 목록과 답변, 지원자의 주간 투자 가능 시간 및 회의 가능 시간대를 조회합니다."
+            description = "팀장이 활성 사용자의 승인 대기 지원서와 지원자 닉네임, 주간 투자 가능 시간, 회의 가능 시간대를 조회합니다. 팀장이 보낸 합류 제안은 제외합니다."
     )
     @SecurityRequirement(name = "JWT")
     @ApiResponses({
@@ -320,7 +331,7 @@ public class TeamController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = TeamApplicationListResponse.class),
-                            examples = @ExampleObject(value = "{\"teamId\":1,\"applications\":[{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}]}")
+                            examples = @ExampleObject(value = "{\"teamId\":1,\"applications\":[{\"applicationId\":1,\"teamId\":1,\"userId\":15,\"applicantNickname\":\"김민재\",\"team\":null,\"roleCode\":\"BACKEND_DEVELOPER\",\"message\":\"백엔드 개발로 참여하고 싶습니다.\",\"status\":\"PENDING\",\"appliedAt\":\"2026-09-08T10:40:00Z\",\"decidedAt\":null,\"weeklyAvailableHours\":20,\"meetingTimeSlots\":[\"MORNING\",\"EVENING\"],\"answers\":[{\"questionId\":1,\"question\":\"이 팀에 지원한 이유를 알려주세요.\",\"answer\":\"서울시 공공데이터를 다뤄본 경험이 있습니다.\",\"displayOrder\":1}]}]}")
                     )
             ),
             @ApiResponse(

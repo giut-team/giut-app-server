@@ -135,10 +135,11 @@ class TeamApplicationAvailabilityPersistenceTest {
                             TeamApplication.MeetingTimeSlot.MORNING, TeamApplication.MeetingTimeSlot.EVENING);
                 });
 
-        for (ResultActions response : new ResultActions[]{
-                mvc.perform(as(applicant, get(MY_APPLICATIONS))),
-                mvc.perform(as(leader, get(teamApplications)))
-        }) {
+        ResultActions myApplications = mvc.perform(as(applicant, get(MY_APPLICATIONS)))
+                .andExpect(jsonPath("$.applications[0].team.name").value("지원할 팀"));
+        ResultActions pendingApplications = mvc.perform(as(leader, get(teamApplications)))
+                .andExpect(jsonPath("$.applications[0].applicantNickname").value("지원자"));
+        for (ResultActions response : new ResultActions[]{myApplications, pendingApplications}) {
             response.andExpect(status().isOk())
                     .andExpect(jsonPath("$.applications[0].userId").value(applicant.getId()))
                     .andExpect(jsonPath("$.applications[0].weeklyAvailableHours").value(20))
