@@ -98,11 +98,10 @@ public class CompetitionService {
                 request.pageOrDefault(), request.sizeOrDefault(), request.sortOrDefault().toSort());
         Slice<Competition> slice = competitionRepository.findBy(listSpecification, query -> query.slice(pageable));
 
-        LongSupplier counter = () -> competitionRepository.count(listSpecification);
-        LongSupplier totalCounter = request.normalizedKeyword() != null
-                ? counter
-                : () -> competitionListCountCache.get(new CompetitionListCountCache.Key(
-                        request.category(), request.activityType(), request.status()), counter);
+        LongSupplier totalCounter = () -> competitionListCountCache.get(
+                new CompetitionListCountCache.Key(request.category(), request.activityType(), request.status(),
+                        request.normalizedKeyword()),
+                () -> competitionRepository.count(listSpecification));
         Page<Competition> competitionPage = new PageImpl<>(
                 slice.getContent(), pageable, totalElements(slice, pageable, totalCounter));
         List<PublicCompetitionResponse> responses = toPublicResponses(slice.getContent(), now);

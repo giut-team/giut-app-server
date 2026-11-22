@@ -39,11 +39,12 @@ class CompetitionListCountCachePersistenceTest {
     }
 
     @Test
-    void cachesTotalPerFilterButKeepsPageContentAndHasNextFresh() {
+    void cachesTotalPerFilterAndKeywordButKeepsPageContentAndHasNextFresh() {
         publish(3, Competition.Category.WEB_MOBILE_IT);
 
-        // 첫 요청은 세어서 캐시한다.
+        // 첫 요청은 세어서 캐시한다. 검색어 조건도 같다.
         assertPage(list(0, null, null), 3, 2, true, 2);
+        assertPage(list(0, "giut", null), 3, 2, true, 2);
 
         publish(2, Competition.Category.WEB_MOBILE_IT);
 
@@ -58,10 +59,11 @@ class CompetitionListCountCachePersistenceTest {
         // 마지막 페이지는 읽은 결과만으로 정확한 개수를 안다.
         assertPage(list(2, null, null), 5, 3, false, 1);
 
-        // 검색어 조건은 캐시하지 않는다.
-        assertPage(list(0, "캐시 대상", null), 5, 3, true, 2);
+        // 검색어는 대소문자·앞뒤 공백과 상관없이 같은 개수를 쓴다(검색 조건이 대소문자를 가리지 않는다).
+        assertPage(list(0, " GIUT ", null), 3, 2, true, 2);
 
-        // 필터 조합이 다르면 따로 센다.
+        // 검색어나 필터 조합이 다르면 따로 센다.
+        assertPage(list(0, "대상", null), 5, 3, true, 2);
         assertPage(list(0, null, Competition.Category.WEB_MOBILE_IT), 5, 3, true, 2);
     }
 
@@ -82,7 +84,7 @@ class CompetitionListCountCachePersistenceTest {
         Instant now = Instant.now();
         long existing = competitions.count();
         for (int i = 1; i <= count; i++) {
-            competitions.saveAndFlush(Competition.create("캐시 대상 " + (existing + i), category, "주최", "대학생",
+            competitions.saveAndFlush(Competition.create("캐시 대상 " + (existing + i), category, "Giut 주최", "대학생",
                     "목록 소개", now.minusSeconds(3600), now.plusSeconds(86_400),
                     Competition.PublicationStatus.PUBLISHED, Competition.VerificationStatus.UNVERIFIED, null));
         }

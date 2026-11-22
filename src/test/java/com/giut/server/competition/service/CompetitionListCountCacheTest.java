@@ -13,9 +13,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CompetitionListCountCacheTest {
 
-    private static final CompetitionListCountCache.Key NO_FILTER = new CompetitionListCountCache.Key(null, null, null);
+    private static final CompetitionListCountCache.Key NO_FILTER = new CompetitionListCountCache.Key(null, null, null, null);
     private static final CompetitionListCountCache.Key IT_OPEN = new CompetitionListCountCache.Key(
-            Competition.Category.WEB_MOBILE_IT, null, CompetitionRecruitmentStatus.OPEN);
+            Competition.Category.WEB_MOBILE_IT, null, CompetitionRecruitmentStatus.OPEN, null);
 
     private final FakeTicker ticker = new FakeTicker();
     private final AtomicLong counts = new AtomicLong();
@@ -41,9 +41,20 @@ class CompetitionListCountCacheTest {
         assertThat(cache.get(NO_FILTER, () -> count(10))).isEqualTo(10);
         assertThat(cache.get(IT_OPEN, () -> count(3))).isEqualTo(3);
         assertThat(cache.get(new CompetitionListCountCache.Key(
-                Competition.Category.WEB_MOBILE_IT, null, CompetitionRecruitmentStatus.OPEN), () -> count(99)))
+                Competition.Category.WEB_MOBILE_IT, null, CompetitionRecruitmentStatus.OPEN, null), () -> count(99)))
                 .isEqualTo(3);
         assertThat(counts).hasValue(2);
+    }
+
+    @Test
+    void sharesKeywordCountIgnoringCaseButKeepsOtherKeywordsSeparately() {
+        CompetitionListCountCache cache = new CompetitionListCountCache(Duration.ofMinutes(1), ticker);
+
+        assertThat(cache.get(keyword("AI"), () -> count(7))).isEqualTo(7);
+        assertThat(cache.get(keyword("ai"), () -> count(99))).isEqualTo(7);
+        assertThat(cache.get(keyword("데이터"), () -> count(4))).isEqualTo(4);
+        assertThat(cache.get(NO_FILTER, () -> count(10))).isEqualTo(10);
+        assertThat(counts).hasValue(3);
     }
 
     @Test
@@ -70,6 +81,10 @@ class CompetitionListCountCacheTest {
     void rejectsNegativeTtl() {
         assertThatThrownBy(() -> new CompetitionListCountCache(Duration.ofSeconds(-1), ticker))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static CompetitionListCountCache.Key keyword(String keyword) {
+        return new CompetitionListCountCache.Key(null, null, null, keyword);
     }
 
     private long count(long value) {
