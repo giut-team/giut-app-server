@@ -14,7 +14,14 @@ import java.util.Objects;
         @UniqueConstraint(name = "uk_competitions_submission_url_hash", columnNames = "submission_source_url_hash"),
         indexes = {
         @Index(name = "idx_competitions_status_id", columnList = "publication_status, id"),
-        @Index(name = "idx_competitions_status_app_end_at", columnList = "publication_status, application_end_at"),
+        // 마감 임박 순(ORDER BY application_end_at, id DESC)과 마감 임박 목록. 정렬 방향이 섞여 있어 id DESC까지 인덱스에 둔다.
+        // 예전 idx_competitions_status_app_end_at(publication_status, application_end_at)을 대신한다(V35).
+        @Index(name = "idx_competitions_status_app_end_at_id", columnList = "publication_status, application_end_at, id DESC"),
+        // 카테고리 + 마감 임박 순.
+        @Index(name = "idx_competitions_status_category_app_end_at_id",
+                columnList = "publication_status, category, application_end_at, id DESC"),
+        // 조회수 순(ORDER BY view_count DESC, id DESC). 상세 조회마다 view_count가 바뀌어 이 인덱스도 함께 갱신된다.
+        @Index(name = "idx_competitions_status_view_count", columnList = "publication_status, view_count"),
         // 스크랩 순 정렬(publication_status = ? ORDER BY scrap_count DESC, id DESC). InnoDB 보조 인덱스 끝에 PK가 붙어 id까지 정렬된다.
         @Index(name = "idx_competitions_status_scrap_count", columnList = "publication_status, scrap_count")
 }) @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
