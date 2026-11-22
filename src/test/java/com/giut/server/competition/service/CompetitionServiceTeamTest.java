@@ -18,8 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
@@ -110,8 +109,8 @@ class CompetitionServiceTeamTest {
         Competition competition = mock(Competition.class);
         when(competition.getId()).thenReturn(1L);
         when(competition.getCategory()).thenReturn(Competition.Category.WEB_MOBILE_IT);
-        when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(competition)));
+        when(competitionRepository.findBy(any(Specification.class), any()))
+                .thenReturn(new SliceImpl<>(List.of(competition)));
         CompetitionTeamRepository.CompetitionTeamCount count = mock(CompetitionTeamRepository.CompetitionTeamCount.class);
         when(count.getCompetitionId()).thenReturn(1L);
         when(count.getTeamCount()).thenReturn(5L);
