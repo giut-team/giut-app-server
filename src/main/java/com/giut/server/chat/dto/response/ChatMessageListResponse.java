@@ -10,7 +10,7 @@ public record ChatMessageListResponse(
         Long chatRoomId,
 
         @Schema(
-                description = "다음 과거 메시지 조회에 사용할 커서. 다음 데이터가 없으면 null",
+                description = "다음 페이지에 사용할 커서. 최신·과거 조회는 beforeMessageId, 재연결 조회는 afterMessageId에 전달합니다. 다음 데이터가 없으면 null",
                 example = "71"
         )
         Long nextCursor,
@@ -18,7 +18,7 @@ public record ChatMessageListResponse(
         @Schema(description = "조회 크기", example = "30")
         int size,
 
-        @Schema(description = "다음 과거 메시지 존재 여부", example = "true")
+        @Schema(description = "현재 조회 방향에 다음 페이지가 있는지 여부", example = "true")
         boolean hasNext,
 
         @Schema(description = "오래된 순서로 정렬된 메시지 목록")

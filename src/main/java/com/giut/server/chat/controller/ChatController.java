@@ -234,9 +234,10 @@ public class ChatController {
     @Operation(
             summary = "채팅 메시지 커서 목록 조회",
             description = """
-                beforeMessageId가 없으면 최신 메시지를 조회합니다.
-                값이 있으면 해당 메시지 ID보다 오래된 메시지를 조회합니다.
-                응답의 nextCursor를 다음 요청의 beforeMessageId로 사용합니다.
+                커서가 없으면 최신 메시지를 조회합니다. beforeMessageId는 해당 ID보다 오래된 메시지를 조회합니다.
+                재연결 뒤 afterMessageId를 보내면 해당 ID보다 큰 활성 메시지를 오래된 순서부터 조회합니다.
+                두 커서는 함께 보낼 수 없습니다. 마지막으로 받은 메시지가 없다면 afterMessageId에 0을 사용할 수 있습니다.
+                hasNext가 true이면 nextCursor를 같은 방향의 다음 요청에 사용합니다.
                 메시지 조회만으로 읽음 처리되지는 않습니다.
                 """
     )
@@ -277,6 +278,8 @@ public class ChatController {
             @PathVariable Long chatRoomId,
             @Parameter(description = "이 ID보다 오래된 메시지를 조회합니다. 첫 조회에서는 생략합니다.", example = "71")
             @RequestParam(required = false) Long beforeMessageId,
+            @Parameter(description = "이 ID 이후 메시지를 오래된 순서부터 조회합니다. beforeMessageId와 함께 사용할 수 없습니다.", example = "125")
+            @RequestParam(required = false) Long afterMessageId,
             @Parameter(description = "한 번에 조회할 메시지 수", example = "30")
             @RequestParam(defaultValue = "30") int size
     ) {
@@ -287,6 +290,7 @@ public class ChatController {
                         userId,
                         chatRoomId,
                         beforeMessageId,
+                        afterMessageId,
                         size
                 )
         );

@@ -79,7 +79,8 @@ class ChatAuthorizationPersistenceTest {
     @Test
     void nonParticipantCannotUseAnyRoomScopedRestOperation() {
         assertForbidden(() -> chatService.getChatRoom(outsider.getId(), chatRoom.getId()));
-        assertForbidden(() -> chatService.getMessages(outsider.getId(), chatRoom.getId(), null, 30));
+        assertForbidden(() -> chatService.getMessages(outsider.getId(), chatRoom.getId(), null, null, 30));
+        assertForbidden(() -> chatService.getMessages(outsider.getId(), chatRoom.getId(), null, 0L, 30));
         assertForbidden(() -> chatService.getUnreadMessageCount(outsider.getId(), chatRoom.getId()));
         assertForbidden(() -> chatService.markChatRoomAsRead(
                 outsider.getId(), chatRoom.getId(), secondUserMessage.getId()));
@@ -98,7 +99,7 @@ class ChatAuthorizationPersistenceTest {
         chatService.leaveChatRoom(firstUser.getId(), chatRoom.getId());
 
         assertForbidden(() -> chatService.getChatRoom(firstUser.getId(), chatRoom.getId()));
-        assertForbidden(() -> chatService.getMessages(firstUser.getId(), chatRoom.getId(), null, 30));
+        assertForbidden(() -> chatService.getMessages(firstUser.getId(), chatRoom.getId(), null, null, 30));
         assertForbidden(() -> chatService.sendMessage(
                 firstUser.getId(),
                 chatRoom.getId(),

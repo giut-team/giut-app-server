@@ -1,5 +1,6 @@
 package com.giut.server.chat.service;
 
+import com.giut.server.auth.security.JwtProvider;
 import com.giut.server.chat.dto.response.ChatMessageListResponse;
 import com.giut.server.chat.entity.ChatMessage;
 import com.giut.server.chat.entity.ChatRoom;
@@ -15,12 +16,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.List;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:chat_cursor_test;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -52,6 +60,12 @@ class ChatMessageCursorPersistenceTest {
     @Autowired
     private ChatMessageRepository chatMessageRepository;
 
+    @Autowired
+    private WebApplicationContext webContext;
+
+    @Autowired
+    private JwtProvider jwt;
+
     private User firstUser;
     private User secondUser;
     private User outsider;
@@ -69,6 +83,9 @@ class ChatMessageCursorPersistenceTest {
                         "cursor-first-oauth-id"
                 )
         );
+
+        firstUser.verifyUniversityEmail("cursor-first@uos.ac.kr");
+        userRepository.saveAndFlush(firstUser);
 
         secondUser = userRepository.saveAndFlush(
                 User.createOAuthUser(
@@ -136,6 +153,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 null,
+                null,
                 30
         );
 
@@ -163,6 +181,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 cursor,
+                null,
                 30
         );
 
@@ -188,6 +207,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 cursor,
+                null,
                 30
         );
 
@@ -209,6 +229,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 null,
+                null,
                 30
         );
 
@@ -225,6 +246,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 firstPage.nextCursor(),
+                null,
                 30
         );
 
@@ -245,6 +267,7 @@ class ChatMessageCursorPersistenceTest {
                 firstUser.getId(),
                 chatRoom.getId(),
                 null,
+                null,
                 30
         );
 
@@ -263,10 +286,89 @@ class ChatMessageCursorPersistenceTest {
                 outsider.getId(),
                 chatRoom.getId(),
                 null,
+                null,
                 30
         ))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessage("채팅방 참여자만 메시지를 이용할 수 있습니다.");
+    }
+
+    @Test
+    void reconnectPaginatesForwardWithoutGapsAndDoesNotMarkAsRead() {
+        long cursor = savedMessages.get(94).getId();
+
+        ChatMessageListResponse first = chatService.getMessages(firstUser.getId(), chatRoom.getId(), null, cursor, 2);
+        assertThat(messageIds(first)).containsExactlyElementsOf(idsBetween(95, 97));
+        assertThat(first.nextCursor()).isEqualTo(savedMessages.get(96).getId());
+        assertThat(first.hasNext()).isTrue();
+
+        ChatMessageListResponse second = chatService.getMessages(
+                firstUser.getId(), chatRoom.getId(), null, first.nextCursor(), 2);
+        assertThat(messageIds(second)).containsExactlyElementsOf(idsBetween(97, 99));
+        assertThat(second.nextCursor()).isEqualTo(savedMessages.get(98).getId());
+        assertThat(second.hasNext()).isTrue();
+
+        ChatMessageListResponse last = chatService.getMessages(
+                firstUser.getId(), chatRoom.getId(), null, second.nextCursor(), 2);
+        assertThat(messageIds(last)).containsExactly(savedMessages.getLast().getId());
+        assertThat(last.nextCursor()).isNull();
+        assertThat(last.hasNext()).isFalse();
+        assertThat(chatRoomMemberRepository.findById(firstParticipant.getId()).orElseThrow().getLastReadMessageId())
+                .isNull();
+    }
+
+    @Test
+    void reconnectSkipsDeletedMessagesAndMessagesFromAnotherRoom() {
+        long cursor = savedMessages.get(96).getId();
+        ChatMessage deleted = savedMessages.get(98);
+        deleted.delete();
+        chatMessageRepository.saveAndFlush(deleted);
+        ChatRoom otherRoom = chatRoomRepository.saveAndFlush(
+                ChatRoom.createPersonalRoom(firstUser.getId(), outsider.getId()));
+        chatMessageRepository.saveAndFlush(ChatMessage.createText(otherRoom.getId(), outsider.getId(), "다른 채팅방"));
+
+        ChatMessageListResponse response = chatService.getMessages(
+                firstUser.getId(), chatRoom.getId(), null, cursor, 30);
+
+        assertThat(messageIds(response)).containsExactly(savedMessages.get(97).getId(), savedMessages.getLast().getId());
+        assertThat(response.hasNext()).isFalse();
+    }
+
+    @Test
+    void reconnectFromZeroStartsAtTheEarliestMessageAndLatestCursorReturnsAnEmptyPage() {
+        ChatMessageListResponse first = chatService.getMessages(firstUser.getId(), chatRoom.getId(), null, 0L, 2);
+        assertThat(messageIds(first)).containsExactlyElementsOf(idsBetween(0, 2));
+        assertThat(first.hasNext()).isTrue();
+
+        ChatMessageListResponse empty = chatService.getMessages(
+                firstUser.getId(), chatRoom.getId(), null, savedMessages.getLast().getId(), 2);
+        assertThat(empty.messages()).isEmpty();
+        assertThat(empty.hasNext()).isFalse();
+        assertThat(empty.nextCursor()).isNull();
+    }
+
+    @Test
+    void reconnectHttpEndpointBindsCursorAndRejectsConflictingOrNegativeCursors() throws Exception {
+        MockMvc mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        String url = "/api/chat-rooms/" + chatRoom.getId() + "/messages";
+        String bearer = "Bearer " + jwt.generateAccessToken(firstUser);
+        String cursor = savedMessages.get(94).getId().toString();
+
+        mvc.perform(get(url).header("Authorization", bearer).param("afterMessageId", cursor).param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages.length()").value(2))
+                .andExpect(jsonPath("$.messages[0].messageId").value(savedMessages.get(95).getId().intValue()))
+                .andExpect(jsonPath("$.nextCursor").value(savedMessages.get(96).getId().intValue()))
+                .andExpect(jsonPath("$.hasNext").value(true));
+        mvc.perform(get(url).header("Authorization", bearer)
+                        .param("afterMessageId", cursor).param("beforeMessageId", cursor))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(url).header("Authorization", bearer).param("afterMessageId", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private List<Long> idsBetween(int start, int end) {
+        return savedMessages.subList(start, end).stream().map(ChatMessage::getId).toList();
     }
 
     private List<Long> messageIds(ChatMessageListResponse response) {
