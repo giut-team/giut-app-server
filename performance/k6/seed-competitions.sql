@@ -1,5 +1,7 @@
 -- k6 공모전 부하 테스트용 시드 (giut_k6 폐기용 DB 전용)
 -- 사용자 5,000명(학교 인증 완료 STUDENT), 공모전 50,000건, 스크랩 약 55만 건(인기 공모전 쏠림)
+-- 클라이언트 기본 문자셋이 latin1이면 한글 리터럴이 이중 인코딩돼 저장되고, 앱의 한글 검색어가 아무것도 찾지 못한다.
+SET NAMES utf8mb4;
 SET SESSION cte_max_recursion_depth = 1000000;
 
 DROP TABLE IF EXISTS k6_digit;

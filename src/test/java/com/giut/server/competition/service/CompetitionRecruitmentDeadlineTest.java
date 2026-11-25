@@ -20,6 +20,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -67,8 +68,8 @@ class CompetitionRecruitmentDeadlineTest {
 
     @Test
     void listCountsRecruitingTeamsForReturnedCompetitions() {
-        when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(competition(1L, NOW.plusSeconds(1)))));
+        when(competitionRepository.findBy(any(Specification.class), any()))
+                .thenReturn(new SliceImpl<>(List.of(competition(1L, NOW.plusSeconds(1)))));
         var count = teamCount(1L, 2L);
         when(competitionTeamRepository.countByCompetitionIdsAndStatus(List.of(1L), Team.Status.RECRUITING))
                 .thenReturn(List.of(count));
@@ -78,8 +79,8 @@ class CompetitionRecruitmentDeadlineTest {
 
     @Test
     void emptyCompetitionPageSkipsTeamCountQuery() {
-        when(competitionRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<Competition>(List.of()));
+        when(competitionRepository.findBy(any(Specification.class), any()))
+                .thenReturn(new SliceImpl<Competition>(List.of()));
 
         var response = atFixedNow(() -> competitionService.getCompetitions(searchRequest()));
 

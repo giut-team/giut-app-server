@@ -42,7 +42,10 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -67,6 +71,7 @@ public class CompetitionService {
     private final CompetitionTeamRepository competitionTeamRepository;
     private final UserRepository userRepository;
     private final CompetitionUrlNormalizer competitionUrlNormalizer;
+    private final CompetitionListCountCache competitionListCountCache;
 
     @Transactional(Transactional.TxType.SUPPORTS)
     public PublicCompetitionListResponse getCompetitions(CompetitionSearchRequest request) {
@@ -87,11 +92,19 @@ public class CompetitionService {
             specification = specification.and(hasRecruitmentStatus(request.status(), now));
         }
 
-        Page<Competition> competitionPage = competitionRepository.findAll(
-                specification,
-                PageRequest.of(request.pageOrDefault(), request.sizeOrDefault(), request.sortOrDefault().toSort())
-        );
-        List<PublicCompetitionResponse> responses = toPublicResponses(competitionPage.getContent(), now);
+        // 목록은 COUNT 없이 size + 1건만 읽고(Slice), 전체 개수는 따로 구한다.
+        Specification<Competition> listSpecification = specification;
+        Pageable pageable = PageRequest.of(
+                request.pageOrDefault(), request.sizeOrDefault(), request.sortOrDefault().toSort());
+        Slice<Competition> slice = competitionRepository.findBy(listSpecification, query -> query.slice(pageable));
+
+        LongSupplier totalCounter = () -> competitionListCountCache.get(
+                new CompetitionListCountCache.Key(request.category(), request.activityType(), request.status(),
+                        request.normalizedKeyword()),
+                () -> competitionRepository.count(listSpecification));
+        Page<Competition> competitionPage = new PageImpl<>(
+                slice.getContent(), pageable, totalElements(slice, pageable, totalCounter));
+        List<PublicCompetitionResponse> responses = toPublicResponses(slice.getContent(), now);
 
         return new PublicCompetitionListResponse(
                 responses,
@@ -99,8 +112,23 @@ public class CompetitionService {
                 competitionPage.getSize(),
                 competitionPage.getTotalElements(),
                 competitionPage.getTotalPages(),
-                competitionPage.hasNext()
+                // 캐시된 개수는 늦을 수 있으므로 다음 페이지 여부는 실제로 읽은 결과(size + 1건)로 정한다.
+                slice.hasNext()
         );
+    }
+
+    /**
+     * 공개 목록의 전체 개수. 마지막 페이지처럼 읽은 결과만으로 정확히 알 수 있으면 세지 않는다.
+     * 캐시된 개수가 늦어 지금 읽은 결과보다 작으면, 읽은 결과가 보여주는 최소 개수로 올린다.
+     */
+    private static long totalElements(Slice<?> slice, Pageable pageable, LongSupplier counter) {
+        long offset = pageable.getOffset();
+        int size = slice.getNumberOfElements();
+        if (!slice.hasNext() && (offset == 0 || size > 0)) {
+            return offset + size;
+        }
+        long minimum = size == 0 ? 0 : offset + size + (slice.hasNext() ? 1 : 0);
+        return Math.max(counter.getAsLong(), minimum);
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
