@@ -106,6 +106,7 @@ temp/
 !/src/main/resources/db/manual/
 /src/main/resources/db/manual/*
 !/src/main/resources/db/manual/V34__add_team_application_availability.sql
+!/src/main/resources/db/manual/V36__add_team_competition_status_index.sql
 !/src/main/resources/db/manual/V18__create_profile_share_links.sql
 !/src/main/resources/db/manual/V25__add_chat_message_idempotency_key.sql
 !/src/main/resources/db/manual/V7__simplify_profile_display_data.sql
