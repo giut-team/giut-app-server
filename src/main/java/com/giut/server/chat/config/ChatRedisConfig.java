@@ -2,6 +2,8 @@ package com.giut.server.chat.config;
 
 import com.giut.server.chat.event.ChatMessageBroadcaster;
 import com.giut.server.chat.event.RedisChatMessageRelay;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,11 +37,16 @@ public class ChatRedisConfig {
     }
 
     @Bean(defaultCandidate = false)
-    ThreadPoolTaskExecutor chatRedisReceiveExecutor() {
+    ThreadPoolTaskExecutor chatRedisReceiveExecutor(MeterRegistry meterRegistry) {
+        Counter droppedEvents = Counter.builder("giut.chat.redis.receive.dropped")
+                .description("Redis chat events rejected by the receive executor")
+                .register(meterRegistry);
         ThreadPoolTaskExecutor executor = singleWorker("chat-redis-receive-");
         // Keep backpressure off the Redis subscription thread and preserve FIFO for queued events.
-        executor.setRejectedExecutionHandler((task, pool) ->
-                log.warn("채팅 Redis 수신 대기열이 가득 찼거나 종료되어 이벤트를 전달하지 못했습니다."));
+        executor.setRejectedExecutionHandler((task, pool) -> {
+            droppedEvents.increment();
+            log.warn("채팅 Redis 수신 대기열이 가득 찼거나 종료되어 이벤트를 전달하지 못했습니다.");
+        });
         return executor;
     }
 
