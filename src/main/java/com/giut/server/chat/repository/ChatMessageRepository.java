@@ -27,6 +27,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             Pageable pageable
     );
 
+    Slice<ChatMessage> findByChatRoomIdAndStatusAndIdGreaterThanOrderByIdAsc(
+            Long chatRoomId,
+            ChatMessage.Status status,
+            Long afterMessageId,
+            Pageable pageable
+    );
+
     long countByChatRoomIdAndStatusAndSenderIdNot(
             Long chatRoomId,
             ChatMessage.Status status,

@@ -200,63 +200,49 @@ public class ChatService {
             Long userId,
             Long chatRoomId,
             Long beforeMessageId,
+            Long afterMessageId,
             int size
     ) {
         ChatRoom chatRoom = findActiveChatRoom(chatRoomId);
         validateActiveParticipant(chatRoom.getId(), userId);
         chatBlockPolicy.requireRoomCanBeUsed(chatRoom, userId);
 
+        if (beforeMessageId != null && afterMessageId != null) {
+            throw new IllegalArgumentException("beforeMessageId와 afterMessageId를 함께 사용할 수 없습니다.");
+        }
         if (beforeMessageId != null && beforeMessageId <= 0) {
-            throw new IllegalArgumentException(
-                    "메시지 커서는 1 이상이어야 합니다."
-            );
+            throw new IllegalArgumentException("메시지 커서는 1 이상이어야 합니다.");
+        }
+        if (afterMessageId != null && afterMessageId < 0) {
+            throw new IllegalArgumentException("afterMessageId는 0 이상이어야 합니다.");
         }
 
         int normalizedSize = normalizeSize(size);
         PageRequest pageable = PageRequest.of(0, normalizedSize);
+        Slice<ChatMessage> messageSlice;
+        if (afterMessageId != null) {
+            messageSlice = chatMessageRepository.findByChatRoomIdAndStatusAndIdGreaterThanOrderByIdAsc(
+                    chatRoomId, ChatMessage.Status.ACTIVE, afterMessageId, pageable);
+        } else if (beforeMessageId != null) {
+            messageSlice = chatMessageRepository.findByChatRoomIdAndStatusAndIdLessThanOrderByIdDesc(
+                    chatRoomId, ChatMessage.Status.ACTIVE, beforeMessageId, pageable);
+        } else {
+            messageSlice = chatMessageRepository.findByChatRoomIdAndStatusOrderByIdDesc(
+                    chatRoomId, ChatMessage.Status.ACTIVE, pageable);
+        }
 
-        Slice<ChatMessage> messageSlice =
-                beforeMessageId == null
-                        ? chatMessageRepository
-                        .findByChatRoomIdAndStatusOrderByIdDesc(
-                                chatRoom.getId(),
-                                ChatMessage.Status.ACTIVE,
-                                pageable
-                        )
-                        : chatMessageRepository
-                        .findByChatRoomIdAndStatusAndIdLessThanOrderByIdDesc(
-                                chatRoom.getId(),
-                                ChatMessage.Status.ACTIVE,
-                                beforeMessageId,
-                                pageable
-                        );
-
-        List<ChatMessage> descendingMessages =
-                messageSlice.getContent();
-
-        Long nextCursor =
-                messageSlice.hasNext() && !descendingMessages.isEmpty()
-                        ? descendingMessages
-                        .get(descendingMessages.size() - 1)
-                        .getId()
-                        : null;
-
-        List<ChatMessageResponse> messages =
-                descendingMessages.stream()
-                        .sorted(
-                                java.util.Comparator.comparing(
-                                        ChatMessage::getId
-                                )
-                        )
-                        .map(ChatMessageResponse::from)
-                        .toList();
+        List<ChatMessage> page = messageSlice.getContent();
+        Long nextCursor = messageSlice.hasNext()
+                ? page.getLast().getId()
+                : null;
+        List<ChatMessage> orderedMessages = afterMessageId == null ? page.reversed() : page;
 
         return new ChatMessageListResponse(
-                chatRoom.getId(),
+                chatRoomId,
                 nextCursor,
                 normalizedSize,
                 messageSlice.hasNext(),
-                messages
+                orderedMessages.stream().map(ChatMessageResponse::from).toList()
         );
     }
 

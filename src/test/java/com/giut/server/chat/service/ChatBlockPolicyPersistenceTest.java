@@ -84,7 +84,8 @@ class ChatBlockPolicyPersistenceTest {
         assertThat(chatService.getChatRooms(secondUser.getId()).chatRooms()).isEmpty();
 
         assertBlocked(() -> chatService.getChatRoom(firstUser.getId(), chatRoomId));
-        assertBlocked(() -> chatService.getMessages(secondUser.getId(), chatRoomId, null, 30));
+        assertBlocked(() -> chatService.getMessages(secondUser.getId(), chatRoomId, null, null, 30));
+        assertBlocked(() -> chatService.getMessages(secondUser.getId(), chatRoomId, null, 0L, 30));
         assertBlocked(() -> chatService.getUnreadMessageCount(firstUser.getId(), chatRoomId));
         assertBlocked(() -> chatService.markChatRoomAsRead(
                 secondUser.getId(), chatRoomId, existingMessage.getId()));
@@ -116,7 +117,7 @@ class ChatBlockPolicyPersistenceTest {
         userBlockService.unblock(firstUser.getId(), secondUser.getId());
 
         assertThat(chatService.getChatRooms(firstUser.getId()).chatRooms()).hasSize(1);
-        assertThat(chatService.getMessages(firstUser.getId(), chatRoomId, null, 30).messages())
+        assertThat(chatService.getMessages(firstUser.getId(), chatRoomId, null, null, 30).messages())
                 .extracting(message -> message.messageId())
                 .containsExactly(existingMessage.getId());
 

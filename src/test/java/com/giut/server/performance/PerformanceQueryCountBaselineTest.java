@@ -88,6 +88,7 @@ class PerformanceQueryCountBaselineTest {
                         seed.measurementUserId(),
                         chatRoomId,
                         null,
+                        null,
                         30
                 )
         );
@@ -133,7 +134,7 @@ class PerformanceQueryCountBaselineTest {
         teamService.getTeamDetail(teamId, userId);
         teamService.getTeamMembers(teamId);
         chatService.getChatRooms(userId);
-        chatService.getMessages(userId, chatRoomId, null, 30);
+        chatService.getMessages(userId, chatRoomId, null, null, 30);
     }
 
     private void writeReport(
