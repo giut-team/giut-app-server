@@ -12,7 +12,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@Entity @Table(name = "teams") @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Entity
+@Table(name = "teams", indexes = @Index(
+        name = "idx_teams_competition_status", columnList = "competition_id, status"
+))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Team extends BaseTimeEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
