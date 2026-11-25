@@ -19,7 +19,9 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -60,6 +62,19 @@ class RedisChatMessageRelayTest {
 
         verify(redis).convertAndSend(eq(channel.getTopic()), anyString());
         verifyNoInteractions(local);
+    }
+
+    @Test
+    void deliveryFailureDoesNotEscapeTheListenerOrPreventTheNextEvent() {
+        RedisChatMessageRelay receiver = relay(remote);
+        DefaultMessage incoming = message(mapper.writeValueAsString(
+                new RedisChatMessageRelay.RedisEvent("another-node", event)));
+        doThrow(new IllegalStateException("DB unavailable")).doNothing().when(remote).broadcast(event);
+
+        assertThatCode(() -> receiver.onMessage(incoming, null)).doesNotThrowAnyException();
+        receiver.onMessage(incoming, null);
+
+        verify(remote, times(2)).broadcast(event);
     }
 
     @ParameterizedTest

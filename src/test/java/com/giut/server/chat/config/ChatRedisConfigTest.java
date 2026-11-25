@@ -9,6 +9,8 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -32,7 +34,8 @@ class ChatRedisConfigTest {
                 assertThat(context)
                         .doesNotHaveBean(RedisChatMessageRelay.class)
                         .doesNotHaveBean(RedisMessageListenerContainer.class)
-                        .doesNotHaveBean("chatRedisPublishExecutor"));
+                        .doesNotHaveBean("chatRedisPublishExecutor")
+                        .doesNotHaveBean("chatRedisReceiveExecutor"));
     }
 
     @Test
@@ -51,6 +54,14 @@ class ChatRedisConfigTest {
                     assertThat(context).hasSingleBean(RedisChatMessageRelay.class)
                             .hasSingleBean(RedisMessageListenerContainer.class)
                             .hasBean("chatRedisPublishExecutor");
+                    var container = context.getBean(RedisMessageListenerContainer.class);
+                    var receiver = context.getBean("chatRedisReceiveExecutor", ThreadPoolTaskExecutor.class);
+                    assertThat(ReflectionTestUtils.getField(container, "taskExecutor")).isSameAs(receiver);
+                    assertThat(ReflectionTestUtils.getField(container, "subscriptionExecutor"))
+                            .isSameAs(context.getBean("chatRedisSubscriptionExecutor"));
+                    assertThat(receiver.getCorePoolSize()).isEqualTo(1);
+                    assertThat(receiver.getMaxPoolSize()).isEqualTo(1);
+                    assertThat(receiver.getQueueCapacity()).isEqualTo(256);
                     assertThat(context.getBean(ChannelTopic.class).getTopic()).isEqualTo("giut:chat:test:messages:v1");
                 });
     }

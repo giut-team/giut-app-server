@@ -54,8 +54,14 @@ public class RedisChatMessageRelay implements MessageListener {
             log.warn("채팅 Redis 이벤트에 필수 정보가 없습니다.");
             return;
         }
-        if (!nodeId.equals(redisEvent.origin())) {
+        if (nodeId.equals(redisEvent.origin())) {
+            return;
+        }
+        try {
             broadcaster.broadcast(redisEvent.event());
+        } catch (RuntimeException exception) {
+            log.warn("채팅 Redis 수신 이벤트 전달 실패. messageId={}, cause={}",
+                    redisEvent.event().message().messageId(), exception.getClass().getSimpleName());
         }
     }
 
