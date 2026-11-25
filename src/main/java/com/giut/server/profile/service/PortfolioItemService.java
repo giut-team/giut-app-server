@@ -55,10 +55,7 @@ public class PortfolioItemService {
 
     @Transactional
     public PortfolioItemDto createPortfolioItem(Long userId, UpsertPortfolioItemRequest request) {
-        // 포트폴리오 행 자체에는 자연스러운 락 대상이 없어서, User 행을 사용자 범위의 임시 뮤텍스로 빌려 쓴다.
-        // 아래 쇼케이스 순서 재배치는 같은 사용자의 여러 행을 한꺼번에 읽고 다시 쓰므로 동시 요청 시 꼬일 수 있다.
-        User user = userRepository.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        User user = lockPortfolioOwner(userId);
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
         List<ProfileRole> roles = findRoles(request.roles());
@@ -94,6 +91,7 @@ public class PortfolioItemService {
 
     @Transactional
     public PortfolioItemDto updatePortfolioItem(Long userId, Long portfolioItemId, UpsertPortfolioItemRequest request) {
+        lockPortfolioOwner(userId);
         PortfolioItem portfolioItem = findPortfolioItem(userId, portfolioItemId);
         validateProjectPeriod(request);
         List<ProfileTag> skillTags = findSkillTags(request.skillTagIds());
@@ -119,6 +117,7 @@ public class PortfolioItemService {
 
     @Transactional
     public void deletePortfolioItem(Long userId, Long portfolioItemId) {
+        lockPortfolioOwner(userId);
         PortfolioItem portfolioItem = findPortfolioItem(userId, portfolioItemId);
         // 자식(역할·스킬태그 연결)부터 지워야 부모 삭제 시 FK 제약에 걸리지 않는다. 각 delete 뒤의 flush는
         // derived delete가 지연 실행되는 걸 막아, 다음 단계가 꼬이지 않게 순서를 강제한다.
@@ -134,6 +133,7 @@ public class PortfolioItemService {
 
     @Transactional
     public PortfolioShowcaseResponse changePortfolioShowcase(Long userId, PortfolioShowcaseRequest request) {
+        lockPortfolioOwner(userId);
         List<PortfolioItem> allPortfolioItems = portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(userId);
         List<Long> requestedIds = request.portfolioItemIds();
         // 소유·중복·null 검증을 먼저 끝내두므로, 아래 루프에서 requestedIds에 있는 id는 indexOf가 항상 유효한
@@ -156,6 +156,7 @@ public class PortfolioItemService {
 
     @Transactional
     public RepresentativePortfolioResponse setRepresentativePortfolio(Long userId, Long portfolioItemId) {
+        lockPortfolioOwner(userId);
         List<PortfolioItem> portfolioItems = portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(userId);
         PortfolioItem selectedItem = portfolioItems.stream()
                 .filter(item -> item.getId().equals(portfolioItemId))
@@ -169,6 +170,16 @@ public class PortfolioItemService {
         portfolioItems.forEach(PortfolioItem::clearRepresentative);
         selectedItem.makeRepresentative();
         return new RepresentativePortfolioResponse(selectedItem.getId(), true);
+    }
+
+    /**
+     * 같은 사용자의 포트폴리오 변경을 직렬화한다. 쇼케이스 순서와 대표 지정은 여러 행에 걸친 규칙이라 행 단위로는 지킬 수 없고,
+     * 포트폴리오 행에는 공통 잠금 대상이 없어 소유자의 User 행을 잠금으로 쓴다. 항목을 읽기 전에 호출해야
+     * 앞선 변경이 커밋된 상태를 읽고, 오래된 엔티티로 순서·대표 값을 덮어쓰지 않는다.
+     */
+    private User lockPortfolioOwner(Long userId) {
+        return userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
     }
 
     private PortfolioItem findPortfolioItem(Long userId, Long portfolioItemId) {

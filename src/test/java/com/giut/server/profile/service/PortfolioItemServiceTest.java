@@ -85,6 +85,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void emptyShowcaseListIsAllowed() {
+        stubOwnerLock();
         when(portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(12L))
                 .thenReturn(List.of());
 
@@ -96,6 +97,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void updateReplacesRoles() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -121,6 +123,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void rejectsUnknownRoleCode() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -140,6 +143,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void deleteRemovesRoleAndSkillTagLinksBeforePortfolioItem() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -164,5 +168,10 @@ class PortfolioItemServiceTest {
         when(role.getCode()).thenReturn(code);
         when(role.getName()).thenReturn(name);
         return role;
+    }
+
+    private void stubOwnerLock() {
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(
+                User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12")));
     }
 }
