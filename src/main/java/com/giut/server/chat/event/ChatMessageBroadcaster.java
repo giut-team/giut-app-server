@@ -7,8 +7,6 @@ import com.giut.server.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
@@ -20,7 +18,6 @@ public class ChatMessageBroadcaster {
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void broadcast(ChatMessageEvent event) {
         Long chatRoomId = event.message().chatRoomId();
         List<Long> participantIds = chatRoomMemberRepository.findAllByChatRoomIdAndLeftAtIsNull(chatRoomId)
