@@ -14,6 +14,7 @@ import com.giut.server.profile.entity.ProfileRole;
 import com.giut.server.profile.entity.ProfileTag;
 import com.giut.server.user.entity.User;
 import com.giut.server.profile.dto.response.ProfileTagSummaryResponse;
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.global.exception.ResourceNotFoundException;
 import com.giut.server.profile.repository.PortfolioItemRepository;
 import com.giut.server.profile.repository.PortfolioItemRoleRepository;
@@ -176,10 +177,17 @@ public class PortfolioItemService {
      * 같은 사용자의 포트폴리오 변경을 직렬화한다. 쇼케이스 순서와 대표 지정은 여러 행에 걸친 규칙이라 행 단위로는 지킬 수 없고,
      * 포트폴리오 행에는 공통 잠금 대상이 없어 소유자의 User 행을 잠금으로 쓴다. 항목을 읽기 전에 호출해야
      * 앞선 변경이 커밋된 상태를 읽고, 오래된 엔티티로 순서·대표 값을 덮어쓰지 않는다.
+     *
+     * <p>탈퇴도 같은 행을 잠그므로 잠근 뒤 읽은 상태가 확정값이다. 인증 필터를 통과한 뒤 잠금을 기다리는 사이 탈퇴가
+     * 커밋됐다면 여기서 거절해 탈퇴 계정의 포트폴리오를 바꾸지 않는다.
      */
     private User lockPortfolioOwner(Long userId) {
-        return userRepository.findByIdForUpdate(userId)
+        User owner = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("사용자를 찾을 수 없습니다."));
+        if (owner.getStatus() != User.Status.ACTIVE) {
+            throw new ForbiddenException("활성 상태의 사용자만 포트폴리오를 변경할 수 있습니다.");
+        }
+        return owner;
     }
 
     private PortfolioItem findPortfolioItem(Long userId, Long portfolioItemId) {

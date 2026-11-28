@@ -1,5 +1,6 @@
 package com.giut.server.profile.service;
 
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.profile.dto.common.ProfileCodeNameResponse;
 import com.giut.server.profile.dto.request.UpsertPortfolioItemRequest;
 import com.giut.server.profile.dto.request.PortfolioShowcaseRequest;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -161,6 +163,17 @@ class PortfolioItemServiceTest {
         inOrder.verify(portfolioItemSkillTagRepository).deleteByPortfolioItem_Id(5L);
         inOrder.verify(portfolioItemSkillTagRepository).flush();
         inOrder.verify(portfolioItemRepository).delete(item);
+    }
+
+    @Test
+    void rejectsChangesFromInactiveOwnerBeforeTouchingPortfolio() {
+        User withdrawn = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
+        withdrawn.withdraw();
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(withdrawn));
+
+        assertThatThrownBy(() -> portfolioItemService.changePortfolioShowcase(12L, new PortfolioShowcaseRequest(List.of())))
+                .isInstanceOf(ForbiddenException.class);
+        verifyNoInteractions(portfolioItemRepository);
     }
 
     private ProfileRole role(String code, String name) {

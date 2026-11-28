@@ -1,5 +1,6 @@
 package com.giut.server.profile.service;
 
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.profile.dto.request.PortfolioShowcaseRequest;
 import com.giut.server.profile.dto.request.UpsertPortfolioItemRequest;
 import com.giut.server.profile.entity.PortfolioItem;
@@ -10,6 +11,7 @@ import com.giut.server.profile.repository.PortfolioItemSkillTagRepository;
 import com.giut.server.profile.repository.ProfileRoleRepository;
 import com.giut.server.user.entity.User;
 import com.giut.server.user.repository.UserRepository;
+import com.giut.server.user.service.UserWithdrawalService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,7 @@ abstract class PortfolioItemConcurrencyScenarios {
     @Autowired private PortfolioItemSkillTagRepository itemSkillTags;
     @Autowired private ProfileRoleRepository roles;
     @Autowired private UserRepository users;
+    @Autowired private UserWithdrawalService withdrawals;
     @Autowired private PlatformTransactionManager transactions;
 
     private User owner;
@@ -113,6 +116,27 @@ abstract class PortfolioItemConcurrencyScenarios {
 
         assertThat(items.findById(hidden.getId()).orElseThrow().getShowcaseOrder()).isNull();
         assertThat(items.findById(kept.getId()).orElseThrow().getShowcaseOrder()).isEqualTo(1);
+    }
+
+    @Test
+    void changeWaitingBehindWithdrawalIsRejectedAndKeepsThePortfolio() throws Exception {
+        PortfolioItem item = item(1);
+
+        Future<Object> update = runOverlappingAndReturnSecond(
+                () -> {
+                    withdrawals.withdraw(owner.getId());
+                    return null;
+                },
+                () -> service.updatePortfolioItem(owner.getId(), item.getId(), createRequest())
+        );
+
+        assertThatThrownBy(() -> update.get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(ForbiddenException.class);
+        PortfolioItem kept = items.findById(item.getId()).orElseThrow();
+        assertThat(kept.getTitle()).isEqualTo("프로젝트 1");
+        assertThat(kept.getShowcaseOrder()).isEqualTo(1);
+        assertThat(users.findById(owner.getId()).orElseThrow().getStatus()).isEqualTo(User.Status.DELETED);
     }
 
     @Test
