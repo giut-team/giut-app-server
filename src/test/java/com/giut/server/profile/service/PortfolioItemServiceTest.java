@@ -1,5 +1,6 @@
 package com.giut.server.profile.service;
 
+import com.giut.server.global.exception.ForbiddenException;
 import com.giut.server.profile.dto.common.ProfileCodeNameResponse;
 import com.giut.server.profile.dto.request.UpsertPortfolioItemRequest;
 import com.giut.server.profile.dto.request.PortfolioShowcaseRequest;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -85,6 +87,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void emptyShowcaseListIsAllowed() {
+        stubOwnerLock();
         when(portfolioItemRepository.findAllByUser_IdOrderByCreatedAtDescIdDesc(12L))
                 .thenReturn(List.of());
 
@@ -96,6 +99,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void updateReplacesRoles() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -121,6 +125,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void rejectsUnknownRoleCode() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -140,6 +145,7 @@ class PortfolioItemServiceTest {
 
     @Test
     void deleteRemovesRoleAndSkillTagLinksBeforePortfolioItem() {
+        stubOwnerLock();
         PortfolioItem item = PortfolioItem.create(
                 null, "https://example.com/image.png", "프로젝트", "설명",
                 null, null, 3, "## 소개"
@@ -159,10 +165,26 @@ class PortfolioItemServiceTest {
         inOrder.verify(portfolioItemRepository).delete(item);
     }
 
+    @Test
+    void rejectsChangesFromInactiveOwnerBeforeTouchingPortfolio() {
+        User withdrawn = User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12");
+        withdrawn.withdraw();
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(withdrawn));
+
+        assertThatThrownBy(() -> portfolioItemService.changePortfolioShowcase(12L, new PortfolioShowcaseRequest(List.of())))
+                .isInstanceOf(ForbiddenException.class);
+        verifyNoInteractions(portfolioItemRepository);
+    }
+
     private ProfileRole role(String code, String name) {
         ProfileRole role = mock(ProfileRole.class);
         when(role.getCode()).thenReturn(code);
         when(role.getName()).thenReturn(name);
         return role;
+    }
+
+    private void stubOwnerLock() {
+        when(userRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(
+                User.createOAuthUser("member@example.com", "회원", User.OAuthProvider.KAKAO, "kakao-12")));
     }
 }
